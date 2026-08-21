@@ -55,6 +55,31 @@ async function dispatch(payload) {
   }
 }
 
+// ---------------------------------------------------------------- capture
+
+let lastCapture = 0
+
+/**
+ * Content scripts cannot call captureVisibleTab, so every screenshot comes through here.
+ * Chrome rate limits this to roughly two calls a second and throws when you exceed it,
+ * so pace the calls rather than losing the user's comment to a quota error.
+ */
+async function capture() {
+  const wait = Math.max(0, 600 - (Date.now() - lastCapture))
+  if (wait) await new Promise(r => setTimeout(r, wait))
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      lastCapture = Date.now()
+      const dataUrl = await chrome.tabs.captureVisibleTab({ format: 'png' })
+      return { ok: true, dataUrl }
+    } catch (err) {
+      if (attempt === 2) return { ok: false, error: String(err) }
+      await new Promise(r => setTimeout(r, 350 * (attempt + 1)))
+    }
+  }
+}
+
 // ---------------------------------------------------------------- badge
 
 /** The icon is the only surface the user sees when something goes wrong. Never stay silent. */
@@ -94,6 +119,7 @@ async function ensureInjected(tabId) {
 chrome.runtime.onMessage.addListener((msg, sender, respond) => {
   if (msg?.type === 'ping') { health().then(respond); return true }
   if (msg?.type === 'dispatch') { dispatch(msg.payload).then(respond); return true }
+  if (msg?.type === 'capture') { capture().then(respond); return true }
   if (msg?.type === 'count') {
     const tabId = sender.tab?.id
     if (tabId) badge(tabId, msg.n ? String(msg.n) : '', msg.n ? `${msg.n} comment${msg.n === 1 ? '' : 's'} waiting to dispatch` : 'Pinpoint — toggle comment mode')

@@ -256,3 +256,19 @@ button.mode.on {
   --pp-input: #131315;
   --pp-hover: #2a2a2e;
 }
+
+.shot-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--pp-dim);
+  cursor: pointer;
+  user-select: none;
+}
+
+.shot-toggle input {
+  accent-color: var(--pp-accent);
+  margin: 0;
+  cursor: pointer;
+}

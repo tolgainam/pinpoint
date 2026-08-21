@@ -8,9 +8,9 @@ arrives in your terminal as work to do.
 
 ## Status
 
-Phases 0–2 done: the channel path is proven, the bridge is live, and the browser overlay
-dispatches real comments end to end. Screenshots (Phase 3) and pin resolution over SSE
-(Phase 4) are next. See [PLAN.md](./PLAN.md).
+Phases 0–3 done: the channel path is proven, the bridge is live, the browser overlay
+dispatches real comments end to end, and each comment carries a screenshot of its
+element. Pin resolution over SSE (Phase 4) is next. See [PLAN.md](./PLAN.md).
 
 ## Install
 
@@ -36,6 +36,21 @@ Open a localhost dev app. The toolbar sits bottom-centre — drag it by the `⌖
 `⌘↵` adds a note, `Esc` closes the composer or leaves comment mode. Clicking the
 extension icon toggles comment mode too. Pins survive a reload — they are keyed by
 origin + pathname in `chrome.storage.local`.
+
+### Screenshots
+
+Each comment is captured when you write it, not at dispatch, so the element is always on
+screen and you get what you actually saw. The overlay hides itself first, so no pins or
+toolbar end up in the image. What lands on disk is a crop of the element plus 24px of
+context, and one uncropped viewport shot per batch.
+
+The composer's **screenshot** checkbox is sticky: uncheck it once and it stays off for
+every later comment until you turn it back on. With it off, nothing is captured at all.
+
+Screenshots are the bulk of what the queue holds, so the server prunes itself — batches
+whose comments are all resolved are deleted after `PINPOINT_RETAIN_HOURS` (default 24),
+and the queue is capped at `PINPOINT_MAX_BATCHES` (default 200). Anything still pending
+is never deleted, however old.
 
 Then either let the channel wake the session, or pull when you are ready:
 

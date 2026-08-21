@@ -16,6 +16,7 @@
 
   const KEY = `pinpoint:${location.origin}${location.pathname}`
   const BAR_KEY = 'pinpoint:bar'
+  const PREFS_KEY = 'pinpoint:prefs'
   const MAX_TEXT = 200
   const MAX_HTML = 600
 
@@ -28,6 +29,9 @@
   let connected = false
   let frozen = null          // element awaiting a note
   let openCard = null        // the composer or pin card currently on screen
+  /** Sticky: whatever you chose last time is the default next time, so turning
+      screenshots off once keeps them off without a separate global switch. */
+  let wantShot = true
 
   // ---------------------------------------------------------------- shadow root
 
@@ -235,6 +239,85 @@
     if (!on) { closeCard(); hideHighlight(); frozen = null }
   }
 
+  // ---------------------------------------------------------------- screenshots
+
+  const PAD = 24          // context around the element, in CSS px
+  const MAX_EDGE = 1400   // cap the crop so storage and the wire stay sane
+
+  /** Wait for a real paint. Hidden tabs never fire rAF, so never wait on it forever. */
+  function nextPaint() {
+    return new Promise(resolve => {
+      let done = false
+      const finish = () => { if (!done) { done = true; resolve() } }
+      requestAnimationFrame(() => requestAnimationFrame(finish))
+      setTimeout(finish, 120)
+    })
+  }
+
+  /** Decode by hand rather than fetch(dataUrl): a strict page CSP can block the fetch. */
+  function dataUrlToBlob(url) {
+    const bin = atob(url.slice(url.indexOf(',') + 1))
+    const bytes = new Uint8Array(bin.length)
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+    return new Blob([bytes], { type: 'image/png' })
+  }
+
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const fr = new FileReader()
+      fr.onload = () => resolve(fr.result)
+      fr.onerror = () => reject(fr.error)
+      fr.readAsDataURL(blob)
+    })
+  }
+
+  /**
+   * One viewport capture with our own UI hidden.
+   *
+   * Pins and the toolbar showing up in the screenshot is the easiest thing here to get
+   * silently wrong, so hiding is not optional — and a style write is not enough, the
+   * browser has to actually paint the hidden state before the capture happens.
+   */
+  async function captureViewport() {
+    host.style.visibility = 'hidden'
+    await nextPaint()
+    try {
+      const res = await chrome.runtime.sendMessage({ type: 'capture' })
+      return res?.ok ? res.dataUrl : null
+    } catch {
+      return null
+    } finally {
+      host.style.visibility = ''
+    }
+  }
+
+  /** Crop one element's region, with padding, out of a viewport capture. */
+  async function cropTo(dataUrl, rect) {
+    try {
+      const bitmap = await createImageBitmap(dataUrlToBlob(dataUrl))
+      // Derive scale from the image itself instead of trusting devicePixelRatio:
+      // HiDPI and browser zoom both land here and they do not always agree.
+      const scale = bitmap.width / document.documentElement.clientWidth
+
+      const x = Math.max(0, Math.round((rect.x - PAD) * scale))
+      const y = Math.max(0, Math.round((rect.y - PAD) * scale))
+      const w = Math.min(bitmap.width - x, Math.round((rect.w + PAD * 2) * scale))
+      const h = Math.min(bitmap.height - y, Math.round((rect.h + PAD * 2) * scale))
+      if (w < 1 || h < 1) { bitmap.close(); return null }
+
+      const shrink = Math.min(1, MAX_EDGE / Math.max(w, h))
+      const outW = Math.max(1, Math.round(w * shrink))
+      const outH = Math.max(1, Math.round(h * shrink))
+
+      const canvas = new OffscreenCanvas(outW, outH)
+      canvas.getContext('2d').drawImage(bitmap, x, y, w, h, 0, 0, outW, outH)
+      bitmap.close()
+      return await blobToDataUrl(await canvas.convertToBlob({ type: 'image/png' }))
+    } catch {
+      return null
+    }
+  }
+
   // ---------------------------------------------------------------- cards
 
   function closeCard() {
@@ -256,13 +339,17 @@
     const card = el('div', 'card')
     const meta = el('div', 'meta', '…')
     const box = el('textarea')
-    box.placeholder = 'What is wrong here?'
+    box.placeholder = 'What is wrong here?   (⌘↵ to add)'
 
     const row = el('div', 'row')
-    const hint = el('span', 'meta', '⌘↵ to add')
+    const shotLabel = el('label', 'shot-toggle')
+    const shotBox = document.createElement('input')
+    shotBox.type = 'checkbox'
+    shotBox.checked = wantShot
+    shotLabel.append(shotBox, document.createTextNode('screenshot'))
     const cancel = el('button', '', 'Cancel')
     const add = el('button', 'primary', 'Add')
-    row.append(hint, el('span', 'spacer'), cancel, add)
+    row.append(shotLabel, el('span', 'spacer'), cancel, add)
     card.append(meta, box, row)
     layer.append(card)
     openCard = card
@@ -277,10 +364,27 @@
       meta.textContent = `<${component}>  ${captured.selector}`
     })
 
-    const submit = () => {
+    const submit = async () => {
       const note = box.value.trim()
       if (!note) { box.focus(); return }
-      comments.push({ ...captured, n: ++seq, note, status: 'pending' })
+
+      wantShot = shotBox.checked
+      chrome.storage.local.set({ [PREFS_KEY]: { wantShot } }).catch(() => {})
+
+      // Re-measure: the composer has been open for a while and the app may have moved.
+      const live = (() => { try { return document.querySelector(captured.selector) } catch { return null } })() || target
+      const r = live.getBoundingClientRect()
+      const rect = { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }
+
+      let shot = null
+      if (wantShot) {
+        add.disabled = true
+        add.textContent = 'Capturing…'
+        const viewport = await captureViewport()
+        shot = viewport ? await cropTo(viewport, rect) : null
+      }
+
+      comments.push({ ...captured, rect, n: ++seq, note, shot: shot || undefined, status: 'pending' })
       closeCard()
       save()
       render()
@@ -464,9 +568,18 @@
     if (!outgoing.length) return
 
     sendBtn.disabled = true
+
+    // One uncropped shot for layout context — but only when this batch has crops at all.
+    // If you turned screenshots off, you meant off.
+    let pageShot = null
+    if (outgoing.some(c => c.shot)) {
+      sendBtn.textContent = 'Capturing…'
+      pageShot = await captureViewport()
+    }
     sendBtn.textContent = 'Sending…'
 
     const payload = {
+      pageShot: pageShot || undefined,
       origin: location.origin,
       url: location.href,
       pathname: location.pathname,
@@ -486,6 +599,7 @@
         html: c.html,
         rect: c.rect,
         component: c.component,
+        shot: c.shot,
       })),
     }
 
@@ -533,12 +647,18 @@
   function save() {
     clearTimeout(saveTimer)
     saveTimer = setTimeout(() => {
-      chrome.storage.local.set({ [KEY]: { seq, comments } })
+      chrome.storage.local.set({ [KEY]: { seq, comments } }).catch(() => {
+        // Over quota. Screenshots are the bulky part and the least costly to lose —
+        // keeping the notes and their selectors matters far more.
+        const lean = comments.map(({ shot, ...rest }) => rest)
+        chrome.storage.local.set({ [KEY]: { seq, comments: lean } }).catch(() => {})
+      })
     }, 150)
   }
 
   async function load() {
-    const got = await chrome.storage.local.get([KEY, BAR_KEY])
+    const got = await chrome.storage.local.get([KEY, BAR_KEY, PREFS_KEY])
+    if (got[PREFS_KEY] && typeof got[PREFS_KEY].wantShot === 'boolean') wantShot = got[PREFS_KEY].wantShot
     const saved = got[KEY]
     if (saved) {
       comments = Array.isArray(saved.comments) ? saved.comments : []

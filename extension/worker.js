@@ -63,6 +63,12 @@ let lastCapture = 0
  * Content scripts cannot call captureVisibleTab, so every screenshot comes through here.
  * Chrome rate limits this to roughly two calls a second and throws when you exceed it,
  * so pace the calls rather than losing the user's comment to a quota error.
+ *
+ * The permission model is the trap. captureVisibleTab accepts <all_urls> or activeTab —
+ * a host permission for localhost is NOT enough — and activeTab is granted by clicking
+ * the extension icon and revoked again on the next navigation. So a page reload silently
+ * takes screenshots away until the icon is clicked again, and the only decent response
+ * is to say so in plain words rather than return an empty image.
  */
 async function capture() {
   const wait = Math.max(0, 600 - (Date.now() - lastCapture))
@@ -74,10 +80,100 @@ async function capture() {
       const dataUrl = await chrome.tabs.captureVisibleTab({ format: 'png' })
       return { ok: true, dataUrl }
     } catch (err) {
-      if (attempt === 2) return { ok: false, error: String(err) }
+      const msg = String(err?.message || err)
+      if (/permission|activeTab|all_urls|cannot access/i.test(msg)) {
+        return { ok: false, permission: true, error: 'click the Pinpoint icon on this tab to allow screenshots, then add the comment again' }
+      }
+      if (attempt === 2) return { ok: false, error: msg }
       await new Promise(r => setTimeout(r, 350 * (attempt + 1)))
     }
   }
+}
+
+// ---------------------------------------------------------------- resolutions
+
+/**
+ * The bridge streams events — a comment resolved, a status line from Claude — over SSE.
+ * EventSource does not exist in a service worker, so the stream is read by hand.
+ *
+ * The worker is torn down whenever Chrome decides it is idle, which would silently drop
+ * events. Two things cover that: every event carries a sequence number and reconnects ask
+ * for everything after the last one seen, and the content script's 5s health ping wakes
+ * the worker often enough to notice the stream is down.
+ */
+let streaming = false
+let lastSeq = 0
+let seqLoaded = false
+let retry = null
+let backoff = 1000
+
+async function fanOut(event) {
+  let tabs = []
+  try {
+    tabs = await chrome.tabs.query({ url: ['http://localhost/*', 'http://127.0.0.1/*'] })
+  } catch { return }
+  for (const t of tabs) {
+    if (!t.id) continue
+    chrome.tabs.sendMessage(t.id, { type: 'bridge-event', event }).catch(() => { /* no overlay there */ })
+  }
+}
+
+async function readStream() {
+  const res = await fetch(`${BRIDGE}/events?since=${lastSeq}`)
+  if (!res.ok || !res.body) throw new Error(`events ${res.status}`)
+  backoff = 1000
+
+  const reader = res.body.getReader()
+  const dec = new TextDecoder()
+  let buf = ''
+
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buf += dec.decode(value, { stream: true })
+
+    let i
+    while ((i = buf.indexOf('\n\n')) !== -1) {
+      const frame = buf.slice(0, i)
+      buf = buf.slice(i + 2)
+      const data = frame
+        .split('\n')
+        .filter(line => line.startsWith('data:'))
+        .map(line => line.slice(5).trim())
+        .join('\n')
+      if (!data) continue // heartbeat or comment line
+
+      let event
+      try { event = JSON.parse(data) } catch { continue }
+      if (event.seq) {
+        lastSeq = event.seq
+        chrome.storage.session?.set({ lastSeq }).catch(() => {})
+      }
+      await fanOut(event)
+    }
+  }
+}
+
+async function ensureStream() {
+  if (streaming) return
+  streaming = true
+  clearTimeout(retry)
+
+  try {
+    if (!seqLoaded) {
+      seqLoaded = true
+      try {
+        const got = await chrome.storage.session?.get('lastSeq')
+        if (got?.lastSeq) lastSeq = got.lastSeq
+      } catch { /* session storage unavailable */ }
+    }
+    await readStream()
+  } catch { /* bridge down or session ended — reconnect below */ }
+
+  streaming = false
+  // The health ping usually gets here first; this is the fallback when no tab is open.
+  retry = setTimeout(ensureStream, backoff)
+  backoff = Math.min(backoff * 2, 30000)
 }
 
 // ---------------------------------------------------------------- badge
@@ -117,7 +213,7 @@ async function ensureInjected(tabId) {
 // ---------------------------------------------------------------- events
 
 chrome.runtime.onMessage.addListener((msg, sender, respond) => {
-  if (msg?.type === 'ping') { health().then(respond); return true }
+  if (msg?.type === 'ping') { ensureStream(); health().then(respond); return true }
   if (msg?.type === 'dispatch') { dispatch(msg.payload).then(respond); return true }
   if (msg?.type === 'capture') { capture().then(respond); return true }
   if (msg?.type === 'count') {
@@ -154,6 +250,7 @@ chrome.action.onClicked.addListener(async tab => {
 
 // Attach to localhost tabs that were already open at install or reload time.
 chrome.runtime.onInstalled.addListener(async () => {
+  ensureStream()
   try {
     const tabs = await chrome.tabs.query({ url: ['http://localhost/*', 'http://127.0.0.1/*'] })
     for (const t of tabs) if (t.id) ensureInjected(t.id)
@@ -161,3 +258,7 @@ chrome.runtime.onInstalled.addListener(async () => {
     console.warn('[pinpoint] startup injection failed', err)
   }
 })
+
+// A worker that just woke up — install, browser start, or a nap — reconnects immediately.
+chrome.runtime.onStartup?.addListener(() => ensureStream())
+ensureStream()

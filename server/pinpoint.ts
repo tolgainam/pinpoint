@@ -250,12 +250,34 @@ await mcp.connect(new StdioServerTransport())
 
 const listeners = new Set<(chunk: string) => void>()
 
-function broadcast(payload: unknown): void {
-  const chunk = `data: ${JSON.stringify(payload)}\n\n`
+/**
+ * The extension's service worker is killed whenever Chrome feels like it, so a resolve
+ * can easily happen with nobody listening. Every event is numbered and kept for a while;
+ * a reconnecting client asks for everything after the last number it saw.
+ */
+const recent: { seq: number; chunk: string }[] = []
+const MAX_RECENT = 200
+let evSeq = 0
+
+function broadcast(payload: Record<string, unknown>): void {
+  const seq = ++evSeq
+  const chunk = `id: ${seq}\ndata: ${JSON.stringify({ ...payload, seq })}\n\n`
+  recent.push({ seq, chunk })
+  if (recent.length > MAX_RECENT) recent.splice(0, recent.length - MAX_RECENT)
   for (const emit of listeners) {
     try { emit(chunk) } catch { /* client vanished mid-write */ }
   }
 }
+
+/**
+ * A comment line every 20s. Two jobs: it keeps the receiving service worker awake — an
+ * idle MV3 worker is torn down after 30s — and it surfaces streams whose client is gone.
+ */
+setInterval(() => {
+  for (const emit of listeners) {
+    try { emit(': ping\n\n') } catch { listeners.delete(emit) }
+  }
+}, 20_000).unref?.()
 
 // ---------------------------------------------------------------- http gate
 
@@ -410,14 +432,19 @@ try {
 
       if (url.pathname === '/events') {
         if (!originAllowed(origin)) return new Response('forbidden', { status: 403 })
+        const since = Number(url.searchParams.get('since') ?? req.headers.get('last-event-id') ?? 0) || 0
         const stream = new ReadableStream({
           start(ctrl) {
             const enc = new TextEncoder()
-            ctrl.enqueue(enc.encode(': connected\n\n'))
             const emit = (chunk: string) => ctrl.enqueue(enc.encode(chunk))
+            emit(`: connected ${evSeq}\n\n`)
+            // Replay whatever landed while this client was away, so a pin still clears
+            // for a resolve that happened while its service worker was asleep.
+            for (const r of recent) if (r.seq > since) emit(r.chunk)
             listeners.add(emit)
             req.signal.addEventListener('abort', () => listeners.delete(emit))
           },
+          cancel() { /* listener removed by the abort handler above */ },
         })
         return new Response(stream, {
           headers: { ...cors(origin), 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },

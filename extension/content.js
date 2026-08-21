@@ -22,7 +22,7 @@
 
   // ---------------------------------------------------------------- state
 
-  /** @type {{n:number, note:string, selector:string, docX:number, docY:number, status:'pending'|'sent'}[]} */
+  /** @type {{n:number, note:string, selector:string, docX:number, docY:number, status:'pending'|'sent'|'resolved'}[]} */
   let comments = []
   let seq = 0
   let mode = false
@@ -278,17 +278,24 @@
    * silently wrong, so hiding is not optional — and a style write is not enough, the
    * browser has to actually paint the hidden state before the capture happens.
    */
+  /** Why the last screenshot failed. A silent null here is indistinguishable from
+      "the user turned screenshots off", which is exactly the wrong thing to guess. */
+  let lastShotError = ''
+
   async function captureViewport() {
     host.style.visibility = 'hidden'
     await nextPaint()
     try {
       const res = await chrome.runtime.sendMessage({ type: 'capture' })
-      return res?.ok ? res.dataUrl : null
-    } catch {
-      return null
+      if (res?.ok && res.dataUrl) return res.dataUrl
+      lastShotError = res?.error || 'the worker returned no image'
+    } catch (err) {
+      lastShotError = String(err?.message || err)
     } finally {
       host.style.visibility = ''
     }
+    console.warn('[pinpoint] screenshot failed:', lastShotError)
+    return null
   }
 
   /** Crop one element's region, with padding, out of a viewport capture. */
@@ -313,7 +320,9 @@
       canvas.getContext('2d').drawImage(bitmap, x, y, w, h, 0, 0, outW, outH)
       bitmap.close()
       return await blobToDataUrl(await canvas.convertToBlob({ type: 'image/png' }))
-    } catch {
+    } catch (err) {
+      lastShotError = `crop failed: ${err?.message || err}`
+      console.warn('[pinpoint]', lastShotError)
       return null
     }
   }
@@ -382,6 +391,7 @@
         add.textContent = 'Capturing…'
         const viewport = await captureViewport()
         shot = viewport ? await cropTo(viewport, rect) : null
+        if (!shot) say(`no screenshot — ${lastShotError}`, true)
       }
 
       comments.push({ ...captured, rect, n: ++seq, note, shot: shot || undefined, status: 'pending' })
@@ -405,9 +415,13 @@
       el('div', 'note', comment.note),
     )
 
+    if (comment.resolution) card.append(el('div', 'resolution', `✓ ${comment.resolution}`))
+
     const row = el('div', 'row')
-    const status = el('span', 'meta', comment.status === 'sent' ? 'dispatched' : 'pending')
-    const remove = el('button', 'danger', 'Remove')
+    const state = comment.status === 'resolved' ? 'resolved' : comment.status === 'sent' ? 'dispatched' : 'pending'
+    const label = comment.shot ? state : `${state} · no screenshot`
+    const status = el('span', 'meta', label)
+    const remove = el('button', 'danger', comment.status === 'resolved' ? 'Dismiss' : 'Remove')
     row.append(status, el('span', 'spacer'), remove)
     card.append(row)
 
@@ -434,8 +448,9 @@
   function renderPins() {
     pins.textContent = ''
     pinNodes = comments.map(c => {
-      const pin = el('div', 'pin', String(c.n))
+      const pin = el('div', 'pin', c.status === 'resolved' ? '✓' : String(c.n))
       pin.classList.toggle('sent', c.status === 'sent')
+      pin.classList.toggle('resolved', c.status === 'resolved')
       pin.title = c.note
       pin.addEventListener('click', ev => {
         ev.preventDefault()
@@ -576,6 +591,9 @@
       sendBtn.textContent = 'Capturing…'
       pageShot = await captureViewport()
     }
+    // Screenshots are the whole point of the batch arriving with context. Say so when
+    // one is missing, rather than letting Claude receive a text-only comment quietly.
+    if (wantShot && !outgoing.some(c => c.shot)) say('dispatching without screenshots', true)
     sendBtn.textContent = 'Sending…'
 
     const payload = {
@@ -641,6 +659,32 @@
     dot.title = connected ? `bridge up · ${res.projectDir ?? ''}` : 'bridge down — is a Claude Code session running?'
   }
 
+  // ---------------------------------------------------------------- bridge events
+
+  /**
+   * The other direction: Claude resolving a comment greys its pin out here, which is the
+   * only signal that the fix has landed without switching to the terminal. Events are
+   * matched on the server's own numbering, recorded at dispatch time.
+   */
+  function onBridgeEvent(ev) {
+    if (!ev) return
+
+    if (ev.type === 'reply') {
+      if (ev.text) say(ev.text)
+      return
+    }
+
+    if (ev.type !== 'resolved') return
+    const hit = comments.find(c => c.batch && `${c.batch}#${c.serverN}` === ev.id)
+    if (!hit || hit.status === 'resolved') return
+
+    hit.status = 'resolved'
+    if (ev.resolution) hit.resolution = ev.resolution
+    save()
+    render()
+    say(`✓ #${hit.n} resolved${ev.resolution ? ` — ${ev.resolution}` : ''}`)
+  }
+
   // ---------------------------------------------------------------- storage
 
   let saveTimer
@@ -676,6 +720,7 @@
     // it decides to inject. It must answer, or the worker injects a second copy.
     if (msg?.type === 'ping-content') { respond({ ok: true }); return false }
     if (msg?.type === 'toggle') { setMode(!mode); respond({ ok: true, mode }); return false }
+    if (msg?.type === 'bridge-event') { onBridgeEvent(msg.event); respond({ ok: true }); return false }
     return false
   })
 

@@ -1,29 +1,75 @@
-# Pinpoint
+<div align="center">
 
-A comment toolbar for the browser that dispatches into a running Claude Code session.
+```
+       ┌─┐
+       │ │  P I N P O I N T
+       └─┼─┐
+         │ │   comment on the page.
+         └─┘   fix it in the terminal.
+```
 
-Pin comments to elements on a localhost dev app, hit **Dispatch**, and the batch —
-element identity, page state, and (from Phase 3) a cropped screenshot per comment —
-arrives in your terminal as work to do.
+**Pin comments to elements on your localhost app. Hit Dispatch. Claude Code
+receives the element, the page state, and a screenshot of exactly what you saw.**
 
-## Status
+[Website](https://tolgainam.github.io/pinpoint/) · [Install](#install) · [How it works](#how-it-works)
 
-Phases 0–3 done: the channel path is proven, the bridge is live, the browser overlay
-dispatches real comments end to end, and each comment carries a screenshot of its
-element. Pin resolution over SSE (Phase 4) is next. See [PLAN.md](./PLAN.md).
+</div>
+
+---
+
+Reviewing a running app and getting fixes made is a lossy loop. You spot something wrong
+in the browser, then describe it in prose — *"the spacing under the brand header on the
+explore page is too tight"* — and Claude has to reconstruct which element you meant. The
+context that was obvious on screen never survives the trip.
+
+Pinpoint closes that loop. Click an element, type what's wrong, dispatch. What arrives in
+your session is a CSS selector, the component name, the visible text, the bounding box,
+the page URL and colour scheme, and a cropped PNG of the element itself.
+
+```
+browser overlay ──POST /dispatch──▶ bridge ──▶ queue on disk (json + PNGs)
+                                      │
+                                      ├──▶ channel event   → lands in your session
+                                      └──▶ list_comments   → /pinpoint:comments
+```
 
 ## Install
 
-**The extension** — `chrome://extensions` → enable *Developer mode* → *Load unpacked* →
-select `extension/`. It activates only on `http://localhost/*` and `http://127.0.0.1/*`.
+Two pieces: a Claude Code plugin, and a Chrome extension.
 
-**The plugin** — point Claude Code at this directory as a plugin, or rely on `.mcp.json`
-when working inside this repo. The MCP server is spawned for you; the bridge comes up on
-`127.0.0.1:8788`.
+**1. The plugin**
+
+```
+/plugin marketplace add tolgainam/pinpoint
+/plugin install pinpoint@pinpoint-marketplace
+```
+
+**2. The extension**
+
+```
+/pinpoint:setup
+```
+
+This prints the extension's path, copies it to your clipboard, and opens
+`chrome://extensions`. Turn on **Developer mode**, click **Load unpacked**, paste.
+
+Requires Node 20+. Nothing else — dependencies install themselves with the plugin.
+
+<details>
+<summary>Running from a clone instead</summary>
+
+```bash
+git clone https://github.com/tolgainam/pinpoint
+cd pinpoint && npm install
+```
+
+The repo ships a `.mcp.json`, so a session started in this directory spawns the bridge
+automatically. Load `extension/` unpacked as above.
+</details>
 
 ## Use
 
-Open a localhost dev app. The toolbar sits bottom-centre — drag it by the `⌖` grip.
+Open your dev app on `http://localhost:…`, then click the Pinpoint icon in the toolbar.
 
 | Control | What it does |
 |---|---|
@@ -33,48 +79,102 @@ Open a localhost dev app. The toolbar sits bottom-centre — drag it by the `⌖
 | `✕` | Clears every pin on this page |
 | dot | Green when the bridge is reachable |
 
-`⌘↵` adds a note, `Esc` closes the composer or leaves comment mode. Clicking the
-extension icon toggles comment mode too. Pins survive a reload — they are keyed by
-origin + pathname in `chrome.storage.local`.
+`⌘↵` adds a note, `Esc` closes the composer or leaves comment mode. Drag the bar by its
+`⌖` grip. Pins survive a reload — they're keyed by origin + pathname in
+`chrome.storage.local`.
+
+When Claude fixes a comment it calls `resolve_comment`, and the pin turns green with a ✓
+and the one-line resolution. You never have to switch to the terminal to know it landed.
+
+### Two ways to receive comments
+
+**On demand** — works in any session, no flags:
+
+```
+/pinpoint:comments
+```
+
+**Hands-free** — dispatches wake the session on their own:
+
+```bash
+claude --dangerously-load-development-channels server:pinpoint
+```
+
+[Channels](https://code.claude.com/docs/en/channels-reference) are a research preview, and
+custom ones aren't on Anthropic's allowlist yet — hence the alarming flag and the
+full-screen warning at startup. The queue on disk is the source of truth either way, so
+nothing is lost by staying on the pull path.
 
 ### Screenshots
 
-Each comment is captured when you write it, not at dispatch, so the element is always on
-screen and you get what you actually saw. The overlay hides itself first, so no pins or
-toolbar end up in the image. What lands on disk is a crop of the element plus 24px of
-context, and one uncropped viewport shot per batch.
+Clicking the extension icon on a tab is what grants Chrome's `activeTab` permission, and
+that is what `captureVisibleTab` needs. Chrome revokes it on every navigation, so after a
+full page reload you click the icon again. If a capture fails you get the reason in a
+toast, not silence.
 
-The composer's **screenshot** checkbox is sticky: uncheck it once and it stays off for
-every later comment until you turn it back on. With it off, nothing is captured at all.
+The overlay hides itself before every capture, so pins and the toolbar never appear in
+the image. One viewport capture per action gets cropped per comment, because
+`captureVisibleTab` is rate-limited.
 
-Screenshots are the bulk of what the queue holds, so the server prunes itself — batches
-whose comments are all resolved are deleted after `PINPOINT_RETAIN_HOURS` (default 24),
-and the queue is capped at `PINPOINT_MAX_BATCHES` (default 200). Anything still pending
-is never deleted, however old.
+## How it works
 
-Then either let the channel wake the session, or pull when you are ready:
+**`server/pinpoint.js`** — an MCP server that Claude Code spawns over stdio, which also
+binds `127.0.0.1:8788`. The `experimental: { 'claude/channel': {} }` capability is what
+lets it push into a live session. Screenshots are written to disk as real PNGs and
+referenced by absolute path; Claude opens them with the ordinary Read tool, which renders
+images. That sidesteps MCP image plumbing entirely.
+
+Resolutions travel back over SSE. Events are numbered and the last 200 kept, so a client
+reconnecting with `?since=N` gets whatever it missed — necessary because Chrome kills the
+extension's service worker whenever it feels like it.
+
+**`extension/`** — MV3, overlay mounted in a Shadow DOM so page CSS can't reach it and
+its own CSS can't leak. Selectors are built preferring `[data-testid]`, then `#id`, then a
+stable class chain, then an `:nth-of-type` path. React component names come from a
+`_debugOwner` fiber walk where available.
+
+**Queue** — `~/.claude/pinpoint/queue/<batch>/`, global rather than per-project so a
+dispatch is never stranded in the wrong repo. Resolved batches are pruned after 24h.
+
+### Security
+
+The bridge binds `127.0.0.1` only, and any page you visit can `fetch()` a localhost port —
+so requests from an unrecognised web `Origin` are rejected, and `application/json` is
+required, which forces a CORS preflight the server refuses. Comment text is treated as
+untrusted input in the channel instructions, since anything reaching the session is
+model-visible.
+
+Set `PINPOINT_TOKEN` to also require an `X-Pinpoint-Token` header.
+
+### Configuration
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PINPOINT_PORT` | `8788` | Bridge port |
+| `PINPOINT_QUEUE` | `~/.claude/pinpoint/queue` | Where batches land |
+| `PINPOINT_TOKEN` | — | Shared secret for `/dispatch` |
+| `PINPOINT_RETAIN_HOURS` | `24` | How long resolved batches are kept |
+| `PINPOINT_MAX_BATCHES` | `200` | Hard ceiling on batches kept |
+
+## Try it without a project
 
 ```bash
-# hands-free — a dispatch arrives in the session unprompted
-claude --dangerously-load-development-channels server:pinpoint
-
-# on demand — plain session
-claude          # then: /pinpoint:comments
+npm run demo    # a deliberately opinionated landing page on :3000
 ```
 
-## Shape
+Pin something, dispatch it, watch it get fixed. Its stylesheet hot-swaps rather than
+reloading the page, so screenshot permission survives between rounds.
 
-| Path | What |
-|---|---|
-| `server/pinpoint.ts` | MCP channel server + local HTTP bridge (Bun) |
-| `extension/content.js` | The overlay — shadow root, pinning, dispatch |
-| `extension/probe.js` | Main-world probe that names the React/Vue component |
-| `extension/worker.js` | Service worker: talks to the bridge, owns screenshots |
-| `commands/comments.md` | `/pinpoint:comments` slash command |
-| `.claude-plugin/` | Plugin manifest |
+## Known limits
 
-## Requirements
+Turning a clicked element into `Header.tsx:42` would be the most valuable thing here, but
+**React 19 removed `_debugSource` from fibers**, so file:line isn't reliably available.
+Pinpoint captures strong *identifiers* instead — component name, `data-testid`, visible
+text, classes — and lets Claude grep for them. That works well and depends on no fragile
+internals.
 
-- Claude Code >= 2.1.235
-- Bun
-- Chrome 111+ (the component probe needs `world: "MAIN"` content scripts)
+Chrome only. `localhost` and `127.0.0.1` only, by design.
+
+## License
+
+MIT

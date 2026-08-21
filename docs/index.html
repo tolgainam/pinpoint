@@ -1,0 +1,829 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pinpoint — comment on the page, fix it in the terminal</title>
+<meta name="description" content="Pin comments to elements on your localhost app. Claude Code receives the element, the page state, and a screenshot of exactly what you saw.">
+<meta property="og:title" content="Pinpoint">
+<meta property="og:description" content="Comment on the page. Fix it in the terminal.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>◈</text></svg>">
+<style>
+  :root {
+    --paper:     #fbfaf7;
+    --paper-2:   #f4f2ec;
+    --card:      #ffffff;
+    --ink:       #17181b;
+    --ink-2:     #4a4d55;
+    --ink-3:     #83878f;
+    --rule:      #e2ded4;
+    --rule-2:    #cfcabb;
+    --accent:    #c25a34;
+    --accent-sf: #fdf1eb;
+    --green:     #2e7d55;
+    --blue:      #2c5f9e;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, -apple-system, "Segoe UI", Inter, system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 14px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    /* A faint grid, the way a schematic sits on graph paper. */
+    background-image:
+      linear-gradient(var(--rule) 1px, transparent 1px),
+      linear-gradient(90deg, var(--rule) 1px, transparent 1px);
+    background-size: 64px 64px;
+    background-position: -1px -1px;
+  }
+
+  .wrap {
+    max-width: 940px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* Content sits on solid paper so the grid reads as margin, not noise. */
+  main {
+    background: var(--paper);
+    border-left: 1px solid var(--rule);
+    border-right: 1px solid var(--rule);
+    max-width: 940px;
+    margin: 0 auto;
+  }
+
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgb(194 90 52 / 0.3); }
+  a:hover { border-bottom-color: var(--accent); }
+
+  h1, h2, h3 { font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+
+  code, pre { font-family: var(--mono); }
+
+  /* ---------------------------------------------------------------- nav */
+
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    padding: 12px 24px;
+    background: rgb(251 250 247 / 0.88);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--rule);
+    font-size: 13px;
+  }
+  nav .mark { color: var(--accent); font-size: 15px; }
+  nav .name { font-weight: 600; letter-spacing: 0.04em; }
+  nav .links { display: flex; gap: 18px; margin-left: auto; }
+  nav a { color: var(--ink-2); border: none; }
+  nav a:hover { color: var(--accent); }
+
+  /* ---------------------------------------------------------------- hero */
+
+  header.hero {
+    padding: 72px 24px 56px;
+    border-bottom: 1px solid var(--rule);
+    text-align: center;
+  }
+
+  /* The wordmark and the flow diagram are pre elements but must not pick up the
+     card treatment the code blocks get. */
+  .ascii {
+    display: block;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    border-radius: 0;
+    white-space: pre;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  /* The two panes are drawn with borders rather than box-drawing characters. Literal
+     ASCII boxes depend on the reader's monospace font keeping │ glyphs flush across
+     lines, and a box that renders as dashes is worse than no box at all. */
+  .hero-art {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: stretch;
+    gap: 0;
+    max-width: 760px;
+    margin: 0 auto 38px;
+    text-align: left;
+  }
+
+  .pane {
+    border: 1px solid var(--rule-2);
+    border-radius: 5px;
+    background: var(--card);
+    overflow: hidden;
+  }
+  .pane-bar {
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--rule);
+    background: var(--paper-2);
+    font-size: 11.5px;
+    color: var(--ink-3);
+  }
+  .pane-body { padding: 16px 14px; min-height: 132px; }
+
+  /* left pane — the element you clicked */
+
+  .mock {
+    position: relative;
+    padding: 12px 14px;
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    background: var(--paper-2);
+  }
+  .pin {
+    position: absolute;
+    top: -9px;
+    left: -9px;
+    width: 19px;
+    height: 19px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 10.5px;
+    font-weight: 600;
+    line-height: 19px;
+    text-align: center;
+    box-shadow: 0 1px 4px rgb(194 90 52 / 0.4);
+  }
+  .mock-title { font-size: 12.5px; color: var(--ink); margin-bottom: 8px; }
+  .mock-line {
+    height: 5px;
+    border-radius: 3px;
+    background: var(--rule);
+    margin-bottom: 5px;
+  }
+  .mock-line.short { width: 62%; margin-bottom: 0; }
+
+  .bubble {
+    position: relative;
+    margin: 16px 0 0 18px;
+    padding: 7px 11px;
+    border: 1px solid var(--accent);
+    border-radius: 5px;
+    background: var(--accent-sf);
+    color: var(--accent);
+    font-size: 11.5px;
+  }
+  .bubble::before {
+    content: "";
+    position: absolute;
+    top: -5px;
+    left: 13px;
+    width: 8px;
+    height: 8px;
+    background: var(--accent-sf);
+    border-left: 1px solid var(--accent);
+    border-top: 1px solid var(--accent);
+    transform: rotate(45deg);
+  }
+
+  /* the arrow between them */
+
+  .arrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 0 14px;
+    min-width: 118px;
+  }
+  .arrow-label { font-size: 11px; color: var(--accent); }
+  .arrow-line {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 1px;
+    background: var(--accent);
+  }
+  .arrow-line::after {
+    content: "";
+    position: absolute;
+    right: -1px;
+    top: -3px;
+    border-left: 6px solid var(--accent);
+    border-top: 3.5px solid transparent;
+    border-bottom: 3.5px solid transparent;
+  }
+
+  /* right pane — what landed in the session */
+
+  .term .row {
+    font-size: 11.5px;
+    line-height: 1.75;
+    color: var(--ink-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .term .key { color: var(--ink-3); }
+  .term .val { color: var(--blue); }
+  .term .done {
+    margin-top: 10px;
+    padding-top: 9px;
+    border-top: 1px dashed var(--rule);
+    color: var(--green);
+  }
+  .term .tick { font-weight: 600; }
+
+  .flow {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--ink-3);
+    margin-top: 30px;
+  }
+  .flow b { color: var(--accent); font-weight: inherit; }
+  .flow i { color: var(--ink-2); font-style: normal; }
+
+  .tagline {
+    font-family: var(--sans);
+    font-size: 25px;
+    line-height: 1.28;
+    letter-spacing: -0.022em;
+    max-width: 26ch;
+    margin: 0 auto;
+    font-weight: 600;
+  }
+  .tagline em { font-style: normal; color: var(--accent); }
+
+  .lede {
+    margin: 16px auto 0;
+    max-width: 60ch;
+    color: var(--ink-2);
+    font-family: var(--sans);
+    font-size: 15.5px;
+    line-height: 1.6;
+  }
+
+  .badges {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 26px;
+    font-size: 12px;
+    color: var(--ink-3);
+  }
+  .badge {
+    padding: 3px 10px;
+    border: 1px solid var(--rule-2);
+    border-radius: 3px;
+    background: var(--card);
+  }
+
+  /* ---------------------------------------------------------------- sections */
+
+  section { padding: 56px 24px; border-bottom: 1px solid var(--rule); }
+
+  .kicker {
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 10px;
+  }
+  .kicker::before { content: "// "; color: var(--rule-2); }
+
+  h2 { font-size: 22px; margin-bottom: 10px; letter-spacing: -0.02em; }
+
+  .prose {
+    font-family: var(--sans);
+    font-size: 15.5px;
+    line-height: 1.65;
+    color: var(--ink-2);
+    max-width: 68ch;
+  }
+  .prose strong { color: var(--ink); font-weight: 600; }
+  .prose p { margin: 0 0 14px; }
+  .prose p:last-child { margin-bottom: 0; }
+
+  /* ---------------------------------------------------------------- code */
+
+  pre {
+    margin: 18px 0 0;
+    padding: 14px 16px;
+    background: var(--card);
+    border: 1px solid var(--rule-2);
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--ink);
+  }
+  pre .c { color: var(--ink-3); }
+  pre .k { color: var(--accent); }
+  pre .s { color: var(--green); }
+  pre .b { color: var(--blue); }
+
+  .cmd {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 10px;
+    padding: 12px 14px;
+    background: var(--card);
+    border: 1px solid var(--rule-2);
+    border-radius: 4px;
+    font-size: 13.5px;
+  }
+  .cmd .prompt { color: var(--accent); user-select: none; }
+  .cmd code { flex: 1; overflow-x: auto; white-space: nowrap; }
+  .cmd button {
+    font: inherit;
+    font-size: 11px;
+    padding: 3px 9px;
+    border: 1px solid var(--rule-2);
+    border-radius: 3px;
+    background: var(--paper-2);
+    color: var(--ink-3);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 120ms ease;
+  }
+  .cmd button:hover { color: var(--accent); border-color: var(--accent); }
+  .cmd button.done { color: var(--green); border-color: var(--green); }
+
+  /* ---------------------------------------------------------------- steps */
+
+  .steps { counter-reset: step; margin-top: 28px; }
+  .step {
+    position: relative;
+    padding-left: 42px;
+    padding-bottom: 30px;
+    border-left: 1px solid var(--rule-2);
+    margin-left: 13px;
+  }
+  .step:last-child { border-left-color: transparent; padding-bottom: 0; }
+  .step::before {
+    counter-increment: step;
+    content: counter(step);
+    position: absolute;
+    left: -13px;
+    top: -2px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--card);
+    border: 1px solid var(--rule-2);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 24px;
+    text-align: center;
+  }
+  .step h3 { font-size: 15px; margin-bottom: 4px; }
+  .step .note { font-family: var(--sans); font-size: 14px; color: var(--ink-2); }
+
+  /* ---------------------------------------------------------------- diagram */
+
+  figure {
+    margin: 24px 0 0;
+    padding: 22px 18px;
+    background: var(--card);
+    border: 1px solid var(--rule-2);
+    border-radius: 4px;
+    overflow-x: auto;
+  }
+  figure pre {
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    font-size: 12.5px;
+    /* Same reason as .hero-art: box sides need the lines to touch. */
+    line-height: 1.2;
+    color: var(--ink-2);
+  }
+  figure pre .k { color: var(--accent); font-weight: 600; }
+  figure pre .b { color: var(--blue); }
+  figure figcaption {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--rule);
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--ink-3);
+  }
+
+  /* ---------------------------------------------------------------- payload */
+
+  .payload {
+    margin-top: 22px;
+    border: 1px solid var(--rule-2);
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--card);
+  }
+  .payload .bar {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 14px;
+    background: var(--paper-2);
+    border-bottom: 1px solid var(--rule);
+    font-size: 12px;
+    color: var(--ink-3);
+  }
+  .payload .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--rule-2); }
+  .payload .dot.live { background: var(--accent); }
+  .payload pre { margin: 0; border: none; border-radius: 0; background: none; }
+
+  /* ---------------------------------------------------------------- grid */
+
+  .two {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin-top: 24px;
+  }
+  .panel {
+    padding: 18px;
+    background: var(--card);
+    border: 1px solid var(--rule-2);
+    border-radius: 4px;
+  }
+  .panel h3 { font-size: 14px; margin-bottom: 8px; }
+  .panel h3 .tag {
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-left: 7px;
+    font-weight: 400;
+  }
+  .panel p { margin: 0; font-family: var(--sans); font-size: 14px; color: var(--ink-2); line-height: 1.55; }
+  .panel pre { margin-top: 12px; font-size: 12px; }
+
+  /* ---------------------------------------------------------------- table */
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 22px;
+    font-size: 13px;
+  }
+  th, td {
+    text-align: left;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 500;
+    border-bottom-color: var(--rule-2);
+  }
+  td:first-child { color: var(--accent); white-space: nowrap; }
+  td:nth-child(2) { color: var(--ink-3); white-space: nowrap; }
+  td:last-child { font-family: var(--sans); color: var(--ink-2); width: 100%; }
+  .table-scroll { overflow-x: auto; }
+
+  ul.ticks { list-style: none; margin: 18px 0 0; padding: 0; max-width: 68ch; }
+  ul.ticks li {
+    position: relative;
+    padding: 0 0 10px 24px;
+    font-family: var(--sans);
+    font-size: 15px;
+    color: var(--ink-2);
+    line-height: 1.55;
+  }
+  ul.ticks li::before {
+    content: "▸";
+    position: absolute;
+    left: 4px;
+    color: var(--accent);
+    font-family: var(--mono);
+  }
+  ul.ticks strong { color: var(--ink); font-weight: 600; }
+
+  /* ---------------------------------------------------------------- footer */
+
+  footer {
+    padding: 34px 24px 48px;
+    text-align: center;
+    color: var(--ink-3);
+    font-size: 12.5px;
+  }
+  footer .rule { color: var(--rule-2); white-space: pre; display: block; margin-bottom: 18px; overflow: hidden; }
+  footer a { color: var(--ink-2); }
+
+  @media (max-width: 720px) {
+    .two { grid-template-columns: 1fr; }
+    .tagline { font-size: 21px; }
+    nav .links { gap: 14px; }
+    section { padding: 42px 20px; }
+    header.hero { padding: 48px 20px 44px; }
+
+    /* Stack the panes and turn the arrow to point down. */
+    .hero-art { grid-template-columns: 1fr; }
+    .arrow { flex-direction: row; min-width: 0; padding: 12px 0; }
+    .arrow-line { width: 60px; }
+    .flow { font-size: 10px; }
+  }
+</style>
+</head>
+<body>
+
+<main>
+
+<nav>
+  <span class="mark">◈</span>
+  <span class="name">PINPOINT</span>
+  <span class="links">
+    <a href="#install">Install</a>
+    <a href="#arrives">Payload</a>
+    <a href="#how">How</a>
+    <a href="https://github.com/tolgainam/pinpoint">GitHub&nbsp;↗</a>
+  </span>
+</nav>
+
+<header class="hero">
+  <div class="hero-art" aria-hidden="true">
+    <div class="pane">
+      <div class="pane-bar"><span class="tt">localhost:3000</span></div>
+      <div class="pane-body">
+        <div class="mock">
+          <span class="pin">1</span>
+          <div class="mock-title">40 years of history</div>
+          <div class="mock-line"></div>
+          <div class="mock-line short"></div>
+        </div>
+        <div class="bubble">make the background red</div>
+      </div>
+    </div>
+
+    <div class="arrow">
+      <span class="arrow-label">dispatch</span>
+      <span class="arrow-line"></span>
+    </div>
+
+    <div class="pane">
+      <div class="pane-bar"><span class="tt">claude code</span></div>
+      <div class="pane-body term">
+        <div class="row"><span class="key">selector</span> <span class="val">[data-testid="feature-history"]</span></div>
+        <div class="row"><span class="key">component</span> <span class="val">FeatureCard</span></div>
+        <div class="row"><span class="key">screenshot</span> <span class="val">shot-01.png</span></div>
+        <div class="row done"><span class="tick">✓</span> resolved — background is red now</div>
+      </div>
+    </div>
+  </div>
+
+  <h1 class="tagline">Comment on the page.<br><em>Fix it in the terminal.</em></h1>
+
+  <p class="lede">
+    Pin comments to elements on your localhost app and hit Dispatch. Claude Code receives
+    the selector, the component name, the page state — and a cropped screenshot of exactly
+    what you were looking at.
+  </p>
+
+  <pre class="ascii flow" aria-hidden="true">  <b>◈</b> <i>click the element</i>  ──▶  <i>type what's wrong</i>  ──▶  <b>dispatch</b>  ──▶  <i>it gets fixed</i>  ──▶  <b>✓</b></pre>
+
+  <div class="badges">
+    <span class="badge">Claude Code plugin</span>
+    <span class="badge">Chrome MV3</span>
+    <span class="badge">Node 20+</span>
+    <span class="badge">MIT</span>
+    <span class="badge">no build step</span>
+  </div>
+</header>
+
+<section>
+  <div class="kicker">the problem</div>
+  <h2>Prose is a lossy channel</h2>
+  <div class="prose">
+    <p>
+      You spot something wrong in the browser, switch to the terminal, and type
+      <em>"the spacing under the brand header on the explore page is too tight."</em>
+      Now Claude has to reconstruct which element you meant, on which route, in which
+      state. Everything that was obvious on screen — <strong>which node, what it looked
+      like, what was around it</strong> — never survives the trip.
+    </p>
+    <p>
+      Pinpoint moves the comment to where the context already is. You click the element.
+      The context comes along for free.
+    </p>
+  </div>
+</section>
+
+<section id="install">
+  <div class="kicker">install</div>
+  <h2>Two pieces, about a minute</h2>
+
+  <div class="steps">
+    <div class="step">
+      <h3>Add the marketplace and install the plugin</h3>
+      <p class="note">In any Claude Code session. Dependencies install themselves.</p>
+      <div class="cmd">
+        <span class="prompt">&gt;</span>
+        <code>/plugin marketplace add tolgainam/pinpoint</code>
+        <button data-copy="/plugin marketplace add tolgainam/pinpoint">copy</button>
+      </div>
+      <div class="cmd">
+        <span class="prompt">&gt;</span>
+        <code>/plugin install pinpoint@pinpoint-marketplace</code>
+        <button data-copy="/plugin install pinpoint@pinpoint-marketplace">copy</button>
+      </div>
+    </div>
+
+    <div class="step">
+      <h3>Load the browser extension</h3>
+      <p class="note">
+        This prints the extension's path, copies it to your clipboard, and opens
+        <code>chrome://extensions</code>. Turn on Developer mode → Load unpacked → paste.
+      </p>
+      <div class="cmd">
+        <span class="prompt">&gt;</span>
+        <code>/pinpoint:setup</code>
+        <button data-copy="/pinpoint:setup">copy</button>
+      </div>
+    </div>
+
+    <div class="step">
+      <h3>Open your app and click the icon</h3>
+      <p class="note">
+        Pinpoint activates on <code>localhost</code> and <code>127.0.0.1</code> only.
+        Clicking the icon toggles comment mode — and grants screenshot permission for
+        that tab.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="arrives">
+  <div class="kicker">the payload</div>
+  <h2>What actually lands in your session</h2>
+  <div class="prose">
+    <p>
+      Not a description of the element. The element.
+    </p>
+  </div>
+
+  <div class="payload">
+    <div class="bar"><span class="dot live"></span> claude code — channel event</div>
+<pre><span class="k">&lt;channel source="pinpoint" batch_id="20260822-023835-z0fp" count="1"&gt;</span>
+<span class="b">**1 comment**</span> on http://localhost:3000/ · viewport: 1772x1054 @1x
+  · colour scheme: dark · batch: 20260822-023835-z0fp
+whole page: ~/.claude/pinpoint/queue/20260822-023835-z0fp/page.png
+
+<span class="b">### [20260822-023835-z0fp#1]</span> make background red and add 32px padding
+  - component: <span class="s">`FeatureCard`</span>
+  - selector: <span class="s">`[data-testid="feature-history"]`</span>
+  - text: <span class="s">"40 years of history — Backfill and replay any point…"</span>
+  - screenshot: ~/.claude/pinpoint/queue/20260822-023835-z0fp/shot-01.png
+<span class="k">&lt;/channel&gt;</span></pre>
+  </div>
+
+  <ul class="ticks">
+    <li><strong>Screenshots are real PNG files on disk</strong>, referenced by absolute path. Claude opens them with the ordinary Read tool, which renders images — no MCP image plumbing involved.</li>
+    <li><strong>The overlay hides itself before every capture</strong>, so pins and the toolbar never end up in the shot.</li>
+    <li><strong>Selectors prefer <code>[data-testid]</code></strong>, then <code>#id</code>, then a stable class chain, then an <code>:nth-of-type</code> path. React component names come from a fiber walk where they're available.</li>
+    <li><strong>Resolutions travel back.</strong> When Claude calls <code>resolve_comment</code>, the pin turns green with a ✓ and the one-line summary. You never switch to the terminal to check.</li>
+  </ul>
+</section>
+
+<section id="how">
+  <div class="kicker">architecture</div>
+  <h2>How it works</h2>
+
+  <figure>
+<pre>   ┌─────────────────────────┐
+   │  chrome extension       │   shadow-DOM overlay, MV3 worker
+   │  ◈ pin  ◈ pin  ◈ pin    │   captures + crops the viewport
+   └───────────┬─────────────┘
+               │  POST /dispatch          <span class="b">127.0.0.1 only</span>
+               ▼
+   ┌─────────────────────────┐
+   │  bridge                 │   node · MCP server over stdio
+   │  server/pinpoint.js     │   + local HTTP on :8788
+   └─────┬───────────────┬───┘
+         │               │
+         ▼               ▼
+   ┌───────────┐   ┌──────────────────────────┐
+   │  queue    │   │  <span class="k">notifications/</span>          │
+   │  on disk  │   │  <span class="k">claude/channel</span>          │──▶ lands in your session
+   │  json+png │   └──────────────────────────┘
+   └─────┬─────┘
+         │  list_comments
+         ▼
+   <span class="k">/pinpoint:comments</span>  ──▶ pulled on demand, no flags
+
+         ◀── SSE /events ──  resolve_comment  ──▶ pin turns green</pre>
+    <figcaption>
+      The queue on disk is the source of truth. The channel is an accelerator on top of
+      it — if channels are unavailable, the pull path still works unchanged.
+    </figcaption>
+  </figure>
+
+  <div class="two">
+    <div class="panel">
+      <h3>On demand <span class="tag">any session</span></h3>
+      <p>Works everywhere, no flags. Comments wait in the queue until you ask for them.</p>
+      <pre><span class="k">/pinpoint:comments</span></pre>
+    </div>
+    <div class="panel">
+      <h3>Hands-free <span class="tag">research preview</span></h3>
+      <p>Dispatches wake the session on their own. Custom channels aren't allowlisted yet, hence the flag.</p>
+      <pre><span class="c">$</span> claude <span class="k">\</span>
+  --dangerously-load-development-channels <span class="k">\</span>
+  server:pinpoint</pre>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="kicker">security</div>
+  <h2>A localhost port is a public surface</h2>
+  <div class="prose">
+    <p>
+      Any page you visit can <code>fetch()</code> a port on your machine. Three layers
+      stand in the way:
+    </p>
+  </div>
+  <ul class="ticks">
+    <li>The bridge binds <strong><code>127.0.0.1</code> explicitly</strong>, never <code>0.0.0.0</code>.</li>
+    <li>Requests from an <strong>unrecognised web <code>Origin</code> are rejected</strong>, and <code>application/json</code> is required — which forces a CORS preflight the server refuses for unknown origins. That's the layer that actually stops a drive-by page.</li>
+    <li>Comment text is treated as <strong>untrusted input</strong> in the channel instructions, since anything reaching the session is model-visible.</li>
+  </ul>
+  <div class="prose" style="margin-top:16px">
+    <p>Set <code>PINPOINT_TOKEN</code> to additionally require an <code>X-Pinpoint-Token</code> header.</p>
+  </div>
+</section>
+
+<section>
+  <div class="kicker">configuration</div>
+  <h2>Environment</h2>
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Variable</th><th>Default</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td>PINPOINT_PORT</td><td>8788</td><td>Bridge port</td></tr>
+      <tr><td>PINPOINT_QUEUE</td><td>~/.claude/pinpoint/queue</td><td>Where batches land — global, so a dispatch is never stranded in the wrong repo</td></tr>
+      <tr><td>PINPOINT_TOKEN</td><td>—</td><td>Shared secret required on /dispatch</td></tr>
+      <tr><td>PINPOINT_RETAIN_HOURS</td><td>24</td><td>How long resolved batches keep their screenshots</td></tr>
+      <tr><td>PINPOINT_MAX_BATCHES</td><td>200</td><td>Hard ceiling on batches kept, oldest dropped first</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <div class="kicker">honest limits</div>
+  <h2>What it can't do</h2>
+  <ul class="ticks">
+    <li><strong>No <code>file:line</code>.</strong> React 19 removed <code>_debugSource</code> from fibers, so mapping a clicked element to <code>Header.tsx:42</code> isn't reliably possible. Pinpoint captures strong identifiers instead and lets Claude grep for them — which works well and depends on no fragile internals.</li>
+    <li><strong>Chrome only</strong>, and <code>localhost</code> / <code>127.0.0.1</code> only. By design.</li>
+    <li><strong>Screenshot permission is per-tab and per-navigation.</strong> Chrome grants <code>activeTab</code> when you click the icon and revokes it on the next navigation. A failed capture tells you why in a toast rather than going quiet.</li>
+  </ul>
+</section>
+
+<footer>
+  <span class="rule">─────────────────────────────────────────────────────────</span>
+  <a href="https://github.com/tolgainam/pinpoint">github.com/tolgainam/pinpoint</a>
+  &nbsp;·&nbsp; MIT &nbsp;·&nbsp; ◈
+</footer>
+
+</main>
+
+<script>
+  // Copy buttons. The clipboard API needs a secure context, which GitHub Pages is.
+  for (const btn of document.querySelectorAll('[data-copy]')) {
+    btn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(btn.dataset.copy)
+        const was = btn.textContent
+        btn.textContent = 'copied'
+        btn.classList.add('done')
+        setTimeout(() => { btn.textContent = was; btn.classList.remove('done') }, 1400)
+      } catch {
+        btn.textContent = 'select it'
+        setTimeout(() => { btn.textContent = 'copy' }, 1400)
+      }
+    })
+  }
+</script>
+
+</body>
+</html>

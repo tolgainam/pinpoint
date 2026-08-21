@@ -1,0 +1,258 @@
+/* Pinpoint overlay. Lives in a shadow root, so nothing here leaks and nothing
+   from the host page reaches in. Every rule is written against :host defaults. */
+
+:host {
+  all: initial;
+}
+
+* {
+  box-sizing: border-box;
+  font-family: ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+}
+
+.layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------- capture */
+
+/* Only present in comment mode. Swallows every click so the app underneath
+   never navigates while you are pinning. */
+.capture {
+  pointer-events: auto;
+  cursor: crosshair;
+  z-index: 1;
+}
+
+/* ---------------------------------------------------------------- highlight */
+
+.highlight {
+  position: absolute;
+  z-index: 2;
+  border: 1.5px solid var(--pp-accent);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--pp-accent) 12%, transparent);
+  transition: all 60ms linear;
+  display: none;
+}
+
+.highlight.frozen {
+  border-style: dashed;
+  transition: none;
+}
+
+.tag {
+  position: absolute;
+  top: -22px;
+  left: -1.5px;
+  padding: 2px 6px;
+  border-radius: 4px 4px 0 0;
+  background: var(--pp-accent);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1.4;
+  font-weight: 600;
+  white-space: nowrap;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------------------------------------------------------------- pins */
+
+.pin {
+  position: absolute;
+  z-index: 3;
+  pointer-events: auto;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  background: var(--pp-accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0 1px 6px rgb(0 0 0 / 0.35);
+  transition: transform 100ms ease;
+}
+
+.pin:hover { transform: scale(1.15); }
+.pin.sent { background: #6b7280; }
+.pin.detached { opacity: 0.4; border-style: dashed; }
+
+/* ---------------------------------------------------------------- cards */
+
+.card {
+  position: absolute;
+  z-index: 20;
+  pointer-events: auto;
+  width: 300px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--pp-line);
+  background: var(--pp-bg);
+  color: var(--pp-fg);
+  box-shadow: 0 10px 32px rgb(0 0 0 / 0.4);
+  font-size: 13px;
+}
+
+.card .meta {
+  font-size: 11px;
+  color: var(--pp-dim);
+  margin-bottom: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card textarea {
+  width: 100%;
+  min-height: 68px;
+  resize: vertical;
+  padding: 7px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--pp-line);
+  background: var(--pp-input);
+  color: var(--pp-fg);
+  font-size: 13px;
+  line-height: 1.45;
+  outline: none;
+}
+
+.card textarea:focus { border-color: var(--pp-accent); }
+
+.card .note {
+  white-space: pre-wrap;
+  line-height: 1.45;
+  margin-bottom: 8px;
+  word-break: break-word;
+}
+
+.row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.row .spacer { flex: 1; }
+
+/* ---------------------------------------------------------------- buttons */
+
+button {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--pp-line);
+  background: transparent;
+  color: var(--pp-fg);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+button:hover:not(:disabled) { background: var(--pp-hover); }
+button:disabled { opacity: 0.45; cursor: default; }
+
+button.primary {
+  background: var(--pp-accent);
+  border-color: var(--pp-accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+button.primary:hover:not(:disabled) { filter: brightness(1.08); }
+button.danger:hover { color: #f87171; }
+
+/* ---------------------------------------------------------------- toolbar */
+
+.bar {
+  position: absolute;
+  z-index: 10;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--pp-line);
+  background: var(--pp-bg);
+  color: var(--pp-fg);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.35);
+  font-size: 12px;
+  user-select: none;
+}
+
+.grip {
+  cursor: grab;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  font-weight: 700;
+  color: var(--pp-accent);
+}
+
+.grip:active { cursor: grabbing; }
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ef4444;
+  flex: none;
+}
+
+.dot.on { background: #22c55e; }
+
+.count {
+  min-width: 18px;
+  text-align: center;
+  color: var(--pp-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+button.mode.on {
+  background: var(--pp-accent);
+  border-color: var(--pp-accent);
+  color: #fff;
+}
+
+.toast {
+  position: absolute;
+  z-index: 30;
+  pointer-events: none;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--pp-bg);
+  border: 1px solid var(--pp-line);
+  color: var(--pp-fg);
+  font-size: 12px;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.35);
+  opacity: 0;
+  transition: opacity 160ms ease;
+  max-width: 60vw;
+}
+
+.toast.show { opacity: 1; }
+.toast.bad { border-color: #f87171; color: #fca5a5; }
+
+/* ---------------------------------------------------------------- palette */
+
+/* Deliberately one dark theme regardless of the page's scheme: the toolbar should
+   read as tooling sitting on top of the app, never as part of it. */
+:host {
+  --pp-accent: #d97757;
+  --pp-bg: #1b1b1d;
+  --pp-fg: #f4f4f5;
+  --pp-dim: #9ca3af;
+  --pp-line: #3f3f46;
+  --pp-input: #131315;
+  --pp-hover: #2a2a2e;
+}

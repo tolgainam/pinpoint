@@ -1,0 +1,25 @@
+{
+  "name": "pinpoint-marketplace",
+  "owner": {
+    "name": "Tolga Inam",
+    "url": "https://github.com/tolgainam"
+  },
+  "description": "Pinpoint — comment on a live page, dispatch straight into Claude Code",
+  "plugins": [
+    {
+      "name": "pinpoint",
+      "source": "./",
+      "description": "Pin comments to elements on a localhost page and dispatch them — with screenshots — into this session",
+      "version": "0.2.0",
+      "category": "development",
+      "tags": ["browser", "frontend", "screenshots", "devtools"],
+      "author": {
+        "name": "Tolga Inam",
+        "url": "https://github.com/tolgainam"
+      },
+      "homepage": "https://tolgainam.github.io/pinpoint/",
+      "repository": "https://github.com/tolgainam/pinpoint",
+      "license": "MIT"
+    }
+  ]
+}

@@ -84,6 +84,9 @@
 
 .pin:hover { transform: scale(1.15); }
 .pin.sent { background: #6b7280; }
+/* Resolved by Claude. Green and ticked, so it reads as done at a glance — a muted
+   version of this was indistinguishable from the grey "dispatched" state. */
+.pin.resolved { background: #2ea36c; border-color: #d7f5e6; opacity: 1; }
 .pin.detached { opacity: 0.4; border-style: dashed; }
 
 /* ---------------------------------------------------------------- cards */
@@ -126,6 +129,17 @@
 }
 
 .card textarea:focus { border-color: var(--pp-accent); }
+
+.card .resolution {
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  background: rgb(63 111 82 / 0.18);
+  color: #a7d7bb;
+  font-size: 12px;
+  line-height: 1.45;
+  word-break: break-word;
+}
 
 .card .note {
   white-space: pre-wrap;

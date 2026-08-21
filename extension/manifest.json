@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Pinpoint",
+  "version": "0.1.0",
+  "description": "Pin comments to elements on a local dev page and dispatch them into a running Claude Code session.",
+  "permissions": ["storage", "tabs", "scripting"],
+  "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"],
+  "background": { "service_worker": "worker.js" },
+  "action": { "default_title": "Pinpoint — toggle comment mode" },
+  "content_scripts": [
+    {
+      "matches": ["http://localhost/*", "http://127.0.0.1/*"],
+      "js": ["probe.js"],
+      "world": "MAIN",
+      "run_at": "document_start",
+      "all_frames": false
+    },
+    {
+      "matches": ["http://localhost/*", "http://127.0.0.1/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["overlay.css"],
+      "matches": ["http://localhost/*", "http://127.0.0.1/*"]
+    }
+  ]
+}

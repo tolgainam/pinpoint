@@ -1,7 +1,15 @@
 {
   "name": "pinpoint",
   "displayName": "Pinpoint",
-  "version": "0.1.0",
-  "description": "Pin comments to elements on a web page, dispatch them into this session",
+  "version": "0.2.0",
+  "description": "Pin comments to elements on a localhost page and dispatch them — with screenshots — into this session",
+  "author": {
+    "name": "Tolga Inam",
+    "url": "https://github.com/tolgainam"
+  },
+  "homepage": "https://tolgainam.github.io/pinpoint/",
+  "repository": "https://github.com/tolgainam/pinpoint",
+  "license": "MIT",
+  "keywords": ["browser", "comments", "screenshots", "frontend", "devtools", "channel"],
   "mcpServers": "./plugin-mcp.json"
 }

@@ -1,0 +1,104 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Nimbus — ship weather, not guesses</title>
+<link rel="stylesheet" href="/style.css">
+
+<header class="site-header" data-testid="site-header">
+  <div class="brand" data-testid="brand">
+    <span class="brand-mark">◈</span>
+    <span class="brand-name">Nimbus</span>
+  </div>
+  <nav class="site-nav" data-testid="site-nav">
+    <a href="#features">Features</a>
+    <a href="#pricing">Pricing</a>
+    <a href="#docs">Docs</a>
+    <a href="#changelog">Changelog</a>
+  </nav>
+  <button class="btn btn-ghost" data-testid="sign-in">Sign in</button>
+</header>
+
+<section class="hero" data-testid="hero">
+  <p class="eyebrow" data-testid="hero-eyebrow">v4.2 is out</p>
+  <h1 class="hero-title" data-testid="hero-title">Ship weather, not guesses.</h1>
+  <p class="hero-sub" data-testid="hero-sub">
+    Forecast APIs with honest error bars. Sub-100ms at the edge, in 41 regions,
+    for teams that would rather not explain a bad prediction to a customer.
+  </p>
+  <div class="hero-actions" data-testid="hero-actions">
+    <button class="btn btn-primary" data-testid="cta-primary">Start free</button>
+    <button class="btn btn-secondary" data-testid="cta-secondary">Read the docs</button>
+  </div>
+</section>
+
+<section class="stats" data-testid="stats-band">
+  <div class="stat"><strong>41</strong><span>edge regions</span></div>
+  <div class="stat"><strong>99.98%</strong><span>uptime, trailing 90d</span></div>
+  <div class="stat"><strong>84ms</strong><span>p95 response</span></div>
+  <div class="stat"><strong>12B</strong><span>calls last month</span></div>
+</section>
+
+<section class="features" id="features" data-testid="features">
+  <h2 class="section-title">Built for the boring parts</h2>
+  <div class="card-grid" data-testid="feature-grid">
+    <article class="feature-card" data-testid="feature-accuracy">
+      <div class="feature-icon">◐</div>
+      <h3>Calibrated accuracy</h3>
+      <p>Every forecast ships with a confidence interval you can actually put in a UI.</p>
+    </article>
+    <article class="feature-card" data-testid="feature-history">
+      <div class="feature-icon">◑</div>
+      <h3>40 years of history</h3>
+      <p>Backfill and replay any point on Earth down to the hour, in one query.</p>
+    </article>
+    <article class="feature-card" data-testid="feature-alerts">
+      <div class="feature-icon">◒</div>
+      <h3>Alerts that fire once</h3>
+      <p>Debounced severe-weather webhooks. No 3am storm of duplicate pages.</p>
+    </article>
+  </div>
+</section>
+
+<section class="pricing" id="pricing" data-testid="pricing">
+  <h2 class="section-title">Pricing</h2>
+  <div class="price-row" data-testid="price-row">
+    <div class="price-card" data-testid="plan-hobby">
+      <h3>Hobby</h3>
+      <div class="price">$0</div>
+      <p class="price-note">10k calls / month</p>
+      <ul><li>Current conditions</li><li>7-day forecast</li><li>Community support</li></ul>
+      <button class="btn btn-secondary">Choose Hobby</button>
+    </div>
+    <div class="price-card featured" data-testid="plan-team">
+      <div class="ribbon">Most popular</div>
+      <h3>Team</h3>
+      <div class="price">$79</div>
+      <p class="price-note">2M calls / month</p>
+      <ul><li>Everything in Hobby</li><li>Historical replay</li><li>Webhook alerts</li><li>Email support</li></ul>
+      <button class="btn btn-primary">Choose Team</button>
+    </div>
+    <div class="price-card" data-testid="plan-scale">
+      <h3>Scale</h3>
+      <div class="price">$340</div>
+      <p class="price-note">25M calls / month</p>
+      <ul><li>Everything in Team</li><li>Private regions</li><li>99.99% SLA</li></ul>
+      <button class="btn btn-secondary">Choose Scale</button>
+    </div>
+  </div>
+</section>
+
+<section class="banner" data-testid="newsletter">
+  <div>
+    <h2>Weather notes, monthly</h2>
+    <p class="banner-sub">Model changes, postmortems, and the occasional storm chase.</p>
+  </div>
+  <form class="signup" data-testid="signup-form" onsubmit="return false">
+    <input type="email" placeholder="you@company.com" data-testid="signup-email">
+    <button class="btn btn-primary" data-testid="signup-submit">Subscribe</button>
+  </form>
+</section>
+
+<footer class="site-footer" data-testid="site-footer">
+  <span class="brand-name">Nimbus</span>
+  <nav><a href="#">Status</a><a href="#">Privacy</a><a href="#">Terms</a><a href="#">Careers</a></nav>
+  <span class="copyright">© 2026 Nimbus Labs</span>
+</footer>

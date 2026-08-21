@@ -14,7 +14,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync } from 'node:fs'
+import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 
@@ -23,6 +23,10 @@ const PROJECT_DIR = process.env.PINPOINT_PROJECT_DIR ?? process.cwd()
 const QUEUE = process.env.PINPOINT_QUEUE ?? join(homedir(), '.claude', 'pinpoint', 'queue')
 /** Optional shared secret. When set, /dispatch also requires X-Pinpoint-Token. */
 const TOKEN = process.env.PINPOINT_TOKEN?.trim()
+/** How long a fully-resolved batch is kept before its screenshots are deleted. */
+const RETAIN_MS = Number(process.env.PINPOINT_RETAIN_HOURS ?? 24) * 3600_000
+/** Hard ceiling on batches kept, oldest dropped first, regardless of age. */
+const MAX_BATCHES = Number(process.env.PINPOINT_MAX_BATCHES ?? 200)
 const VERSION = '0.1.0'
 
 mkdirSync(QUEUE, { recursive: true })
@@ -57,6 +61,7 @@ interface Batch {
   viewport?: { w: number; h: number }
   dpr?: number
   colorScheme?: string
+  pageShot?: string      // filename of the uncropped viewport shot, relative to the batch dir
   comments: Comment[]
 }
 
@@ -87,6 +92,36 @@ function pendingBatches(): Batch[] {
     .filter((b): b is Batch => !!b && b.comments.some(c => c.status !== 'resolved'))
 }
 
+/**
+ * Screenshots make this directory grow without bound otherwise — a few hundred KB per
+ * dispatch, kept forever. Resolved work is safe to drop; anything still pending is not,
+ * however old, because it is the only record that the comment exists.
+ */
+function prune(): void {
+  if (!existsSync(QUEUE)) return
+  const now = Date.now()
+  const names = readdirSync(QUEUE).sort()
+  const resolved: string[] = []
+
+  for (const name of names) {
+    const b = readBatch(name)
+    if (!b) continue
+    if (b.comments.some(c => c.status !== 'resolved')) continue
+    resolved.push(name)
+    const age = now - new Date(b.receivedAt).getTime()
+    if (age > RETAIN_MS) rmSync(batchDir(name), { recursive: true, force: true })
+  }
+
+  // Still too many even after the age sweep: drop the oldest resolved ones.
+  const left = readdirSync(QUEUE)
+  if (left.length > MAX_BATCHES) {
+    const droppable = resolved.filter(n => left.includes(n)).sort()
+    for (const name of droppable.slice(0, left.length - MAX_BATCHES)) {
+      rmSync(batchDir(name), { recursive: true, force: true })
+    }
+  }
+}
+
 // ---------------------------------------------------------------- rendering
 
 /**
@@ -104,6 +139,8 @@ function renderBatch(b: Batch): string {
     `batch: ${b.id}`,
   ].filter(Boolean).join(' · ')
 
+  const page = b.pageShot ? `\nwhole page: ${join(batchDir(b.id), b.pageShot)}` : ''
+
   const body = open.map(c => {
     const facts = [
       c.component ? `component: \`${c.component}\`` : null,
@@ -116,8 +153,10 @@ function renderBatch(b: Batch): string {
     return `\n### [${b.id}#${c.n}] ${c.note}\n${facts}`
   }).join('\n')
 
-  return `${head}\n${body}`
+  return `${head}${page}\n${body}`
 }
+
+prune()
 
 // ---------------------------------------------------------------- mcp
 
@@ -306,15 +345,24 @@ async function handleDispatch(req: Request): Promise<Response> {
     }
   })
 
+  // One uncropped viewport shot per batch, as context for the crops.
+  let pageShot: string | undefined
+  if (typeof payload.pageShot === 'string' && payload.pageShot.startsWith('data:image/png;base64,')) {
+    pageShot = 'page.png'
+    writeFileSync(join(batchDir(id), pageShot), Buffer.from(payload.pageShot.split(',')[1], 'base64'))
+  }
+
   const batch: Batch = {
     id,
     receivedAt: new Date().toISOString(),
     origin: origin ?? String(payload.origin ?? 'unknown'),
     url: payload.url, pathname: payload.pathname, title: payload.title,
     viewport: payload.viewport, dpr: payload.dpr, colorScheme: payload.colorScheme,
+    pageShot,
     comments,
   }
   writeBatch(batch)
+  prune()
 
   // Fire into the session. A no-op if this server wasn't loaded as a channel —
   // the batch is already on disk, so /pinpoint:comments still finds it.

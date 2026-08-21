@@ -1,28 +1,33 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 /**
  * Static server for the demo page, with a live reload so a fix made from a pinned
  * comment shows up in the browser without touching the keyboard.
  *
- * bun demo/serve.ts   →   http://localhost:3000
+ *   node demo/serve.js   ->   http://localhost:3000
  */
+import { createServer } from 'node:http'
+import { readFile, stat } from 'node:fs/promises'
 import { watch } from 'node:fs'
-import { join, extname } from 'node:path'
+import { join, extname, normalize } from 'node:path'
+import { dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const DIR = import.meta.dir
+const DIR = dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.env.DEMO_PORT ?? 3000)
 
-const TYPES: Record<string, string> = {
+const TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.svg': 'image/svg+xml',
+  '.png': 'image/png',
 }
 
-const clients = new Set<(chunk: string) => void>()
+const clients = new Set()
 
 // Debounced: an editor writing a file often produces several events in a row.
-let timer: Timer | undefined
-let changed = new Set<string>()
+let timer
+let changed = new Set()
 watch(DIR, { recursive: true }, (_event, filename) => {
   if (filename) changed.add(String(filename))
   clearTimeout(timer)
@@ -58,38 +63,47 @@ const RELOAD = `
   }
 </script>`
 
-Bun.serve({
-  port: PORT,
-  hostname: '127.0.0.1',
-  idleTimeout: 0,
-  async fetch(req) {
-    const url = new URL(req.url)
+const server = createServer(async (req, res) => {
+  const url = new URL(req.url ?? '/', `http://127.0.0.1:${PORT}`)
 
-    if (url.pathname === '/__reload') {
-      const stream = new ReadableStream({
-        start(ctrl) {
-          const enc = new TextEncoder()
-          const emit = (chunk: string) => ctrl.enqueue(enc.encode(chunk))
-          emit(': connected\n\n')
-          clients.add(emit)
-          req.signal.addEventListener('abort', () => clients.delete(emit))
-        },
-      })
-      return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } })
-    }
+  if (url.pathname === '/__reload') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    })
+    const emit = chunk => res.write(chunk)
+    emit(': connected\n\n')
+    clients.add(emit)
+    req.on('close', () => clients.delete(emit))
+    return
+  }
 
-    const path = url.pathname === '/' ? '/index.html' : url.pathname
-    const file = Bun.file(join(DIR, path))
-    if (!(await file.exists())) return new Response('not found', { status: 404 })
+  // normalize() collapses any ../ before it can escape the demo directory.
+  const rel = normalize(url.pathname === '/' ? '/index.html' : url.pathname).replace(/^(\.\.[/\\])+/, '')
+  const path = join(DIR, rel)
+  if (!path.startsWith(DIR)) {
+    res.writeHead(403).end('forbidden')
+    return
+  }
 
-    const type = TYPES[extname(path)] ?? 'application/octet-stream'
-    const headers = { 'Content-Type': type, 'Cache-Control': 'no-store' }
+  try {
+    await stat(path)
+  } catch {
+    res.writeHead(404).end('not found')
+    return
+  }
 
-    if (path.endsWith('.html')) {
-      return new Response((await file.text()) + RELOAD, { headers })
-    }
-    return new Response(file, { headers })
-  },
+  const type = TYPES[extname(rel)] ?? 'application/octet-stream'
+  const headers = { 'Content-Type': type, 'Cache-Control': 'no-store' }
+
+  if (rel.endsWith('.html')) {
+    res.writeHead(200, headers).end((await readFile(path, 'utf8')) + RELOAD)
+    return
+  }
+  res.writeHead(200, headers).end(await readFile(path))
 })
 
-console.log(`demo on http://localhost:${PORT}`)
+server.timeout = 0
+server.keepAliveTimeout = 0
+server.listen(PORT, '127.0.0.1', () => console.log(`demo on http://localhost:${PORT}`))

@@ -1,18 +1,19 @@
 {
-  "name": "pinpoint",
-  "version": "0.1.0",
-  "private": true,
+  "name": "pinpoint-claude",
+  "version": "0.2.0",
   "type": "module",
-  "description": "Browser comment toolbar that dispatches into a running Claude Code session",
+  "description": "Pin comments to elements on a localhost page and dispatch them into a running Claude Code session",
+  "license": "MIT",
+  "repository": "github:tolgainam/pinpoint",
+  "keywords": ["claude-code", "claude-code-plugin", "mcp", "chrome-extension", "devtools"],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "server": "bun server/pinpoint.ts",
-    "typecheck": "tsc --noEmit"
+    "server": "node server/pinpoint.js",
+    "demo": "node demo/serve.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "zod": "^4.4.3"
-  },
-  "devDependencies": {
-    "@types/bun": "^1.4.0"
+    "@modelcontextprotocol/sdk": "^1.30.0"
   }
 }

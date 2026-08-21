@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 /**
  * Pinpoint — MCP channel server + local HTTP bridge.
  *
@@ -10,10 +10,14 @@
  *   channel  — dispatches arrive in the session unprompted (needs --channels or the dev flag)
  *   tools    — dispatches sit in the queue until /pinpoint:comments pulls them
  * The queue on disk is the source of truth in both, so nothing is lost either way.
+ *
+ * Plain JavaScript on plain Node, deliberately: the only runtime a user needs is the one
+ * Claude Code already requires. No build step, no second runtime to install.
  */
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js'
+import { createServer } from 'node:http'
 import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
@@ -27,69 +31,50 @@ const TOKEN = process.env.PINPOINT_TOKEN?.trim()
 const RETAIN_MS = Number(process.env.PINPOINT_RETAIN_HOURS ?? 24) * 3600_000
 /** Hard ceiling on batches kept, oldest dropped first, regardless of age. */
 const MAX_BATCHES = Number(process.env.PINPOINT_MAX_BATCHES ?? 200)
-const VERSION = '0.1.0'
+/** A batch carries screenshots, so bodies are large by web standards — but not unbounded. */
+const MAX_BODY = 48 * 1024 * 1024
+const VERSION = '0.2.0'
 
 mkdirSync(QUEUE, { recursive: true })
 
-// ---------------------------------------------------------------- types
-
-interface Comment {
-  n: number
-  note: string
-  selector?: string
-  tag?: string
-  elementId?: string
-  classes?: string
-  role?: string
-  ariaLabel?: string
-  text?: string
-  html?: string
-  rect?: { x: number; y: number; w: number; h: number }
-  component?: string
-  shot?: string          // filename, relative to the batch dir
-  status?: 'pending' | 'resolved'
-  resolution?: string
-}
-
-interface Batch {
-  id: string
-  receivedAt: string
-  origin: string
-  url?: string
-  pathname?: string
-  title?: string
-  viewport?: { w: number; h: number }
-  dpr?: number
-  colorScheme?: string
-  pageShot?: string      // filename of the uncropped viewport shot, relative to the batch dir
-  comments: Comment[]
-}
+/**
+ * @typedef {{n: number, note: string, selector?: string, tag?: string, elementId?: string,
+ *   classes?: string, role?: string, ariaLabel?: string, text?: string, html?: string,
+ *   rect?: {x: number, y: number, w: number, h: number}, component?: string, shot?: string,
+ *   status?: 'pending' | 'resolved', resolution?: string}} Comment
+ *
+ * @typedef {{id: string, receivedAt: string, origin: string, url?: string, pathname?: string,
+ *   title?: string, viewport?: {w: number, h: number}, dpr?: number, colorScheme?: string,
+ *   pageShot?: string, comments: Comment[]}} Batch
+ */
 
 // ---------------------------------------------------------------- queue
 
-const batchDir = (id: string) => join(QUEUE, id)
-const batchFile = (id: string) => join(batchDir(id), 'batch.json')
+const batchDir = id => join(QUEUE, id)
+const batchFile = id => join(batchDir(id), 'batch.json')
 
-function readBatch(id: string): Batch | null {
+/** @returns {Batch | null} */
+function readBatch(id) {
   try {
-    return JSON.parse(readFileSync(batchFile(id), 'utf8')) as Batch
+    return JSON.parse(readFileSync(batchFile(id), 'utf8'))
   } catch {
     return null
   }
 }
 
-function writeBatch(b: Batch): void {
+/** @param {Batch} b */
+function writeBatch(b) {
   mkdirSync(batchDir(b.id), { recursive: true })
   writeFileSync(batchFile(b.id), JSON.stringify(b, null, 2))
 }
 
 /** Every batch that still has at least one unresolved comment, oldest first. */
-function pendingBatches(): Batch[] {
+function pendingBatches() {
   if (!existsSync(QUEUE)) return []
   return readdirSync(QUEUE)
     .sort()
     .map(readBatch)
-    .filter((b): b is Batch => !!b && b.comments.some(c => c.status !== 'resolved'))
+    .filter(b => !!b && b.comments.some(c => c.status !== 'resolved'))
 }
 
 /**
@@ -97,11 +82,11 @@ function pendingBatches(): Batch[] {
  * dispatch, kept forever. Resolved work is safe to drop; anything still pending is not,
  * however old, because it is the only record that the comment exists.
  */
-function prune(): void {
+function prune() {
   if (!existsSync(QUEUE)) return
   const now = Date.now()
   const names = readdirSync(QUEUE).sort()
-  const resolved: string[] = []
+  const resolved = []
 
   for (const name of names) {
     const b = readBatch(name)
@@ -128,8 +113,10 @@ function prune(): void {
  * The brief Claude actually reads. Screenshots are referenced by absolute path rather
  * than embedded: Claude opens them with the Read tool, which renders images, so we
  * never have to push image bytes through MCP.
+ *
+ * @param {Batch} b
  */
-function renderBatch(b: Batch): string {
+function renderBatch(b) {
   const open = b.comments.filter(c => c.status !== 'resolved')
   const head = [
     `**${open.length} comment${open.length === 1 ? '' : 's'}** on ${b.url ?? b.origin}`,
@@ -214,7 +201,7 @@ const TOOLS = [
 mcp.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
 
 mcp.setRequestHandler(CallToolRequestSchema, async req => {
-  const args = (req.params.arguments ?? {}) as Record<string, string>
+  const args = req.params.arguments ?? {}
 
   if (req.params.name === 'list_comments') {
     const batches = pendingBatches()
@@ -248,18 +235,19 @@ await mcp.connect(new StdioServerTransport())
 
 // ---------------------------------------------------------------- sse
 
-const listeners = new Set<(chunk: string) => void>()
+/** @type {Set<(chunk: string) => void>} */
+const listeners = new Set()
 
 /**
  * The extension's service worker is killed whenever Chrome feels like it, so a resolve
  * can easily happen with nobody listening. Every event is numbered and kept for a while;
  * a reconnecting client asks for everything after the last number it saw.
  */
-const recent: { seq: number; chunk: string }[] = []
+const recent = []
 const MAX_RECENT = 200
 let evSeq = 0
 
-function broadcast(payload: Record<string, unknown>): void {
+function broadcast(payload) {
   const seq = ++evSeq
   const chunk = `id: ${seq}\ndata: ${JSON.stringify({ ...payload, seq })}\n\n`
   recent.push({ seq, chunk })
@@ -277,7 +265,7 @@ setInterval(() => {
   for (const emit of listeners) {
     try { emit(': ping\n\n') } catch { listeners.delete(emit) }
   }
-}, 20_000).unref?.()
+}, 20_000).unref()
 
 // ---------------------------------------------------------------- http gate
 
@@ -293,12 +281,12 @@ setInterval(() => {
 const LOCAL_PAGE = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
 const EXTENSION = /^(chrome-extension|moz-extension|safari-web-extension):\/\/[a-z0-9-]+$/i
 
-function originAllowed(origin: string | null): boolean {
+function originAllowed(origin) {
   if (!origin) return true
   return LOCAL_PAGE.test(origin) || EXTENSION.test(origin)
 }
 
-function cors(origin: string | null): Record<string, string> {
+function cors(origin) {
   return {
     'Access-Control-Allow-Origin': origin && originAllowed(origin) ? origin : 'null',
     'Access-Control-Allow-Headers': 'content-type, x-pinpoint-token',
@@ -307,48 +295,72 @@ function cors(origin: string | null): Record<string, string> {
   }
 }
 
+function send(res, status, headers, body) {
+  res.writeHead(status, headers)
+  res.end(body)
+}
+
+function sendJson(res, status, headers, value) {
+  send(res, status, { ...headers, 'Content-Type': 'application/json' }, JSON.stringify(value))
+}
+
+/** Buffer a request body, refusing anything absurd rather than growing without limit. */
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let size = 0
+    const chunks = []
+    req.on('data', chunk => {
+      size += chunk.length
+      if (size > MAX_BODY) {
+        reject(new Error('body too large'))
+        req.destroy()
+        return
+      }
+      chunks.push(chunk)
+    })
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+    req.on('error', reject)
+  })
+}
+
 // ---------------------------------------------------------------- dispatch
 
 /** Channel meta keys must match [A-Za-z0-9_]+ — anything with a hyphen is silently dropped. */
-function stamp(): string {
+function stamp() {
   const d = new Date()
-  const p = (n: number, w = 2) => String(n).padStart(w, '0')
+  const p = (n, w = 2) => String(n).padStart(w, '0')
   const rand = Math.random().toString(36).slice(2, 6)
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}-${rand}`
 }
 
-async function handleDispatch(req: Request): Promise<Response> {
-  const origin = req.headers.get('origin')
+async function handleDispatch(req, res) {
+  const origin = req.headers.origin ?? null
   const headers = cors(origin)
 
-  if (!originAllowed(origin)) {
-    return new Response('forbidden origin', { status: 403, headers })
+  if (!originAllowed(origin)) return send(res, 403, headers, 'forbidden origin')
+  if (!(req.headers['content-type'] ?? '').includes('application/json')) {
+    return send(res, 415, headers, 'expected application/json')
   }
-  if (!(req.headers.get('content-type') ?? '').includes('application/json')) {
-    return new Response('expected application/json', { status: 415, headers })
-  }
-  if (TOKEN && req.headers.get('x-pinpoint-token') !== TOKEN) {
-    return new Response('bad token', { status: 401, headers })
+  if (TOKEN && req.headers['x-pinpoint-token'] !== TOKEN) {
+    return send(res, 401, headers, 'bad token')
   }
 
-  let payload: any
+  let payload
   try {
-    payload = await req.json()
+    payload = JSON.parse(await readBody(req))
   } catch {
-    return new Response('invalid json', { status: 400, headers })
+    return send(res, 400, headers, 'invalid json')
   }
 
   const incoming = Array.isArray(payload?.comments) ? payload.comments : []
-  if (!incoming.length) {
-    return new Response('no comments', { status: 400, headers })
-  }
+  if (!incoming.length) return send(res, 400, headers, 'no comments')
 
   const id = stamp()
   mkdirSync(batchDir(id), { recursive: true })
 
-  const comments: Comment[] = incoming.map((c: any, i: number) => {
+  const comments = incoming.map((c, i) => {
     const n = i + 1
-    let shot: string | undefined
+    let shot
     // Screenshots arrive as data URLs and land as real PNGs so Read can render them.
     if (typeof c.shot === 'string' && c.shot.startsWith('data:image/png;base64,')) {
       shot = `shot-${String(n).padStart(2, '0')}.png`
@@ -368,13 +380,13 @@ async function handleDispatch(req: Request): Promise<Response> {
   })
 
   // One uncropped viewport shot per batch, as context for the crops.
-  let pageShot: string | undefined
+  let pageShot
   if (typeof payload.pageShot === 'string' && payload.pageShot.startsWith('data:image/png;base64,')) {
     pageShot = 'page.png'
     writeFileSync(join(batchDir(id), pageShot), Buffer.from(payload.pageShot.split(',')[1], 'base64'))
   }
 
-  const batch: Batch = {
+  const batch = {
     id,
     receivedAt: new Date().toISOString(),
     origin: origin ?? String(payload.origin ?? 'unknown'),
@@ -405,66 +417,74 @@ async function handleDispatch(req: Request): Promise<Response> {
     console.error('[pinpoint] notification failed:', err)
   }
 
-  return Response.json({ ok: true, batch: id, count: comments.length }, { headers })
+  sendJson(res, 200, headers, { ok: true, batch: id, count: comments.length })
 }
 
 // ---------------------------------------------------------------- serve
 
-try {
-  Bun.serve({
-    port: PORT,
-    hostname: '127.0.0.1',
-    idleTimeout: 0, // keep SSE streams open
-    async fetch(req) {
-      const url = new URL(req.url)
-      const origin = req.headers.get('origin')
+const server = createServer((req, res) => {
+  const url = new URL(req.url ?? '/', `http://127.0.0.1:${PORT}`)
+  const origin = req.headers.origin ?? null
 
-      if (req.method === 'OPTIONS') {
-        return new Response(null, { status: 204, headers: cors(origin) })
-      }
+  if (req.method === 'OPTIONS') return send(res, 204, cors(origin))
 
-      if (url.pathname === '/health') {
-        return Response.json(
-          { ok: true, version: VERSION, projectDir: PROJECT_DIR, queue: QUEUE, pending: pendingBatches().length },
-          { headers: cors(origin) },
-        )
-      }
+  if (url.pathname === '/health') {
+    return sendJson(res, 200, cors(origin), {
+      ok: true, version: VERSION, projectDir: PROJECT_DIR, queue: QUEUE, pending: pendingBatches().length,
+    })
+  }
 
-      if (url.pathname === '/events') {
-        if (!originAllowed(origin)) return new Response('forbidden', { status: 403 })
-        const since = Number(url.searchParams.get('since') ?? req.headers.get('last-event-id') ?? 0) || 0
-        const stream = new ReadableStream({
-          start(ctrl) {
-            const enc = new TextEncoder()
-            const emit = (chunk: string) => ctrl.enqueue(enc.encode(chunk))
-            emit(`: connected ${evSeq}\n\n`)
-            // Replay whatever landed while this client was away, so a pin still clears
-            // for a resolve that happened while its service worker was asleep.
-            for (const r of recent) if (r.seq > since) emit(r.chunk)
-            listeners.add(emit)
-            req.signal.addEventListener('abort', () => listeners.delete(emit))
-          },
-          cancel() { /* listener removed by the abort handler above */ },
-        })
-        return new Response(stream, {
-          headers: { ...cors(origin), 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' },
-        })
-      }
+  if (url.pathname === '/events') {
+    if (!originAllowed(origin)) return send(res, 403, {}, 'forbidden')
 
-      if (url.pathname === '/dispatch' && req.method === 'POST') {
-        return handleDispatch(req)
-      }
+    res.writeHead(200, {
+      ...cors(origin),
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    })
+    // Without this each event waits on Nagle's algorithm, which for a stream of tiny
+    // writes means a pin that clears a beat late.
+    res.socket?.setNoDelay(true)
 
-      return new Response('not found', { status: 404, headers: cors(origin) })
-    },
-  })
-  console.error(`[pinpoint] bridge on http://127.0.0.1:${PORT} · queue ${QUEUE} · project ${PROJECT_DIR}`)
-} catch (err: any) {
+    const since = Number(url.searchParams.get('since') ?? req.headers['last-event-id'] ?? 0) || 0
+    const emit = chunk => res.write(chunk)
+    emit(`: connected ${evSeq}\n\n`)
+    // Replay whatever landed while this client was away, so a pin still clears
+    // for a resolve that happened while its service worker was asleep.
+    for (const r of recent) if (r.seq > since) emit(r.chunk)
+
+    listeners.add(emit)
+    req.on('close', () => listeners.delete(emit))
+    return
+  }
+
+  if (url.pathname === '/dispatch' && req.method === 'POST') {
+    handleDispatch(req, res).catch(err => {
+      console.error('[pinpoint] dispatch failed:', err)
+      if (!res.headersSent) send(res, 500, cors(origin), 'dispatch failed')
+    })
+    return
+  }
+
+  send(res, 404, cors(origin), 'not found')
+})
+
+// An SSE response stays open for the life of the session, so the default socket
+// timeouts have to come off or the stream is cut from under us.
+server.timeout = 0
+server.keepAliveTimeout = 0
+
+server.on('error', err => {
   // Another session already owns the port. The queue is shared on disk, so this
   // session still serves list_comments — it just isn't the one receiving dispatches.
   if (err?.code === 'EADDRINUSE') {
     console.error(`[pinpoint] port ${PORT} already held by another session — running tools-only`)
   } else {
-    throw err
+    console.error('[pinpoint] http server error:', err)
   }
-}
+})
+
+server.listen(PORT, '127.0.0.1', () => {
+  console.error(`[pinpoint] bridge on http://127.0.0.1:${PORT} · queue ${QUEUE} · project ${PROJECT_DIR}`)
+})

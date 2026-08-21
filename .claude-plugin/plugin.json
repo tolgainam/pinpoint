@@ -1,0 +1,7 @@
+{
+  "name": "pinpoint",
+  "displayName": "Pinpoint",
+  "version": "0.1.0",
+  "description": "Pin comments to elements on a web page, dispatch them into this session",
+  "mcpServers": "./plugin-mcp.json"
+}

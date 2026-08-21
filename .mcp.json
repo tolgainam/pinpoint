@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "pinpoint": {
+      "command": "bun",
+      "args": ["./server/pinpoint.ts"],
+      "env": { "PINPOINT_PORT": "8788" }
+    }
+  }
+}

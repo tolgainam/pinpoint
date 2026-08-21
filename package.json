@@ -1,0 +1,15 @@
+{
+  "name": "pinpoint",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser comment toolbar that dispatches into a running Claude Code session",
+  "scripts": {
+    "server": "bun server/pinpoint.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^4.4.3"
+  }
+}

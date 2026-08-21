@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.log
+
+# Bun
+bun.lockb
+
+# Local runtime state — the dispatch queue lives in ~/.claude/pinpoint,
+# but keep this here in case anyone points PINPOINT_QUEUE at the repo.
+queue/
+.env
+.DS_Store

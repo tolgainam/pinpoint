@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "pinpoint": {
+      "command": "bun",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/server/pinpoint.ts"],
+      "env": {
+        "PINPOINT_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}",
+        "PINPOINT_PORT": "8788"
+      }
+    }
+  }
+}

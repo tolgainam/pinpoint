@@ -26,6 +26,35 @@
   z-index: 1;
 }
 
+/* ---------------------------------------------------------------- frozen frame */
+
+/* Sits under everything of ours but over the whole page, so what you pin on is the
+   picture taken at the moment you froze rather than a page that has moved on. */
+.frame {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+
+.frame-note {
+  position: absolute;
+  z-index: 11;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--pp-accent);
+  background: var(--pp-bg);
+  color: var(--pp-accent);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.35);
+}
+
 /* ---------------------------------------------------------------- highlight */
 
 .highlight {
@@ -216,6 +245,11 @@
   background: rgb(124 107 214 / 0.22);
   color: #c3b8f5;
   font-size: 11px;
+}
+
+.card .kind.frozen {
+  background: rgb(217 119 87 / 0.2);
+  color: #f0b39c;
 }
 
 .card .answer {

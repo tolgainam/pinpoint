@@ -77,6 +77,7 @@ Open your dev app on `http://localhost:…`, then click the Pinpoint icon in the
 | count | Pending comments not yet dispatched |
 | **Dispatch** | Sends the batch to the running session |
 | `✕` | Clears every pin on this page |
+| **Alt+Shift+F** | Freezes the page so vanishing states can be pinned |
 | dot | Green when the bridge is reachable |
 
 `⌘↵` adds a note, `Esc` closes the composer or leaves comment mode. Drag the bar by its
@@ -139,6 +140,24 @@ are written in.
 It is a curated subset on purpose: a full `getComputedStyle` dump is ~340 properties, and
 properties still sitting at their initial value are dropped, so what arrives is what
 somebody actually set.
+
+### Freeze the page to pin what's vanishing
+
+Hover menus, dropdowns, and toasts disappear the moment you reach for the tool. Press
+**Alt+Shift+F** (rebindable at `chrome://extensions/shortcuts`) while the state is on
+screen: Pinpoint takes a picture of the viewport and, in the same breath, the geometry of
+everything visible in it. Comment mode turns on and you pin against that picture. `Esc`
+releases it.
+
+Deliberately no `chrome.debugger` permission. Pausing JS would stop timers, but it still
+can't hold a CSS `:hover` open, it breaks whenever DevTools is attached, and it puts a
+banner across the browser. A picture plus geometry covers the same cases with no extra
+permission.
+
+The honest limit: the DOM moves on. An element that unmounts is still described from the
+reference held at freeze time — tag, classes, text, and markup survive — but it has no
+computed style and no unique selector any more. Those comments are labelled, and the
+brief tells Claude to trust the screenshot over the selector.
 
 ### Console errors and failed requests
 

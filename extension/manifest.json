@@ -7,6 +7,12 @@
   "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"],
   "background": { "service_worker": "worker.js" },
   "action": { "default_title": "Pinpoint — toggle comment mode" },
+  "commands": {
+    "freeze": {
+      "suggested_key": { "default": "Alt+Shift+F" },
+      "description": "Freeze the page and pin what is on screen"
+    }
+  },
   "content_scripts": [
     {
       "matches": ["http://localhost/*", "http://127.0.0.1/*"],

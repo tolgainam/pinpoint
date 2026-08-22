@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Marigold — a Chakra UI demo</title>
+
+<!--
+  Chakra injects its variables at runtime through Emotion, so they live in a <style> tag
+  and in no stylesheet on disk. That is left exactly as it is here on purpose: it is the
+  case the static probe cannot see and the runtime probe exists for. The names below are
+  the ones Chakra derives from src/theme.js.
+-->
+<style>
+  :root {
+    --chakra-colors-brand-50: #f5f3ff;
+    --chakra-colors-brand-100: #ede9fe;
+    --chakra-colors-brand-300: #c4b5fd;
+    --chakra-colors-brand-500: #8b5cf6;
+    --chakra-colors-brand-600: #7c3aed;
+    --chakra-colors-brand-700: #6d28d9;
+    --chakra-colors-ink-900: #1a1b25;
+    --chakra-colors-ink-700: #3b3d4d;
+    --chakra-colors-ink-500: #6b6e85;
+    --chakra-colors-line: #e6e4f0;
+    --chakra-colors-surface: #ffffff;
+    --chakra-colors-canvas: #faf9fe;
+
+    --chakra-space-1: 0.25rem;
+    --chakra-space-2: 0.5rem;
+    --chakra-space-3: 0.75rem;
+    --chakra-space-4: 1rem;
+    --chakra-space-5: 1.25rem;
+    --chakra-space-6: 1.5rem;
+    --chakra-space-8: 2rem;
+    --chakra-space-10: 2.5rem;
+    --chakra-space-12: 3rem;
+    --chakra-space-16: 4rem;
+
+    --chakra-fontSizes-xs: 0.75rem;
+    --chakra-fontSizes-sm: 0.875rem;
+    --chakra-fontSizes-md: 1rem;
+    --chakra-fontSizes-lg: 1.125rem;
+    --chakra-fontSizes-xl: 1.25rem;
+    --chakra-fontSizes-2xl: 1.5rem;
+    --chakra-fontSizes-4xl: 2.25rem;
+
+    --chakra-radii-sm: 4px;
+    --chakra-radii-md: 8px;
+    --chakra-radii-lg: 12px;
+    --chakra-radii-xl: 20px;
+    --chakra-radii-full: 9999px;
+  }
+</style>
+
+<link rel="stylesheet" href="./style.css">
+<link rel="stylesheet" href="/switch.css">
+</head>
+<body>
+
+<div class="chakra-container" data-testid="ck-container">
+
+  <header data-testid="ck-header">
+    <span class="chakra-badge" data-testid="ck-eyebrow">Chakra UI</span>
+    <h1 class="chakra-heading" data-testid="ck-title">A theme object, not a stylesheet</h1>
+    <p class="chakra-text chakra-text--muted" data-testid="ck-sub">
+      The scale lives in <code>src/theme.js</code> as a plain literal. The variables it
+      turns into never touch a <code>.css</code> file — the page is the only place they
+      exist.
+    </p>
+    <div class="chakra-stack" data-testid="ck-actions">
+      <button class="chakra-button chakra-button--solid" data-testid="ck-cta-primary">Start free</button>
+      <button class="chakra-button chakra-button--outline" data-testid="ck-cta-secondary">Book a demo</button>
+    </div>
+  </header>
+
+  <main class="chakra-grid" data-testid="ck-cards">
+    <article class="chakra-card" data-testid="ck-card-scale">
+      <h2 class="chakra-card__title">Space in rem</h2>
+      <p class="chakra-text chakra-text--muted">
+        <code>0.25rem</code> through <code>4rem</code>. The probe has to convert before it
+        can find the step, and the step is what makes a stray value obvious.
+      </p>
+    </article>
+
+    <article class="chakra-card" data-testid="ck-card-palette">
+      <h2 class="chakra-card__title">Nested colours</h2>
+      <p class="chakra-text chakra-text--muted">
+        <code>brand.500</code> is two levels down in the literal and comes back out as one
+        flat token name.
+      </p>
+    </article>
+
+    <!-- Deliberately wrong: padding nobody chose, and a colour in no palette. -->
+    <article class="chakra-card chakra-card--off" data-testid="ck-card-off">
+      <h2 class="chakra-card__title">Off the scale</h2>
+      <p class="chakra-text">
+        Padded <code>22px</code>, bordered <code>#ff6b6b</code>. Pin it: both should come
+        back flagged, with the neighbouring space tokens named.
+      </p>
+    </article>
+  </main>
+
+  <section class="chakra-panel" data-testid="ck-panel">
+    <div>
+      <h2 class="chakra-card__title">Invite your team</h2>
+      <p class="chakra-text chakra-text--muted">Everyone gets the same theme.</p>
+    </div>
+    <div class="chakra-stack">
+      <input class="chakra-input" placeholder="name@company.com" data-testid="ck-input">
+      <button class="chakra-button chakra-button--solid" data-testid="ck-invite">Invite</button>
+    </div>
+  </section>
+
+</div>
+
+<nav class="demo-switch" data-testid="demo-switch" aria-label="Demo pages">
+  <a href="/">Vanilla</a>
+  <a href="/fixtures/tailwind/">Tailwind</a>
+  <a href="/fixtures/shadcn/">shadcn</a>
+  <a href="/fixtures/chakra/" aria-current="page">Chakra</a>
+</nav>
+
+</body>
+</html>

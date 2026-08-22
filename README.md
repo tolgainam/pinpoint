@@ -251,11 +251,22 @@ Set `PINPOINT_TOKEN` to also require an `X-Pinpoint-Token` header.
 ## Try it without a project
 
 ```bash
-npm run demo    # a deliberately opinionated landing page on :3000
+npm run demo    # four demo pages on :3000
 ```
 
-Pin something, dispatch it, watch it get fixed. Its stylesheet hot-swaps rather than
+Pin something, dispatch it, watch it get fixed. The stylesheets hot-swap rather than
 reloading the page, so screenshot permission survives between rounds.
+
+`/` is a deliberately opinionated landing page with no design system at all. The other
+three — `/fixtures/tailwind/`, `/fixtures/shadcn/`, `/fixtures/chakra/` — each sit in a
+directory that looks like a real project built with that stack, so the design-system
+probe has something to read:
+
+```bash
+PINPOINT_PROJECT_DIR=demo/fixtures/shadcn npm run server
+```
+
+See [demo/fixtures/README.md](demo/fixtures/README.md) for what each one is meant to prove.
 
 ## Known limits
 

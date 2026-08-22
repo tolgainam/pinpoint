@@ -42,6 +42,13 @@
     </div>
   </section>
 
+  <div data-slot="alert" class="mt-8 rounded-lg border p-4 text-sm alert-destructive" data-testid="sh-alert">
+    <strong class="font-medium">Billing failed.</strong>
+    This alert is painted with <code>--destructive</code>. Its border, though, is a
+    one-off <code>#e11d48</code> that belongs to no token — pin it and the payload should
+    say so.
+  </div>
+
   <!-- A dropdown left open, so the page carries a Radix fingerprint as well as a
        shadcn one — and so there is something menu-shaped to pin without freezing. -->
   <div class="mt-8 relative" data-testid="sh-menu-anchor">
@@ -59,12 +66,6 @@
     </div>
   </div>
 
-  <div data-slot="alert" class="mt-8 rounded-lg border p-4 text-sm alert-destructive" data-testid="sh-alert">
-    <strong class="font-medium">Billing failed.</strong>
-    This alert is painted with <code>--destructive</code>. Its border, though, is a
-    one-off <code>#e11d48</code> that belongs to no token — pin it and the payload should
-    say so.
-  </div>
 
 </div>
 

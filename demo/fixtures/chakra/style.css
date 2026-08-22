@@ -1,0 +1,138 @@
+/* What Chakra's components compile to for this page, written by hand so the demo needs
+   no build step. Every value reads through a `--chakra-*` variable, which is how Chakra
+   works at runtime and why this file declares no tokens of its own — they are injected
+   into the page, not shipped in a stylesheet. */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--chakra-colors-canvas);
+  color: var(--chakra-colors-ink-900);
+  font-family: Inter, ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  font-size: var(--chakra-fontSizes-md);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2 { margin: 0; }
+p { margin: 0; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; }
+
+.chakra-container {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: var(--chakra-space-16) var(--chakra-space-6);
+}
+
+/* ---------------------------------------------------------------- header */
+
+.chakra-badge {
+  display: inline-block;
+  padding: var(--chakra-space-1) var(--chakra-space-3);
+  border-radius: var(--chakra-radii-full);
+  background: var(--chakra-colors-brand-100);
+  color: var(--chakra-colors-brand-700);
+  font-size: var(--chakra-fontSizes-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.chakra-heading {
+  margin-top: var(--chakra-space-4);
+  font-size: var(--chakra-fontSizes-4xl);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.chakra-text { font-size: var(--chakra-fontSizes-md); line-height: 1.6; }
+.chakra-text--muted { color: var(--chakra-colors-ink-500); }
+
+.chakra-heading + .chakra-text { margin-top: var(--chakra-space-3); max-width: 34rem; }
+
+.chakra-stack {
+  display: flex;
+  gap: var(--chakra-space-3);
+  align-items: center;
+}
+
+header .chakra-stack { margin-top: var(--chakra-space-6); }
+
+/* ---------------------------------------------------------------- controls */
+
+.chakra-button {
+  font-family: inherit;
+  font-size: var(--chakra-fontSizes-sm);
+  font-weight: 600;
+  padding: var(--chakra-space-3) var(--chakra-space-6);
+  border-radius: var(--chakra-radii-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.chakra-button--solid {
+  background: var(--chakra-colors-brand-500);
+  color: var(--chakra-colors-surface);
+}
+
+.chakra-button--solid:hover { background: var(--chakra-colors-brand-600); }
+
+.chakra-button--outline {
+  background: var(--chakra-colors-surface);
+  border-color: var(--chakra-colors-line);
+  color: var(--chakra-colors-ink-700);
+}
+
+.chakra-input {
+  font-family: inherit;
+  font-size: var(--chakra-fontSizes-sm);
+  padding: var(--chakra-space-3) var(--chakra-space-4);
+  border-radius: var(--chakra-radii-md);
+  border: 1px solid var(--chakra-colors-line);
+  background: var(--chakra-colors-surface);
+  color: var(--chakra-colors-ink-900);
+  min-width: 260px;
+}
+
+.chakra-input::placeholder { color: var(--chakra-colors-ink-500); }
+
+/* ---------------------------------------------------------------- cards */
+
+.chakra-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--chakra-space-4);
+  margin-top: var(--chakra-space-12);
+}
+
+.chakra-card {
+  padding: var(--chakra-space-6);
+  border-radius: var(--chakra-radii-lg);
+  border: 1px solid var(--chakra-colors-line);
+  background: var(--chakra-colors-surface);
+}
+
+.chakra-card__title {
+  font-size: var(--chakra-fontSizes-xl);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: var(--chakra-space-2);
+}
+
+/* The one card written outside the theme. Chakra would take these as `p="22px"` and
+   `borderColor="#ff6b6b"` without complaint — nothing in the library stops you. */
+.chakra-card--off {
+  padding: 22px;
+  border-color: #ff6b6b;
+}
+
+.chakra-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--chakra-space-6);
+  margin-top: var(--chakra-space-12);
+  padding: var(--chakra-space-8);
+  border-radius: var(--chakra-radii-xl);
+  background: var(--chakra-colors-brand-50);
+}

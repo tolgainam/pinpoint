@@ -11,6 +11,18 @@
   <nav class="site-nav" data-testid="site-nav">
     <a href="#features">Features</a>
     <a href="#pricing">Pricing</a>
+    <!-- Opens on CSS :hover alone, with no JS and no click target. There is no way to
+         pin anything inside it except by freezing the page: the pointer has to leave the
+         nav to reach the toolbar, and the menu closes with it. -->
+    <div class="nav-menu" data-testid="nav-products">
+      <a href="#products">Products <span class="caret">▾</span></a>
+      <div class="menu" data-testid="products-menu">
+        <a href="#forecast">Forecast API</a>
+        <a href="#radar">Radar tiles</a>
+        <a href="#alerts">Severe alerts</a>
+        <a href="#history">Historical archive</a>
+      </div>
+    </div>
     <a href="#docs">Docs</a>
     <a href="#changelog">Changelog</a>
   </nav>
@@ -96,6 +108,35 @@
     <button class="btn btn-primary" data-testid="signup-submit">Subscribe</button>
   </form>
 </section>
+
+<!-- Fixtures for the two features that cannot be exercised on a page that behaves.
+     Subscribe fails on purpose: a 404 fetch, a console error, and a toast that removes
+     itself three seconds later — one for the composer's debug toggle, one for freeze. -->
+<script>
+  document.querySelector('[data-testid="signup-submit"]').addEventListener('click', async () => {
+    const email = document.querySelector('[data-testid="signup-email"]').value
+
+    const toast = document.createElement('div')
+    toast.className = 'app-toast'
+    toast.dataset.testid = 'signup-toast'
+    toast.textContent = 'Could not subscribe — try again in a moment.'
+    document.body.append(toast)
+    // Self-removing, so by the time you reach the toolbar it is gone. That is the case
+    // freeze exists for, and the node genuinely unmounts rather than merely hiding.
+    setTimeout(() => toast.remove(), 3000)
+
+    try {
+      const res = await fetch('/api/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      if (!res.ok) throw new Error(`subscribe failed: ${res.status} ${res.statusText}`)
+    } catch (err) {
+      console.error('[nimbus] newsletter signup failed', err)
+    }
+  })
+</script>
 
 <footer class="site-footer" data-testid="site-footer">
   <span class="brand-name">Nimbus</span>

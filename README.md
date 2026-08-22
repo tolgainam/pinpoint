@@ -87,6 +87,40 @@ Open your dev app on `http://localhost:…`, then click the Pinpoint icon in the
 When Claude fixes a comment it calls `resolve_comment`, and the pin turns green with a ✓
 and the one-line resolution. You never have to switch to the terminal to know it landed.
 
+While it works, the pin shows what it's doing: it pulses on `working`, and lists the files
+it touched on `edited`. Outcomes only — the transcript stays in the terminal, which is
+where there's room for it.
+
+### Say it's still not right
+
+A green pin has a reply box. Type into it and the same pin reopens for a second round,
+carrying the first one with it: Claude gets what you originally asked, what it did about
+it, and the fact that it wasn't enough. It takes a fresh screenshot on the way, because
+the element has changed since the first round.
+
+The same box answers Claude's own questions — when a fix would land in a shared component
+it asks on the pin ("this instance, or everywhere?") rather than guessing.
+
+Capped at three rounds. After that the card says to take it to the terminal, and means it:
+a long negotiation belongs in the session, not in a box that size.
+
+### Claude checks its own work
+
+Resolving a comment asks the page for a fresh crop of the same element and hands Claude the
+path to it. That closes the one gap in the loop — Claude used to resolve a comment on the
+belief that its edit was correct, which misses CSS lost to specificity, a rule applied to a
+sibling, or a value overridden somewhere else. Every one of those looks fine in a diff.
+
+It's best-effort. A closed tab, an element that's gone, an expired screenshot permission —
+all ordinary, and none of them fail the resolve. What you get instead is "the fix is
+unverified", which is worth knowing on its own.
+
+### A record of what you asked for
+
+Every dispatch and every resolution is appended to `.pinpoint/history.md`, newest at the
+bottom. The queue in `~/.claude` is pruned after a day; this isn't. There's no panel for
+it — it's a markdown file, browsable in the editor and in git, and nothing reads it back.
+
 ### Pick the right element
 
 Clicking grabs whatever node is on top, which is often a span three levels below the
@@ -128,6 +162,24 @@ through it with:
 ```
 
 Add `.pinpoint/` to `.gitignore` if you'd rather keep yours private.
+
+### It speaks your design system
+
+Pinpoint reads your project once a session — `tailwind.config.*`, `@theme` blocks,
+`components.json`, MUI/Chakra/Ant theme literals, `package.json` deps — and reads every CSS
+custom property the page actually resolved. Configs are parsed as text and never executed.
+
+So a payload says `padding: 24px ← 24px = --spacing-6` instead of `padding: 24px`, and
+flags `13px` as off a 4px scale with the nearest tokens named. Off-scale values are very
+often the actual bug. A guardrail line rides with every batch telling Claude to fix within
+the scale rather than inventing raw px and hex.
+
+The composer shows the same thing as chips — the element's current tokens, with a warning
+where a value is off-system. Tap one for a picker built from your real scale: spacing as a
+ramp, colours as your actual palette, or ± steppers where there's no scale to speak of.
+Picks preview on the live element and dispatch as `padding: 24px (spacing-6) → 32px
+(spacing-8)`, so a comment can be nothing but the change. Works with no design system at
+all — the chips fall back to raw values.
 
 ### What rides along with a comment
 

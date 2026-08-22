@@ -35,6 +35,12 @@ const QUEUE = process.env.PINPOINT_QUEUE ?? join(homedir(), '.claude', 'pinpoint
  */
 const BACKLOG_FILE = join(PROJECT_DIR, '.pinpoint', 'backlog.md')
 const SHOTS_DIR = join(PROJECT_DIR, '.pinpoint', 'shots')
+/**
+ * The record of what was asked and what came of it. Like the backlog it belongs to the
+ * project rather than to the queue: the queue is pruned after a day, and "what did I ask
+ * for last week, and what happened" is a question that outlives that by a lot.
+ */
+const HISTORY_FILE = join(PROJECT_DIR, '.pinpoint', 'history.md')
 /** Optional shared secret. When set, /dispatch also requires X-Pinpoint-Token. */
 const TOKEN = process.env.PINPOINT_TOKEN?.trim()
 /** How long a fully-resolved batch is kept before its screenshots are deleted. */
@@ -289,6 +295,51 @@ function moveToDone(index, outcome) {
   return { title: titleOf(item.body), id: idOf(item.body) }
 }
 
+// ---------------------------------------------------------------- history log
+
+const HISTORY_SEED = `# Pinpoint history
+
+What was pinned, and what came of it. Appended by Pinpoint, newest at the bottom; the
+queue in ~/.claude is pruned after a day, this is not. Delete it whenever you like — it
+is a log, nothing reads it back.
+
+`
+
+/**
+ * Append lines under today's date heading, adding the heading if this is the first entry
+ * of the day.
+ *
+ * Append-only and strictly chronological, which is the whole design. Writing a batch and
+ * then going back to annotate it when it resolves would mean splicing a file a human also
+ * edits; a resolution written as its own line, later in the file, says the same thing and
+ * cannot corrupt anything.
+ */
+function appendHistory(lines) {
+  if (!lines.length) return
+  try {
+    mkdirSync(dirname(HISTORY_FILE), { recursive: true })
+    let text = existsSync(HISTORY_FILE) ? readFileSync(HISTORY_FILE, 'utf8') : HISTORY_SEED
+    const today = `## ${human().slice(0, 10)}`
+    if (!text.includes(today)) text += `${text.endsWith('\n') ? '' : '\n'}\n${today}\n`
+    writeFileSync(HISTORY_FILE, `${text}${text.endsWith('\n') ? '' : '\n'}${lines.join('\n')}\n`)
+  } catch (err) {
+    // A log that cannot be written must never cost a dispatch. It is a record, not a step.
+    console.error('[pinpoint] history write failed:', err)
+  }
+}
+
+const clock = () => human().slice(11)
+
+function historyForBatch(batch) {
+  const lines = [`- ${clock()} · **${batch.id}** · ${batch.comments.length} on ${batch.url ?? batch.origin}`]
+  for (const c of batch.comments) {
+    const mark = c.question ? '❓' : c.followUpOf ? '↩' : '·'
+    const where = c.selector ? ` — \`${c.selector}\`` : ''
+    lines.push(`  - ${mark} #${c.n} ${c.note.split('\n')[0].slice(0, 120)}${where}`)
+  }
+  return lines
+}
+
 // ---------------------------------------------------------------- design system
 
 /** An empty summary, so every caller downstream can stay unaware that a probe can fail. */
@@ -376,6 +427,24 @@ function debugBlock(debug) {
 // ---------------------------------------------------------------- rendering
 
 /**
+ * What the previous round of this comment asked for, and what was done about it.
+ *
+ * Round-tripping is the defining complaint about agent UI work, and the reason is almost
+ * always that the second attempt starts from nothing. Reading the original out of the
+ * queue costs one file read and turns "still not right" into a sentence with a subject.
+ */
+function followUpFact(c) {
+  if (!c.followUpOf) return null
+  const [batchId, nRaw] = String(c.followUpOf).split('#')
+  const prior = readBatch(batchId)?.comments.find(x => x.n === Number(nRaw))
+  const round = c.round ? ` (round ${c.round})` : ''
+  if (!prior) return `**follow-up${round}** on \`${c.followUpOf}\`, which is no longer in the queue`
+  const asked = prior.note.split('\n')[0].slice(0, 160)
+  const did = prior.resolution ? ` and you resolved it as "${String(prior.resolution).slice(0, 200)}"` : ', which was never resolved'
+  return `**follow-up${round}** — the same element was pinned before as "${asked}"${did}. This is the user saying that was not enough, so start from what changed rather than from scratch.`
+}
+
+/**
  * The brief Claude actually reads. Screenshots are referenced by absolute path rather
  * than embedded: Claude opens them with the Read tool, which renders images, so we
  * never have to push image bytes through MCP.
@@ -409,6 +478,7 @@ function renderBatch(b) {
       ...(c.deltas?.length
         ? [`**requested change${c.deltas.length > 1 ? 's' : ''}** — ${c.deltas.map(deltaLine).filter(Boolean).join(' · ')}`]
         : []),
+      followUpFact(c),
       c.component ? `component: \`${c.component}\`` : null,
       c.selector ? `selector: \`${c.selector}\`` : null,
       c.text ? `text: "${c.text.slice(0, 120)}"` : null,
@@ -461,6 +531,15 @@ const mcp = new Server(
       'Comments the user parked instead of dispatching live in .pinpoint/backlog.md — reach them',
       'with list_backlog, start_backlog_item, and finish_backlog_item, never by editing that file by hand.',
       'Use reply without an id to send a short status line back to the toolbar.',
+      'report_progress puts a line on the pin while you work — "working" when you start,',
+      '"edited" with the files once they have changed. It is optional and it never closes',
+      'anything; resolve_comment does that.',
+      'resolve_comment asks the page for a fresh crop of the same element and returns its',
+      'path. Read that image: it is the only way to see whether the edit actually landed,',
+      'rather than whether the diff looked right. If it did not land, say so instead of',
+      'leaving the comment resolved.',
+      'A comment marked as a follow-up is a second round on an element you already touched.',
+      'The brief carries what was asked and what you did; start from that, not from scratch.',
     ].join(' '),
   },
 )
@@ -494,6 +573,25 @@ const TOOLS = [
         id: { type: 'string', description: 'Comment id to answer, e.g. 20260822-014455-a1b2#1. Omit for a general status line.' },
       },
       required: ['text'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'report_progress',
+    description: "Show progress on one comment while you work on it, on its pin in the browser. Use 'working' when you start and 'edited' once files have changed. Optional — resolve_comment is what closes a comment.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Comment id, e.g. 20260822-014455-a1b2#1' },
+        state: { type: 'string', enum: ['working', 'edited'], description: "'working' while you are on it, 'edited' once files have changed" },
+        note: { type: 'string', description: 'One short line, e.g. "editing Button.tsx"' },
+        files: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Files touched, optionally with a diffstat: "src/Button.tsx +4 -1"',
+        },
+      },
+      required: ['id', 'state'],
       additionalProperties: false,
     },
   },
@@ -551,7 +649,37 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
     if (args.resolution) c.resolution = args.resolution
     writeBatch(b)
     broadcast({ type: 'resolved', id: args.id, resolution: args.resolution ?? '' })
-    return { content: [{ type: 'text', text: `Resolved ${args.id}` }] }
+    appendHistory([`- ${clock()} · ✓ ${args.id}${args.resolution ? ` — ${String(args.resolution).split('\n')[0].slice(0, 200)}` : ''}`])
+
+    // Ask the page for a fresh crop of the same rect, so the edit can be looked at rather
+    // than assumed. A failure here is information, not an error: it says the verification
+    // did not happen, which is worth knowing and is not worth failing the resolve over.
+    const after = await requestRecapture(String(args.id), c)
+    const verdict = after.shot
+      ? `\n\nA fresh crop of the same element is at ${after.shot} — read it and check the change actually landed. If it did not, say so rather than leaving this resolved.`
+      : `\n\nNo after-shot: ${after.error}. The fix is unverified.`
+    return { content: [{ type: 'text', text: `Resolved ${args.id}${verdict}` }] }
+  }
+
+  if (req.params.name === 'report_progress') {
+    const id = String(args.id ?? '')
+    const [batchId, nRaw] = id.split('#')
+    const b = readBatch(batchId)
+    const c = b?.comments.find(x => x.n === Number(nRaw))
+    if (!b || !c) return { content: [{ type: 'text', text: `No such comment: ${id}` }], isError: true }
+
+    const state = args.state === 'edited' ? 'edited' : 'working'
+    const note = args.note ? String(args.note).slice(0, 200) : ''
+    const files = Array.isArray(args.files)
+      ? args.files.slice(0, 12).map(f => String(f).slice(0, 160))
+      : []
+
+    // Kept on the comment as well as broadcast: an extension worker that was asleep when
+    // this happened still shows it when the page comes back.
+    c.progress = { state, note, files, at: new Date().toISOString() }
+    writeBatch(b)
+    broadcast({ type: 'progress', id, state, note, files })
+    return { content: [{ type: 'text', text: `${state} · ${id}` }] }
   }
 
   if (req.params.name === 'reply') {
@@ -626,6 +754,80 @@ setInterval(() => {
     try { emit(': ping\n\n') } catch { listeners.delete(emit) }
   }
 }, 20_000).unref()
+
+// ---------------------------------------------------------------- re-capture
+
+/**
+ * Claude resolves a comment on the belief that its edit was correct. That belief misses
+ * CSS lost to specificity, a rule applied to a sibling, and a value overridden by another
+ * code path — every failure mode that looks fine in a diff. Every other part of this tool
+ * is built on "let Claude see what you saw"; this is the missing half.
+ *
+ * `resolve_comment` asks the page for a fresh crop of the same rect and waits briefly for
+ * it. The wait is short and always resolves: a tab that is closed, an element that is gone,
+ * and a screenshot permission that lapsed are all ordinary, and none of them may turn
+ * resolving a comment into an error.
+ */
+const RECAPTURE_WAIT = Number(process.env.PINPOINT_RECAPTURE_MS ?? 4000)
+/** Time for a hot reload to land before the picture is taken. */
+const RECAPTURE_SETTLE = 500
+
+/** @type {Map<string, (result: {shot?: string, error?: string}) => void>} */
+const awaitingShot = new Map()
+
+function requestRecapture(id, comment) {
+  if (!listeners.size || !comment?.rect) return Promise.resolve({ error: 'no page listening' })
+  return new Promise(resolve => {
+    const done = once(resolve)
+    awaitingShot.set(id, done)
+    const timer = setTimeout(() => done({ error: 'the page did not answer in time' }), RECAPTURE_WAIT)
+    timer.unref?.()
+    broadcast({
+      type: 'recapture',
+      id,
+      selector: comment.selector,
+      rect: comment.rect,
+      settle: RECAPTURE_SETTLE,
+    })
+  }).finally(() => awaitingShot.delete(id))
+}
+
+const once = fn => {
+  let spent = false
+  return value => { if (!spent) { spent = true; fn(value) } }
+}
+
+async function handleRecapture(req, res) {
+  const got = await gate(req, res)
+  if (!got) return
+  const { headers, payload } = got
+  const id = String(payload?.id ?? '')
+  const waiting = awaitingShot.get(id)
+  if (!waiting) return sendJson(res, 200, headers, { ok: true, ignored: 'nothing was waiting' })
+
+  const [batchId, nRaw] = id.split('#')
+  const b = readBatch(batchId)
+  const c = b?.comments.find(x => x.n === Number(nRaw))
+  if (!b || !c) {
+    waiting({ error: 'the batch went away' })
+    return sendJson(res, 200, headers, { ok: true })
+  }
+
+  if (typeof payload.shot === 'string' && payload.shot.startsWith('data:image/png;base64,')) {
+    const name = `after-${String(c.n).padStart(2, '0')}.png`
+    try {
+      writeFileSync(join(batchDir(batchId), name), Buffer.from(payload.shot.split(',')[1], 'base64'))
+      c.after = name
+      writeBatch(b)
+      waiting({ shot: join(batchDir(batchId), name) })
+    } catch (err) {
+      waiting({ error: `could not write the crop: ${err?.message ?? err}` })
+    }
+  } else {
+    waiting({ error: String(payload.error ?? 'the page sent no image').slice(0, 200) })
+  }
+  sendJson(res, 200, headers, { ok: true })
+}
 
 // ---------------------------------------------------------------- http gate
 
@@ -806,6 +1008,8 @@ async function handleDispatch(req, res) {
       styles: c.styles && typeof c.styles === 'object' ? c.styles : undefined,
       parents: Array.isArray(c.parents) ? c.parents.slice(0, 6) : undefined,
       transient: c.transient === true || undefined,
+      followUpOf: typeof c.followUpOf === 'string' ? c.followUpOf.slice(0, 60) : undefined,
+      round: Number(c.round) > 1 ? Math.min(Number(c.round), 9) : undefined,
       deltas: sanitiseDeltas(c.deltas),
       debug: sanitiseDebug(c.debug),
       question: c.question === true || undefined,
@@ -832,6 +1036,7 @@ async function handleDispatch(req, res) {
     comments,
   }
   writeBatch(batch)
+  appendHistory(historyForBatch(batch))
   prune()
 
   // Fire into the session. A no-op if this server wasn't loaded as a channel —
@@ -992,6 +1197,14 @@ const server = createServer((req, res) => {
   if (url.pathname === '/design-system' && req.method === 'POST') {
     handleDesignSystem(req, res).catch(err => {
       console.error('[pinpoint] design-system request failed:', err)
+      try { res.writeHead(500).end('error') } catch { /* already gone */ }
+    })
+    return
+  }
+
+  if (url.pathname === '/recapture' && req.method === 'POST') {
+    handleRecapture(req, res).catch(err => {
+      console.error('[pinpoint] recapture failed:', err)
       try { res.writeHead(500).end('error') } catch { /* already gone */ }
     })
     return

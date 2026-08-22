@@ -15,61 +15,6 @@ on its own. Add `.pinpoint/` to `.gitignore` if you'd rather keep yours private.
 
 ## Open
 
-- [ ] **Per-pin progress and results** — Claude's outcomes, rendered on the pin
-  - size: M
-  - why: a pin is silent between Dispatch and green. The terminal keeps the
-    transcript; the overlay should show outcomes — the difference between a dispatch
-    tool and a place you can actually work from.
-  - shape: extend the reply protocol to typed events the overlay renders on the pin
-    card — `working` (pin pulses, "editing card.tsx…"), `edited` (files touched plus
-    a diffstat), `resolved` (the existing one-liner, plus before/after once
-    re-capture ships). The SSE channel and `reply` plumbing already exist; this is
-    structure, not new transport.
-  - scope guard: not a chat client. If it isn't about a specific element, it doesn't
-    belong in the overlay — full output, permissions, and steering stay in the
-    terminal.
-
-- [ ] **Follow-up threads on resolved pins** — "still 2px off" without starting over
-  - size: S
-  - why: when a fix is almost right, the current move is a fresh comment with no
-    history. Round-tripping is the defining complaint about agent UI work; the second
-    round should carry the first round's context.
-  - shape: a reply box on green pins. Replying reopens the comment, takes a fresh
-    capture, and dispatches it linked to the original batch and resolution.
-  - note: the same reply box answers Claude's mid-fix questions ("move the portal to
-    body, or drop overflow-hidden?") — surfaced on the pin via per-pin progress
-    events, answered inline. Most terminal round-trips during UI work are exactly
-    these.
-  - note: capped, not a chat. After ~2 unresolved rounds on one pin, the card says
-    "take it to the terminal" and stops offering the reply box — long negotiation
-    belongs in the session, not the overlay.
-
-- [ ] **Batch history on disk** — a markdown log, not a panel
-  - size: S
-  - why: the queue is on disk and pruned after 24h, but invisible. You can't see what
-    you asked for last week or what came of it.
-  - shape: the bridge appends each dispatched batch and its resolutions to
-    `.pinpoint/history.md` — browsable in the editor and in git, no overlay UI.
-  - decided (2026-08-22): reshaped from a toolbar panel/dock to a file. The overlay
-    stays uncrowded; per-pin progress already covers the live view.
-
-- [ ] **Re-capture after a fix, so Claude can verify its own work**
-  - size: L
-  - why: two reasons, and the second is the real one.
-    1. The baseline disappears. Once the fix lands you're comparing against memory, and
-       memory is not good enough to judge *right* versus merely *different*.
-    2. Claude never sees the result of its own edit. It resolves a comment on the belief
-       that the change was correct — which misses CSS lost to specificity, applied to a
-       sibling, or overridden by a different code path. Every other part of this tool is
-       built on "let Claude see what you saw". This is the missing half.
-  - shape: `resolve_comment` broadcasts a re-capture request over SSE; the worker
-    captures and crops the same rect; the before/after pair goes back to both the pin
-    card and the session.
-  - blockers: needs the tab open, the element still present, and `activeTab` still
-    granted. Fails often enough that the failure path has to be graceful.
-  - sequencing: after the three items above. It's the most expensive thing here and it
-    only pays off once there's something worth verifying.
-
 - [ ] **Chrome Web Store listing**
   - size: M
   - why: the biggest remaining install friction. "Load unpacked" is the one step that
@@ -285,3 +230,62 @@ deleted — the record is the point.
     is where "try it in the browser first" now lives; the standalone live CSS trial
     item was dropped in its favour.
   - done: 2026-08-22 14:05 — 2026-08-22 — all three phases together, since a picker with no preview is a worse version of typing the number. The composer asks the bridge once per page for the merged scales (new POST /design-system, the same merge a dispatch does, so a chip can never name a token the brief would not) and shows one chip per property the element actually sets: the token name where there is one, a ⚠ where a spacing value is off the step. Tapping a chip opens a picker built from the project's own scale — spacing and radius as a ramp sliced around the current value, colours as a swatch grid of the real palette, and ± steppers where there is no scale at all. A pick previews on the real element and dispatches as a structured delta, so a comment can now consist of nothing but the change. Notes: colours with no palette stay a readout rather than pretending to be a control; a shorthand like `12px 22px` is shown with its warnings but not offered a picker, because a scale answers one value and replacing four sides with one number is not what was asked; picks are abandoned when you walk the ancestor chain, since they belong to the element they were made on; and the preview — the one place Pinpoint writes to the host page — is unwound on every path out of the card, including before the screenshot, so the picture shows the problem and the delta carries the proposal.
+
+- [x] **Per-pin progress and results** — Claude's outcomes, rendered on the pin
+  - size: M
+  - why: a pin is silent between Dispatch and green. The terminal keeps the
+    transcript; the overlay should show outcomes — the difference between a dispatch
+    tool and a place you can actually work from.
+  - shape: extend the reply protocol to typed events the overlay renders on the pin
+    card — `working` (pin pulses, "editing card.tsx…"), `edited` (files touched plus
+    a diffstat), `resolved` (the existing one-liner, plus before/after once
+    re-capture ships). The SSE channel and `reply` plumbing already exist; this is
+    structure, not new transport.
+  - scope guard: not a chat client. If it isn't about a specific element, it doesn't
+    belong in the overlay — full output, permissions, and steering stay in the
+    terminal.
+  - done: 2026-08-22 14:25 — 2026-08-22 — a report_progress tool broadcasting `working` and `edited` (with the files touched and their diffstat) over the SSE channel that already existed. The pin pulses while work is in flight and the card lists what changed. State is written onto the comment as well as broadcast, so a service worker Chrome killed mid-fix still shows it when the page comes back. The scope guard held: outcomes only, never a transcript.
+
+- [x] **Follow-up threads on resolved pins** — "still 2px off" without starting over
+  - size: S
+  - why: when a fix is almost right, the current move is a fresh comment with no
+    history. Round-tripping is the defining complaint about agent UI work; the second
+    round should carry the first round's context.
+  - shape: a reply box on green pins. Replying reopens the comment, takes a fresh
+    capture, and dispatches it linked to the original batch and resolution.
+  - note: the same reply box answers Claude's mid-fix questions ("move the portal to
+    body, or drop overflow-hidden?") — surfaced on the pin via per-pin progress
+    events, answered inline. Most terminal round-trips during UI work are exactly
+    these.
+  - note: capped, not a chat. After ~2 unresolved rounds on one pin, the card says
+    "take it to the terminal" and stops offering the reply box — long negotiation
+    belongs in the session, not the overlay.
+  - done: 2026-08-22 14:26 — 2026-08-22 — a reply box on green and answered pins. It reopens the same pin for another round rather than creating a second one: a new pin on the same node would say the first request had been abandoned, when it was answered and just not well enough. A fresh crop is taken on the way, since the element has changed since round one. The bridge reads the previous round out of the queue and the brief states what was asked, what was done about it, and that it was not enough — the thing that makes a second attempt start from somewhere. The same box answers Claude's mid-fix questions. Capped at three rounds, after which the card says to take it to the terminal.
+
+- [x] **Batch history on disk** — a markdown log, not a panel
+  - size: S
+  - why: the queue is on disk and pruned after 24h, but invisible. You can't see what
+    you asked for last week or what came of it.
+  - shape: the bridge appends each dispatched batch and its resolutions to
+    `.pinpoint/history.md` — browsable in the editor and in git, no overlay UI.
+  - decided (2026-08-22): reshaped from a toolbar panel/dock to a file. The overlay
+    stays uncrowded; per-pin progress already covers the live view.
+  - done: 2026-08-22 14:26 — 2026-08-22 — .pinpoint/history.md, appended under a date heading, newest at the bottom. Resolutions land as their own later line rather than being spliced back into the batch that produced them: the file is one a human also edits, and an append-only log cannot corrupt what someone wrote around it. A write that fails is logged and never costs a dispatch — it is a record, not a step.
+
+- [x] **Re-capture after a fix, so Claude can verify its own work**
+  - size: L
+  - why: two reasons, and the second is the real one.
+    1. The baseline disappears. Once the fix lands you're comparing against memory, and
+       memory is not good enough to judge *right* versus merely *different*.
+    2. Claude never sees the result of its own edit. It resolves a comment on the belief
+       that the change was correct — which misses CSS lost to specificity, applied to a
+       sibling, or overridden by a different code path. Every other part of this tool is
+       built on "let Claude see what you saw". This is the missing half.
+  - shape: `resolve_comment` broadcasts a re-capture request over SSE; the worker
+    captures and crops the same rect; the before/after pair goes back to both the pin
+    card and the session.
+  - blockers: needs the tab open, the element still present, and `activeTab` still
+    granted. Fails often enough that the failure path has to be graceful.
+  - sequencing: after the three items above. It's the most expensive thing here and it
+    only pays off once there's something worth verifying.
+  - done: 2026-08-22 14:26 — 2026-08-22 — resolve_comment broadcasts a request and waits briefly; the page waits out the hot reload, re-measures the element rather than reusing the old rect (a fix that changes the size is exactly what this catches, and yesterday's box would clip it), crops, and posts back. The path lands in the tool result, and the instructions tell Claude to read it and say so if the edit did not land. Every failure path — no tab listening, element gone, scrolled out of view, screenshot permission lapsed, page too slow — resolves the comment anyway and reports the fix as unverified, which is information rather than an error. Covered end to end by test/bridge.test.js, which drives the real MCP server over stdio and answers the handshake over HTTP.

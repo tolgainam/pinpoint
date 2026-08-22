@@ -1220,6 +1220,58 @@
     render()
   }
 
+  /**
+   * After this many rounds on one pin, the card stops offering a reply box.
+   *
+   * Deliberately low. A long negotiation belongs in the session, where there is room to
+   * argue and a transcript to argue against; a card that lets it run forever turns the
+   * overlay into a bad chat client, which is the one thing it must not become.
+   */
+  const MAX_ROUNDS = 3
+
+  /**
+   * A second go at a pin that came back not quite right, carrying the first go with it.
+   *
+   * The comment is reopened rather than duplicated: same pin, same element, a new round.
+   * A second pin on the same node would say the first request had been abandoned, which
+   * is exactly wrong — it was answered, just not well enough.
+   */
+  async function sendFollowUp(comment, text) {
+    const prior = comment.batch && comment.serverN ? `${comment.batch}#${comment.serverN}` : undefined
+
+    let rect = comment.rect
+    let shot = comment.shot
+    let live = null
+    try { live = document.querySelector(comment.selector) } catch { /* stale selector */ }
+    if (live) {
+      const r = live.getBoundingClientRect()
+      rect = { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }
+      // A fresh crop, because the element has been edited since the first round and the
+      // old picture now shows a state nobody is talking about.
+      if (wantShot) {
+        const viewport = await captureViewport()
+        shot = (viewport ? await cropTo(viewport, rect) : null) ?? shot
+      }
+    }
+
+    comment.followUpOf = prior
+    comment.round = (comment.round ?? 1) + 1
+    comment.note = text
+    comment.rect = rect
+    comment.shot = shot
+    comment.status = 'pending'
+    // The previous round's answer is now history: it is in the brief the bridge builds
+    // from `followUpOf`, and leaving it on the card would read as still true.
+    comment.resolution = undefined
+    comment.answer = undefined
+    comment.progress = undefined
+    comment.deltas = undefined
+
+    save()
+    render()
+    await dispatchComments([comment])
+  }
+
   const STATE_LABEL = {
     pending: 'pending',
     sent: 'dispatched',
@@ -1263,6 +1315,16 @@
     if (comment.answer) sect.append(el('div', 'answer', comment.answer))
     if (comment.resolution) sect.append(el('div', 'resolution', `✓ ${comment.resolution}`))
 
+    // What Claude did, as outcomes. Files and a state, never a transcript.
+    if (comment.progress && comment.status !== 'resolved') {
+      const p = el('div', `progress ${comment.progress.state}`)
+      p.append(el('div', 'progress-head', comment.progress.state === 'working'
+        ? (comment.progress.note || 'working…')
+        : (comment.progress.note || 'edited')))
+      for (const f of comment.progress.files ?? []) p.append(el('div', 'file', f))
+      sect.append(p)
+    }
+
     const row = el('div', 'row')
     // The number is only worth showing when there is more than one to tell apart — on a
     // lone comment it just repeats what the pin already says.
@@ -1281,6 +1343,37 @@
     }
     row.append(remove)
     sect.append(row)
+
+    // A reply box on a pin Claude has already spoken on: either it resolved the comment
+    // and got it not quite right, or it asked a question mid-fix and is waiting.
+    const answered = comment.status === 'resolved' || comment.status === 'answered'
+    const round = comment.round ?? 1
+    if (answered && round < MAX_ROUNDS) {
+      const box = el('textarea', 'reply')
+      box.placeholder = comment.status === 'answered' ? 'Answer…' : 'Still not right?'
+      box.rows = 2
+      const send = el('button', 'primary', 'Send')
+      const sendRow = el('div', 'row')
+      sendRow.append(el('span', 'spacer'), send)
+      const go = async () => {
+        const text = box.value.trim()
+        if (!text) { box.focus(); return }
+        send.disabled = true
+        send.textContent = 'Sending…'
+        closeCard()
+        await sendFollowUp(comment, text)
+      }
+      send.onclick = go
+      box.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); go() }
+        // Escape belongs to the card, but only once the box is empty — otherwise it
+        // throws away something typed.
+        if (ev.key === 'Escape' && box.value) { ev.stopPropagation(); box.value = '' }
+      })
+      sect.append(box, sendRow)
+    } else if (answered && round >= MAX_ROUNDS) {
+      sect.append(el('div', 'hint show', `${round} rounds on this one — take it to the terminal`))
+    }
 
     remove.onclick = () => {
       comments = comments.filter(c => c !== comment)
@@ -1320,6 +1413,7 @@
       card.append(top)
 
       for (const c of live) card.append(commentSection(c, stacked, fill))
+      card.refresh = fill
       // Re-anchor: the card is shorter now, and a clamped one should drift back toward
       // the pin rather than stay pushed up against the viewport edge.
       placeCard(card, x + 12, y + 12)
@@ -1373,6 +1467,7 @@
       pin.classList.toggle('question', !!c.question && c.status !== 'resolved')
       pin.classList.toggle('unsaved', stack.some(x => x.unsaved))
       pin.classList.toggle('stack', stack.length > 1)
+      pin.classList.toggle('working', stack.some(x => x.progress?.state === 'working' && x.status !== 'resolved'))
       if (stack.length > 1) pin.dataset.more = String(stack.length - 1)
       pin.title = stack.map(x => `#${x.n} ${x.note}`).join('\n')
       pin.addEventListener('click', ev => {
@@ -1508,23 +1603,25 @@
 
   // ---------------------------------------------------------------- dispatch
 
-  sendBtn.onclick = async () => {
-    const outgoing = comments.filter(c => c.status === 'pending')
-    if (!outgoing.length) return
-
-    sendBtn.disabled = true
+  /**
+   * Send a set of comments as one batch. Factored out of the toolbar button because a
+   * follow-up on a green pin dispatches on its own, without waiting for the next time
+   * someone presses Dispatch — the reply *is* the send.
+   */
+  async function dispatchComments(outgoing, onStatus = () => {}) {
+    if (!outgoing.length) return false
 
     // One uncropped shot for layout context — but only when this batch has crops at all.
     // If you turned screenshots off, you meant off.
     let pageShot = null
     if (outgoing.some(c => c.shot)) {
-      sendBtn.textContent = 'Capturing…'
+      onStatus('Capturing…')
       pageShot = frame ? frame.shot : await captureViewport()
     }
     // Screenshots are the whole point of the batch arriving with context. Say so when
     // one is missing, rather than letting Claude receive a text-only comment quietly.
     if (wantShot && !outgoing.some(c => c.shot)) say('dispatching without screenshots', true)
-    sendBtn.textContent = 'Sending…'
+    onStatus('Sending…')
 
     const payload = {
       pageShot: pageShot || undefined,
@@ -1550,6 +1647,8 @@
         styles: c.styles,
         parents: c.parents,
         transient: c.transient,
+        followUpOf: c.followUpOf,
+        round: c.round,
         deltas: c.deltas,
         debug: c.debug,
         component: c.component,
@@ -1574,11 +1673,20 @@
         c.serverN = i + 1
       })
       say(`Dispatched ${outgoing.length} to Claude Code`)
-      setMode(false)
       save()
     } else {
       say(res?.error || 'dispatch failed', true)
     }
+    render()
+    return !!res?.ok
+  }
+
+  sendBtn.onclick = async () => {
+    const outgoing = comments.filter(c => c.status === 'pending')
+    if (!outgoing.length) return
+    sendBtn.disabled = true
+    const ok = await dispatchComments(outgoing, text => { sendBtn.textContent = text })
+    if (ok) setMode(false)
     render()
   }
 
@@ -1622,6 +1730,26 @@
       return
     }
 
+    // What Claude is doing about this pin, while it is doing it. Outcomes only — the
+    // transcript stays in the terminal, and this is not a chat client.
+    if (ev.type === 'progress') {
+      const hit = byServerId(ev.id)
+      if (!hit || hit.status === 'resolved') return
+      hit.progress = { state: ev.state, note: ev.text ?? ev.note ?? '', files: ev.files ?? [] }
+      save()
+      render()
+      if (openCard?.refresh) openCard.refresh()
+      return
+    }
+
+    // A fresh crop of the same element, so Claude can look at its own edit rather than
+    // assume it. Best-effort by design: the tab may be gone, the element may be gone, and
+    // the screenshot permission may have lapsed on the last navigation.
+    if (ev.type === 'recapture') {
+      recapture(ev).catch(err => sendRecapture(ev.id, null, String(err?.message ?? err)))
+      return
+    }
+
     if (ev.type === 'backlog-done') {
       const done = comments.find(c => c.backlogId && c.backlogId === ev.id)
       if (!done || done.status === 'resolved') return
@@ -1642,6 +1770,43 @@
     save()
     render()
     say(`✓ #${hit.n} resolved${ev.resolution ? ` — ${ev.resolution}` : ''}`)
+  }
+
+  // ---------------------------------------------------------------- re-capture
+
+  function sendRecapture(id, shot, error) {
+    chrome.runtime.sendMessage({ type: 'recapture', payload: { id, shot, error } }).catch(() => {})
+  }
+
+  async function recapture(ev) {
+    // Let a hot reload land first. A crop taken in the same tick as the resolve shows the
+    // page before the stylesheet was swapped, which is worse than no crop: it looks like
+    // evidence the fix did not work.
+    await new Promise(r => setTimeout(r, Math.min(Number(ev.settle) || 0, 2000)))
+
+    let live = null
+    try { live = ev.selector ? document.querySelector(ev.selector) : null } catch { /* stale selector */ }
+    // Re-measure rather than reusing the old rect: a fix that changes the size is exactly
+    // the kind this is meant to catch, and cropping to yesterday's box would clip it.
+    let rect = ev.rect
+    if (live) {
+      const r = live.getBoundingClientRect()
+      rect = { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }
+    }
+    if (!rect || rect.w <= 0 || rect.h <= 0) {
+      sendRecapture(ev.id, null, live ? 'the element has no size' : 'the element is no longer on the page')
+      return
+    }
+    // Off-screen is not a failure worth a picture of the wrong thing.
+    if (rect.y + rect.h < 0 || rect.y > innerHeight) {
+      sendRecapture(ev.id, null, 'the element is scrolled out of view')
+      return
+    }
+
+    const viewport = await captureViewport()
+    if (!viewport) { sendRecapture(ev.id, null, lastShotError || 'screenshot unavailable'); return }
+    const shot = await cropTo(viewport, rect)
+    sendRecapture(ev.id, shot, shot ? undefined : lastShotError || 'crop failed')
   }
 
   // ---------------------------------------------------------------- storage

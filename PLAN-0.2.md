@@ -1,6 +1,6 @@
 # Pinpoint 0.2 — from dispatch tool to review cockpit
 
-> **Status: Phases A, B and C shipped (2026-08-22), Phase D next.** Scoped 2026-08-22 after a deliberate cut: 33 ideas
+> **Status: all four phases shipped (2026-08-22).** Scoped 2026-08-22 after a deliberate cut: 33 ideas
 > were generated and researched, 10 were dropped or parked with reasoning recorded in
 > [`.pinpoint/backlog.md`](.pinpoint/backlog.md) (the item-level source of truth), and
 > 15 survived. Mockups of the headline UX live at `.pinpoint/mockups.html`.
@@ -62,20 +62,26 @@ Phase C — design-system layer (M, M)
    every path out of the composer — including before the screenshot, so the picture
    shows the problem and the delta carries the proposal.
 
-Phase D — the loop back (M, S, S, L)
-8. **Per-pin progress and results** — typed events over the existing SSE/`reply`
-   plumbing: `working`, `edited` (files + diffstat), `resolved`. Scope guard: not a
-   chat client.
-9. **Follow-up threads** — reply on a green pin reopens with full context. Capped:
-   after ~2 unresolved rounds the card says "take it to the terminal". Also carries
-   Claude's mid-fix questions (e.g. shared-component scope: "this instance or
-   everywhere?" — the behaviour that replaced the dropped scope dial).
-11. **Batch history on disk** — bridge appends batches + resolutions to
-    `.pinpoint/history.md`. No overlay UI.
-12. **Re-capture after a fix** — Claude sees a fresh crop before resolving;
-    before/after lands on the pin. Last on purpose: most expensive, and it pays off
-    once there is something worth verifying. Failure paths (tab closed, element gone,
-    permission lapsed) must be graceful.
+Phase D — the loop back (M, S, S, L) — **shipped**
+8. ~~**Per-pin progress and results**~~ — a `report_progress` tool broadcasting
+   `working` and `edited` (files + diffstat) over the existing SSE plumbing. Kept on
+   the comment as well as broadcast, so a service worker that was asleep catches up.
+   Scope guard held: outcomes only, no transcript.
+9. ~~**Follow-up threads**~~ — a reply box on green and answered pins reopens the same
+   pin for another round rather than making a second one, takes a fresh crop, and
+   dispatches immediately. The brief reads the previous round out of the queue and
+   states what was asked, what was done, and that it was not enough. Capped at three
+   rounds.
+11. ~~**Batch history on disk**~~ — `.pinpoint/history.md`, append-only under a date
+    heading. Resolutions are appended as their own later line rather than spliced into
+    the batch that produced them: the file is one a human also edits, and a log that
+    only ever appends cannot corrupt it.
+12. ~~**Re-capture after a fix**~~ — `resolve_comment` broadcasts a request and waits
+    briefly; the page re-measures the element (a fix that changes the size is exactly
+    what this catches, so the old rect would clip it), waits out the hot reload, crops,
+    and posts back. The path lands in the tool result so Claude can read it. Every
+    failure path — no tab, no element, scrolled out of view, no permission — resolves
+    the comment and says the fix is unverified.
 
 Ops (pre-announce, not build items)
 13. Chrome Web Store listing (M) · 14. donate link (XS) · 15. confirm repo

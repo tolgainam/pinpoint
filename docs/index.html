@@ -519,6 +519,33 @@
   }
   ul.ticks strong { color: var(--ink); font-weight: 600; }
 
+  /* ---------------------------------------------------------------- about */
+
+  .about .panel { display: flex; flex-direction: column; }
+  .about .panel p + p { margin-top: 10px; }
+  .panel .fine {
+    margin-top: auto;
+    padding-top: 12px;
+    font-size: 12.5px;
+    color: var(--ink-3);
+  }
+  .panel .fine a { border-bottom-color: transparent; }
+  .panel .fine a:hover { border-bottom-color: var(--accent); }
+
+  .disclaimer {
+    margin-top: 18px;
+    padding: 16px 18px;
+    border: 1px solid var(--rule-2);
+    border-left: 3px solid var(--ink-3);
+    border-radius: 4px;
+    background: var(--paper-2);
+    font-family: var(--sans);
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--ink-2);
+  }
+  .disclaimer strong { color: var(--ink); font-weight: 600; }
+
   /* ---------------------------------------------------------------- footer */
 
   footer {
@@ -556,6 +583,7 @@
     <a href="#install">Install</a>
     <a href="#arrives">Payload</a>
     <a href="#how">How</a>
+    <a href="#about">About</a>
     <a href="https://github.com/tolgainam/pinpoint">GitHub&nbsp;↗</a>
   </span>
 </nav>
@@ -799,10 +827,47 @@ whole page: ~/.claude/pinpoint/queue/20260822-023835-z0fp/page.png
   </ul>
 </section>
 
+<section id="about">
+  <div class="kicker">the small print</div>
+  <h2>License, affiliation, support</h2>
+
+  <div class="two about">
+    <div class="panel">
+      <h3>MIT licensed</h3>
+      <p>
+        Free to use, modify, and ship inside commercial work. Keep the copyright notice
+        and it's yours.
+      </p>
+      <p class="fine">Copyright © 2026 Tolga Inam. <a href="https://github.com/tolgainam/pinpoint/blob/main/LICENSE">Full text&nbsp;↗</a></p>
+    </div>
+
+    <div class="panel">
+      <h3>Support the project</h3>
+      <p>
+        Pinpoint is free and stays that way. A sponsorship link will live here.
+      </p>
+      <p class="fine">
+        Free and just as useful: star the repo, file an issue when something breaks,
+        or tell someone who reviews a lot of UI.
+      </p>
+    </div>
+  </div>
+
+  <div class="disclaimer">
+    <strong>Not affiliated with Anthropic.</strong>
+    Pinpoint is an independent, community-built tool — not affiliated with, endorsed by,
+    or sponsored by Anthropic. "Claude" and "Claude Code" are trademarks of Anthropic,
+    PBC, used here only to describe what this tool interoperates with. Pinpoint speaks to
+    Claude Code through its documented plugin, MCP, and channel interfaces; those are
+    Anthropic's to change, and a change on their side can break this tool without warning.
+  </div>
+</section>
+
 <footer>
   <span class="rule">─────────────────────────────────────────────────────────</span>
   <a href="https://github.com/tolgainam/pinpoint">github.com/tolgainam/pinpoint</a>
-  &nbsp;·&nbsp; MIT &nbsp;·&nbsp; ◈
+  &nbsp;·&nbsp; <a href="https://github.com/tolgainam/pinpoint/blob/main/LICENSE">MIT</a>
+  &nbsp;·&nbsp; ◈
 </footer>
 
 </main>

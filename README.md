@@ -175,6 +175,28 @@ internals.
 
 Chrome only. `localhost` and `127.0.0.1` only, by design.
 
+## Not affiliated with Anthropic
+
+Pinpoint is an independent, community-built tool. It is **not affiliated with,
+endorsed by, or sponsored by Anthropic**. "Claude" and "Claude Code" are trademarks of
+Anthropic, PBC, used here only to describe what this tool interoperates with.
+
+Pinpoint talks to Claude Code through its documented plugin, MCP, and channel
+interfaces. Those interfaces — channels especially — are Anthropic's to change, and a
+change on their side can break this tool without warning.
+
+## Support
+
+Pinpoint is free and MIT licensed, and it stays that way. If it saves you time and you
+want to say thanks, a sponsorship link will live here.
+
+<!-- TODO: replace with a real link before announcing — GitHub Sponsors, Ko-fi,
+     Buy Me a Coffee, or whatever you settle on. An empty donate section is worse
+     than none, so this stays a comment until it points somewhere. -->
+
+Free ways to help that are worth just as much: star the repo, file an issue when
+something breaks, or tell someone who reviews a lot of UI.
+
 ## License
 
-MIT
+[MIT](./LICENSE) © 2026 Tolga Inam

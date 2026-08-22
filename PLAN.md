@@ -1,5 +1,11 @@
 # Pinpoint — a comment toolbar that dispatches into Claude Code
 
+> **Status: built and shipping.** All five phases are done and the loop works end to
+> end. See [Outcome](#outcome) at the bottom for what was built, what the plan got
+> wrong, and what is still open. The sections below are the original plan, kept as
+> written — they are the reasoning, not the current documentation. For how to install
+> and use it, see [README.md](./README.md).
+
 ## Context
 
 Reviewing a running web app and getting fixes made is currently a lossy manual loop: you spot something wrong in the browser, then describe it in prose in the terminal ("the spacing under the brand header on the explore page is too tight"), and Claude has to reconstruct which element you meant. The context that was obvious on screen — which element, which page state, what it looked like — never survives the trip.
@@ -187,13 +193,14 @@ The realistic approach, which the plan assumes: capture strong *identifiers* (co
 
 Sequenced to kill the biggest unknown first.
 
-| Phase | Work | Proves |
-|---|---|---|
-| **0** | `/plugin install fakechat@claude-plugins-official`, restart with `--channels`, send a message from `localhost:8787` | The channel path works on this machine and account. ~15 min, before writing any code. |
-| **1** | `server/pinpoint.ts` + plugin manifest. Test with `curl`. | Bridge receives, queues, and pushes into the session. |
-| **2** | Extension: overlay, pinning, dispatch. No screenshots yet. | End-to-end loop with real comments. |
-| **3** | Screenshots: capture, hide-overlay, crop, write PNGs. | Claude can see what you saw. |
-| **4** | Two-way: `resolve_comment` → SSE → pins grey out. | The loop closes. |
+| Phase | Work | Proves | |
+|---|---|---|---|
+| **0** | `/plugin install fakechat@claude-plugins-official`, restart with `--channels`, send a message from `localhost:8787` | The channel path works on this machine and account. ~15 min, before writing any code. | ✅ |
+| **1** | `server/pinpoint.ts` + plugin manifest. Test with `curl`. | Bridge receives, queues, and pushes into the session. | ✅ |
+| **2** | Extension: overlay, pinning, dispatch. No screenshots yet. | End-to-end loop with real comments. | ✅ |
+| **3** | Screenshots: capture, hide-overlay, crop, write PNGs. | Claude can see what you saw. | ✅ |
+| **4** | Two-way: `resolve_comment` → SSE → pins grey out. | The loop closes. | ✅ |
+| **5** | Packaging: marketplace, Node runtime, landing page. | A stranger can install it. | ✅ |
 
 Stop after any phase and the tool is still useful. If Phase 0 fails, Phases 1–4 still deliver the `/pinpoint:comments` pull workflow — only hands-free is lost.
 
@@ -227,3 +234,79 @@ curl -X POST localhost:8788/dispatch -H 'Content-Type: application/json' \
 **Full loop:** with Canary running and a session started with the development-channels flag, comment on a real element, dispatch, and confirm Claude receives the brief, reads the screenshot PNG, locates the component, and makes the fix.
 
 **Screenshot correctness:** verify the saved PNG contains *no* pins or toolbar — the most likely thing to get silently wrong.
+
+---
+
+## Outcome
+
+Written after the fact. Every phase above shipped; this records what actually happened,
+including the places the plan was wrong.
+
+### Phase status
+
+| Phase | Status | Notes |
+|---|---|---|
+| 0 — channel spike | ✅ | Channels work on this account. `--dangerously-load-development-channels` is still required, as predicted. |
+| 1 — server + bridge | ✅ | `/dispatch`, `/health`, `/events`, three MCP tools, origin gate, queue pruning. |
+| 2 — extension | ✅ | Shadow-DOM overlay, pinning, composer, draggable bar, persistence. |
+| 3 — screenshots | ✅ | Capture, hide-overlay, crop, write PNGs. Blocked for a while on a missing permission — see below. |
+| 4 — resolve → SSE | ✅ | Sequenced, replayable events; resolved pins turn green with the resolution line. |
+| 5 — packaging | ✅ | Marketplace, Node runtime, `/pinpoint:setup`, landing page. Not in the original plan. |
+
+### What the plan got wrong
+
+**`captureVisibleTab` needs `activeTab` or `<all_urls>`.** The plan specified
+`permissions: ["storage", "scripting", "tabs"]` with `host_permissions` for localhost,
+and assumed that was enough for screenshots. It is not — a host permission does not
+satisfy `captureVisibleTab`. Every dispatch arrived without an image until `activeTab`
+was added. Worse, three bare `catch { return null }` blocks in the capture path made a
+permission error look identical to the user having unticked the screenshot box, so the
+bug hid for several rounds. Failures now carry their reason to a toast.
+
+The knock-on effect is permanent: `activeTab` is granted by clicking the extension icon
+and **revoked on the next navigation**. Screenshots therefore stop working after every
+full page reload until the icon is clicked again. The demo server hot-swaps its
+stylesheet instead of reloading for exactly this reason.
+
+**Bun was the wrong runtime for a distributed tool.** Fine while the plan was "a thing
+I run locally", wrong the moment it became something other people install. Claude Code
+already requires Node, and it installs a plugin's dependencies with `npm ci` — but only
+when it finds an npm lockfile. The checked-in `bun.lock` made it reach for
+`bun install` and fail on any machine without Bun. The server is now plain JS on plain
+Node; `Bun.serve` became `node:http`, which needed two things Bun did not: socket
+timeouts disabled so SSE streams are not cut, and `setNoDelay` so events are not held by
+Nagle's algorithm.
+
+**MV3 service workers die mid-stream.** Not anticipated at all. `EventSource` does not
+exist in a service worker, so the SSE stream is read by hand — and Chrome tears the
+worker down when idle, silently dropping resolve events. Fixed with sequence numbers on
+every event, a 200-entry replay buffer, `?since=N` on reconnect, and a 20s heartbeat
+that doubles as a keepalive.
+
+**Literal ASCII boxes are not portable.** The landing page's hero was drawn with
+box-drawing characters and rendered as dashed, broken boxes — the vertical glyphs do not
+sit flush across lines at any line-height above ~1.1, and it is font-dependent. The hero
+is CSS borders now. ASCII survives only in the architecture diagram, where a small gap
+costs nothing.
+
+### What was added beyond the plan
+
+- **Packaging as a marketplace** (`.claude-plugin/marketplace.json`), so install is two
+  slash commands rather than "point Claude Code at this directory".
+- **`/pinpoint:setup`** — after install the extension lives in the plugin cache under an
+  unguessable path, and Chrome's "Load unpacked" is a file picker no CLI can drive. The
+  command resolves the path, copies it, and opens `chrome://extensions`.
+- **A demo page** (`demo/`) so the tool can be tried without wiring it to a real project.
+- **A landing page** (`docs/`) for GitHub Pages.
+- **Event replay** — not in the plan, forced by the service-worker lifecycle.
+
+### Still open
+
+- **The extension must be loaded unpacked.** One-click install needs the Chrome Web
+  Store (one-time developer fee, plus review). Worth doing if this gets users.
+- **Source mapping is still identifiers-only.** React 19 removed `_debugSource`; the
+  plan already assumed this and it remains true.
+- **Chrome only.** The overlay is portable, but `captureVisibleTab` and MV3 specifics
+  are not.
+- **Channels remain a research preview.** The scary flag is still required for
+  hands-free mode. The pull path needs no flags and is unaffected.

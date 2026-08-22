@@ -279,6 +279,48 @@
   color: #d4d4d8;
 }
 
+/* ---------------------------------------------------------------- progress */
+
+/* What Claude is doing about this pin, while it is doing it. Outcomes only — files and a
+   state. The transcript stays in the terminal, where there is room for it. */
+.card .progress {
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  border-left: 2px solid var(--pp-line);
+  background: rgb(255 255 255 / 0.04);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.card .progress.working { border-left-color: var(--pp-accent); }
+.card .progress.edited { border-left-color: #2ea36c; }
+.card .progress-head { color: var(--pp-fg); }
+.card .file { color: var(--pp-dim); font-variant-numeric: tabular-nums; }
+
+/* A pin with work in flight. Slow and low-contrast on purpose: it has to be noticeable
+   when you look at it and ignorable when you are doing something else. */
+.pin.working { animation: pp-pulse 1.6s ease-in-out infinite; }
+
+@keyframes pp-pulse {
+  0%, 100% { box-shadow: 0 1px 6px rgb(0 0 0 / 0.35); }
+  50% { box-shadow: 0 1px 6px rgb(0 0 0 / 0.35), 0 0 0 5px color-mix(in srgb, var(--pp-accent) 30%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pin.working { animation: none; outline: 2px solid var(--pp-accent); outline-offset: 2px; }
+}
+
+/* ---------------------------------------------------------------- follow-up */
+
+/* The second round, on the pin that had the first. Capped at a few rounds by the script:
+   a long negotiation belongs in the session, not in a box this size. */
+.card textarea.reply {
+  min-height: 44px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+
 /* ---------------------------------------------------------------- token chips */
 
 /* What the element is, in the project's own vocabulary. The row is a readout first and a

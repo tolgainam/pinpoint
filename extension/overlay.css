@@ -279,6 +279,108 @@
   color: #d4d4d8;
 }
 
+/* ---------------------------------------------------------------- token chips */
+
+/* What the element is, in the project's own vocabulary. The row is a readout first and a
+   control second: most of the time you glance at it, see `p-6`, and start typing. */
+.chips {
+  display: none;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.chips.show { display: flex; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--pp-line);
+  background: var(--pp-input);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.chip:disabled { opacity: 1; cursor: default; }
+.chip-key { color: var(--pp-dim); }
+.chip-val { color: var(--pp-fg); font-variant-numeric: tabular-nums; }
+
+/* A value on no scale is the thing worth noticing before you write the note. */
+.chip.warn { border-color: #a16207; background: rgb(161 98 7 / 0.14); }
+.chip-warn { color: #fbbf24; }
+
+/* A pick already made reads as pending, not as fact — it describes the page after the fix. */
+.chip.changed { border-color: var(--pp-accent); background: color-mix(in srgb, var(--pp-accent) 16%, transparent); }
+
+.chip-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid rgb(255 255 255 / 0.35);
+}
+
+/* ---------------------------------------------------------------- pickers */
+
+.picker { display: none; margin-bottom: 8px; }
+.picker.show { display: block; }
+
+/* Spacing as a size rather than a number: a ramp you can see is faster to choose from
+   than a list you have to read. */
+.ramp { display: flex; flex-direction: column; gap: 1px; max-height: 190px; overflow-y: auto; }
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 7px;
+  border-radius: 6px;
+  border-color: transparent;
+  font-size: 11px;
+  text-align: left;
+}
+
+.step .bar { height: 8px; border-radius: 2px; background: var(--pp-accent); opacity: 0.55; flex: none; }
+.step .name { color: var(--pp-fg); }
+.step .val { margin-left: auto; color: var(--pp-dim); font-variant-numeric: tabular-nums; }
+.step.on { background: var(--pp-hover); }
+.step.on .bar { opacity: 1; }
+
+/* The project's palette, not a colour wheel: the point is to stay inside the system. */
+.swatches { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+
+.swatch {
+  height: 26px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid rgb(255 255 255 / 0.18);
+}
+
+.swatch.on { outline: 2px solid var(--pp-fg); outline-offset: 1px; }
+
+/* No scale to pick from, so nudge the number instead — the honest fallback. */
+.stepper { display: flex; align-items: center; gap: 6px; }
+.stepper .val { min-width: 52px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; }
+.stepper .spacer { flex: 1; }
+
+/* ---------------------------------------------------------------- picked values */
+
+/* On the pin card, the part of the comment that says exactly what was asked for. */
+.card .deltas { margin-bottom: 8px; }
+
+.card .delta {
+  padding: 4px 7px;
+  border-radius: 6px;
+  border-left: 2px solid var(--pp-accent);
+  background: color-mix(in srgb, var(--pp-accent) 10%, transparent);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.card .delta + .delta { margin-top: 3px; }
+
 /* ---------------------------------------------------------------- card header */
 
 /* The card now outlives the comments inside it, so it needs a way out of its own:

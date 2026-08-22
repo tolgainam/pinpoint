@@ -640,3 +640,50 @@ export function withRuntime(summary, runtime) {
   merged.detected = merged.libraries.length > 0 || merged.tokens.color.length > 0 || merged.tokens.spacing.length > 0
   return merged
 }
+
+// ---------------------------------------------------------------- what the composer needs
+
+/**
+ * The summary in the shape the composer's token chips want: every scale flattened, sorted,
+ * and pre-normalised, so the extension can match a computed value against it with a string
+ * compare and a `parseFloat`.
+ *
+ * Normalising here rather than there is the point. Colour parsing, unit conversion, and
+ * categorisation are the parts most likely to need correcting, and they should need
+ * correcting in one file rather than in two that can drift apart.
+ */
+export function chipData(summary) {
+  if (!summary?.detected) return { detected: false, step: null, color: [], spacing: [], type: [], radius: [] }
+
+  const lengths = group => summary.tokens[group]
+    .map(t => ({ name: t.name, value: t.value, px: toPx(t.value) }))
+    .filter(t => t.px != null)
+    .sort((a, b) => a.px - b.px)
+
+  return {
+    detected: true,
+    step: summary.spacingStep,
+    // Colours keep their authored value as well as the hex: the authored form is what
+    // belongs in the fix, the hex is only how we recognise it.
+    color: summary.tokens.color
+      .map(t => ({ name: t.name, value: t.value, hex: normaliseColour(t.value) }))
+      .filter(t => t.hex),
+    spacing: lengths('spacing'),
+    type: lengths('type'),
+    radius: lengths('radius'),
+  }
+}
+
+/**
+ * A picked value, as a line for the brief.
+ *
+ * Deltas are the whole reason the chips exist: "make this p-8 instead of p-6" is a fact
+ * with no ambiguity in it, where the same request in prose is a guess about which of
+ * four spacing properties was meant.
+ */
+export function deltaLine(delta) {
+  if (!delta?.prop) return null
+  const from = delta.fromToken ? `${delta.from} (${delta.fromToken})` : delta.from
+  const to = delta.toToken ? `${delta.to} (${delta.toToken})` : delta.to
+  return `${delta.prop}: ${from} → **${to}**`
+}

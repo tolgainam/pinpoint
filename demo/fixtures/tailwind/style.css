@@ -1,0 +1,91 @@
+/* The classes Tailwind would have generated for index.html, written by hand so the demo
+   needs no build step. Only the utilities the page actually uses are here — a compiled
+   sheet would look the same, because that is exactly what the compiler emits.
+
+   Values come from tailwind.config.js and nowhere else, with one deliberate exception:
+   the `p-[13px]` / `bg-rose-500` strip, which is the thing the probe should catch. */
+
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; font-family: ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+h1, h2 { margin: 0; }
+p { margin: 0; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; }
+
+/* ---------------------------------------------------------------- layout */
+
+.mx-auto { margin-left: auto; margin-right: auto; }
+.max-w-4xl { max-width: 896px; }
+.max-w-xl { max-width: 576px; }
+
+.flex { display: flex; }
+.grid { display: grid; }
+.grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+
+.gap-3 { gap: 12px; }
+.gap-4 { gap: 16px; }
+
+.mt-2 { margin-top: 8px; }
+.mt-3 { margin-top: 12px; }
+.mt-4 { margin-top: 16px; }
+.mt-6 { margin-top: 24px; }
+.mt-10 { margin-top: 40px; }
+
+.p-6 { padding: 24px; }
+.px-3 { padding-left: 12px; padding-right: 12px; }
+.px-6 { padding-left: 24px; padding-right: 24px; }
+.py-1 { padding-top: 4px; padding-bottom: 4px; }
+.py-3 { padding-top: 12px; padding-bottom: 12px; }
+.py-12 { padding-top: 48px; padding-bottom: 48px; }
+.pt-16 { padding-top: 64px; }
+
+/* An arbitrary value. Tailwind will happily emit one; the config never sanctioned it. */
+.p-\[13px\] { padding: 13px; }
+
+/* ---------------------------------------------------------------- borders */
+
+.border { border-width: 1px; border-style: solid; }
+.border-ink-line { border-color: #e2e8f0; }
+
+.rounded-md { border-radius: 8px; }
+.rounded-lg { border-radius: 12px; }
+.rounded-full { border-radius: 9999px; }
+
+/* ---------------------------------------------------------------- colour */
+
+.bg-canvas { background-color: #f8fafc; }
+.bg-surface { background-color: #ffffff; }
+.bg-brand-50 { background-color: #eef2ff; }
+.bg-brand-600 { background-color: #4f46e5; }
+
+/* Not in the palette. Tailwind ships a `rose` scale the config never extended, so this
+   class is real Tailwind output and still an off-system colour for this project. */
+.bg-rose-500 { background-color: #f43f5e; }
+
+.text-ink { color: #0f172a; }
+.text-ink-muted { color: #64748b; }
+.text-white { color: #ffffff; }
+.text-brand-100 { color: #e0e7ff; }
+.text-brand-600 { color: #4f46e5; }
+.text-brand-700 { color: #4338ca; }
+
+/* ---------------------------------------------------------------- type */
+
+.text-xs { font-size: 12px; line-height: 16px; }
+.text-sm { font-size: 14px; line-height: 20px; }
+.text-base { font-size: 16px; line-height: 24px; }
+.text-lg { font-size: 18px; line-height: 28px; }
+.text-2xl { font-size: 24px; line-height: 32px; }
+.text-4xl { font-size: 36px; line-height: 40px; }
+
+.font-medium { font-weight: 500; }
+.font-semibold { font-weight: 600; }
+.tracking-tight { letter-spacing: -0.025em; }
+
+/* ---------------------------------------------------------------- elements */
+
+button { font-family: inherit; border: 0; cursor: pointer; }
+button.border { border-width: 1px; border-style: solid; }
+
+.inline-block { display: inline-block; }

@@ -1,0 +1,37 @@
+/* Shared switcher for the demo pages.
+ *
+ * Deliberately colour-neutral and self-contained: it must not add tokens to any demo's
+ * palette, so every value here is a literal and nothing is declared on `:root`. A
+ * custom property in this file would show up in the design-system summary of whichever
+ * demo you happened to be pinning, which is exactly the wrong thing for a probe test.
+ */
+.demo-switch {
+  position: fixed;
+  right: 14px;
+  bottom: 12px;
+  z-index: 40;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(18, 21, 28, 0.86);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.24);
+  font: 12px/1 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.demo-switch a {
+  padding: 7px 12px;
+  border-radius: 999px;
+  color: #b9c1d1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.demo-switch a:hover { color: #ffffff; }
+
+.demo-switch a[aria-current="page"] {
+  background: #ffffff;
+  color: #12151c;
+}

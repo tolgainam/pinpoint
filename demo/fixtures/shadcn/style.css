@@ -1,0 +1,104 @@
+/* The utilities index.html uses, written by hand so the demo needs no build step. Every
+   colour resolves through a variable in app/globals.css — that indirection is the point
+   of the shadcn setup and the thing the probe has to see through.
+
+   Radii come from `--radius` the way the config declares them: lg is the variable
+   itself, md and sm are calc() steps down from it. */
+
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2 { margin: 0; }
+p { margin: 0; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; }
+
+/* ---------------------------------------------------------------- layout */
+
+.mx-auto { margin-left: auto; margin-right: auto; }
+.max-w-3xl { max-width: 768px; }
+.relative { position: relative; }
+.flex { display: flex; }
+.flex-1 { flex: 1 1 0%; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.gap-2 { gap: 8px; }
+
+.mt-1 { margin-top: 4px; }
+.mt-2 { margin-top: 8px; }
+.mt-8 { margin-top: 32px; }
+.my-1 { margin-top: 4px; margin-bottom: 4px; }
+
+.p-1 { padding: 4px; }
+.p-4 { padding: 16px; }
+.p-6 { padding: 24px; }
+.px-2 { padding-left: 8px; padding-right: 8px; }
+.px-3 { padding-left: 12px; padding-right: 12px; }
+.px-4 { padding-left: 16px; padding-right: 16px; }
+.px-6 { padding-left: 24px; padding-right: 24px; }
+.py-1 { padding-top: 4px; padding-bottom: 4px; }
+.py-2 { padding-top: 8px; padding-bottom: 8px; }
+.py-4 { padding-top: 16px; padding-bottom: 16px; }
+.py-16 { padding-top: 64px; padding-bottom: 64px; }
+.pb-6 { padding-bottom: 24px; }
+
+/* ---------------------------------------------------------------- borders */
+
+.border { border-width: 1px; border-style: solid; border-color: hsl(var(--border)); }
+.border-t { border-top-width: 1px; border-top-style: solid; border-top-color: hsl(var(--border)); }
+
+.rounded-sm { border-radius: calc(var(--radius) - 4px); }
+.rounded-md { border-radius: calc(var(--radius) - 2px); }
+.rounded-lg { border-radius: var(--radius); }
+
+.shadow-sm { box-shadow: 0 1px 2px 0 hsl(var(--foreground) / 0.05); }
+.shadow-md { box-shadow: 0 4px 6px -1px hsl(var(--foreground) / 0.1), 0 2px 4px -2px hsl(var(--foreground) / 0.1); }
+
+/* ---------------------------------------------------------------- colour */
+
+.bg-background { background-color: hsl(var(--background)); }
+.bg-card { background-color: hsl(var(--card)); }
+.bg-popover { background-color: hsl(var(--popover)); }
+.bg-primary { background-color: hsl(var(--primary)); }
+.bg-secondary { background-color: hsl(var(--secondary)); }
+.bg-accent { background-color: hsl(var(--accent)); }
+
+.text-foreground { color: hsl(var(--foreground)); }
+.text-card-foreground { color: hsl(var(--card-foreground)); }
+.text-popover-foreground { color: hsl(var(--popover-foreground)); }
+.text-primary-foreground { color: hsl(var(--primary-foreground)); }
+.text-secondary-foreground { color: hsl(var(--secondary-foreground)); }
+.text-accent-foreground { color: hsl(var(--accent-foreground)); }
+.text-muted-foreground { color: hsl(var(--muted-foreground)); }
+.text-destructive { color: hsl(var(--destructive)); }
+
+/* ---------------------------------------------------------------- type */
+
+.text-xs { font-size: 12px; line-height: 16px; }
+.text-sm { font-size: 14px; line-height: 20px; }
+.text-xl { font-size: 20px; line-height: 28px; }
+.text-3xl { font-size: 30px; line-height: 36px; }
+.font-medium { font-weight: 500; }
+.font-semibold { font-weight: 600; }
+.tracking-tight { letter-spacing: -0.025em; }
+
+/* ---------------------------------------------------------------- elements */
+
+button, input { font-family: inherit; }
+button { cursor: pointer; }
+.input::placeholder { color: hsl(var(--muted-foreground)); }
+.input:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+
+/* Radix renders the open menu into a positioned wrapper; this is that wrapper's job. */
+[data-radix-popper-content-wrapper] { position: absolute; top: 100%; left: 0; margin-top: 4px; z-index: 10; }
+.menu { min-width: 200px; }
+[data-slot="dropdown-menu-item"] { cursor: pointer; }
+
+/* One-off, and off-system on purpose: a border colour that is in no token. */
+.alert-destructive {
+  border-color: #e11d48;
+  color: hsl(var(--destructive));
+  background-color: hsl(var(--background));
+}

@@ -21,7 +21,9 @@ import { createServer } from 'node:http'
 import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { homedir } from 'node:os'
-import { probeProject, withRuntime, tokenIndex, annotate, summaryLine, guardrailLine } from './design-system.js'
+import {
+  probeProject, withRuntime, tokenIndex, annotate, summaryLine, guardrailLine, chipData, deltaLine,
+} from './design-system.js'
 
 const PORT = Number(process.env.PINPOINT_PORT ?? 8788)
 const PROJECT_DIR = process.env.PINPOINT_PROJECT_DIR ?? process.cwd()
@@ -402,6 +404,11 @@ function renderBatch(b) {
 
   const body = open.map(c => {
     const facts = [
+      // Above the element facts on purpose: a picked value is the least ambiguous thing
+      // in the whole comment, and the prose beside it is usually just the reason.
+      ...(c.deltas?.length
+        ? [`**requested change${c.deltas.length > 1 ? 's' : ''}** — ${c.deltas.map(deltaLine).filter(Boolean).join(' · ')}`]
+        : []),
       c.component ? `component: \`${c.component}\`` : null,
       c.selector ? `selector: \`${c.selector}\`` : null,
       c.text ? `text: "${c.text.slice(0, 120)}"` : null,
@@ -691,6 +698,22 @@ function sanitiseDebug(debug) {
 }
 
 /**
+ * Values picked from the composer's token chips. Page-controlled like everything else
+ * here, so capped and stringified rather than trusted.
+ */
+function sanitiseDeltas(deltas) {
+  if (!Array.isArray(deltas) || !deltas.length) return undefined
+  const clean = deltas.slice(0, 8).map(d => ({
+    prop: String(d?.prop ?? '').slice(0, 40),
+    from: String(d?.from ?? '').slice(0, 60),
+    to: String(d?.to ?? '').slice(0, 60),
+    fromToken: d?.fromToken ? String(d.fromToken).slice(0, 60) : undefined,
+    toToken: d?.toToken ? String(d.toToken).slice(0, 60) : undefined,
+  })).filter(d => d.prop && d.to)
+  return clean.length ? clean : undefined
+}
+
+/**
  * What the page said about its own design system, trimmed to size.
  *
  * A page can declare as many custom properties as it likes, and the names are whatever
@@ -783,6 +806,7 @@ async function handleDispatch(req, res) {
       styles: c.styles && typeof c.styles === 'object' ? c.styles : undefined,
       parents: Array.isArray(c.parents) ? c.parents.slice(0, 6) : undefined,
       transient: c.transient === true || undefined,
+      deltas: sanitiseDeltas(c.deltas),
       debug: sanitiseDebug(c.debug),
       question: c.question === true || undefined,
       shot,
@@ -832,6 +856,15 @@ async function handleDispatch(req, res) {
   sendJson(res, 200, headers, { ok: true, batch: id, count: comments.length })
 }
 
+async function handleDesignSystem(req, res) {
+  const got = await gate(req, res)
+  if (!got) return
+  const { headers, payload } = got
+  const runtime = sanitiseRuntimeDesign(payload?.designSystem)
+  const merged = withRuntime(projectDesignSystem(), runtime)
+  sendJson(res, 200, headers, { ok: true, ...chipData(merged), summary: summaryLine(merged) })
+}
+
 // ---------------------------------------------------------------- backlog intake
 
 /** Notes are prose; a backlog needs a scannable title. First line, capped, emphasis stripped. */
@@ -877,6 +910,12 @@ async function handleBacklog(req, res) {
   if (c.selector) block.push(`  - selector: \`${c.selector}\``)
   if (c.text) block.push(`  - text: "${String(c.text).slice(0, 120)}"`)
   if (Array.isArray(c.parents) && c.parents.length) block.push(`  - parents: ${c.parents.slice(0, 4).join(' ‹ ')}`)
+  // Kept where computed styles are not: a picked value is a decision, and a decision does
+  // not go stale the way a measurement does.
+  const deltas = sanitiseDeltas(c.deltas)
+  if (deltas) {
+    block.push(`  - requested: ${deltas.map(d => `${d.prop} ${d.fromToken ?? d.from} → ${d.toToken ?? d.to}`).join('; ')}`)
+  }
   // Computed styles are deliberately not written here. A backlog item is read weeks
   // later, and stale layout numbers read as current fact — the screenshot is at least
   // visibly a photograph. An error message keeps its meaning, so that one is kept.
@@ -943,6 +982,17 @@ const server = createServer((req, res) => {
     handleDispatch(req, res).catch(err => {
       console.error('[pinpoint] dispatch failed:', err)
       if (!res.headersSent) send(res, 500, cors(origin), 'dispatch failed')
+    })
+    return
+  }
+
+  // The composer asks for this once per page so its chips can speak in token names. It
+  // posts what the page resolved at runtime and gets the merged view back — the same
+  // merge a dispatch would do, so a chip can never name a token the brief would not.
+  if (url.pathname === '/design-system' && req.method === 'POST') {
+    handleDesignSystem(req, res).catch(err => {
+      console.error('[pinpoint] design-system request failed:', err)
+      try { res.writeHead(500).end('error') } catch { /* already gone */ }
     })
     return
   }

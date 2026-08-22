@@ -33,11 +33,6 @@
   /** Sticky: whatever you chose last time is the default next time, so turning
       screenshots off once keeps them off without a separate global switch. */
   let wantShot = true
-  /** Sticky for this page load only, deliberately not persisted. A review pass where
-      everything goes to the backlog should not have to tick the box fifteen times, but
-      the next page you open must default to dispatching — silently backlogging an
-      urgent comment is the one failure mode worth spending a click to avoid. */
-  let wantBacklog = false
 
   // ---------------------------------------------------------------- shadow root
 
@@ -217,12 +212,23 @@
 
   // ---------------------------------------------------------------- intent
 
-  /** A note that opens with `?` is a question: answer it, do not touch files. */
-  const isQuestion = note => /^\s*\?/.test(note)
+  /**
+   * The first character decides what a note is: `?` asks a question, `!` parks it on the
+   * backlog, anything else is an ordinary fix request. One marker, only at the start, and
+   * it must have a note after it — so a comment that genuinely reads "!" is still a note.
+   *
+   * This is the whole switch. It replaced a composer checkbox because a marker you type
+   * while writing costs nothing, and every checkbox is chrome that stays on screen for
+   * the comments that do not need it.
+   */
+  const MARKER = { '?': 'question', '!': 'backlog' }
 
-  /** The `?` is a mode switch, not part of the sentence — carrying it through would put
-      it in the batch heading and in backlog titles, where it reads as a typo. */
-  const stripMarker = note => note.replace(/^\s*\?+\s*/, '').trim() || note.trim()
+  function intentOf(note) {
+    const m = note.match(/^\s*([?!])\s*(\S[\s\S]*)$/)
+    // The marker never travels with the text: it would land in the batch heading and in
+    // backlog titles, where it reads as a typo.
+    return m ? { kind: MARKER[m[1]], text: m[2].trim() } : { kind: null, text: note.trim() }
+  }
 
   // ---------------------------------------------------------------- highlight
 
@@ -401,7 +407,7 @@
     crumbs.title = '↑ parent · ↓ child — or click a level'
     const meta = el('div', 'meta', '…')
     const box = el('textarea')
-    box.placeholder = 'What is wrong here?   (⌘↵ to add · start with ? to ask)'
+    box.placeholder = 'What is wrong here?    ⌘↵ add · ? ask · ! backlog'
     const hint = el('div', 'hint')
 
     const row = el('div', 'row')
@@ -410,14 +416,9 @@
     shotBox.type = 'checkbox'
     shotBox.checked = wantShot
     shotLabel.append(shotBox, document.createTextNode('screenshot'))
-    const backlogLabel = el('label', 'toggle')
-    const backlogBox = document.createElement('input')
-    backlogBox.type = 'checkbox'
-    backlogBox.checked = wantBacklog
-    backlogLabel.append(backlogBox, document.createTextNode('backlog'))
     const cancel = el('button', '', 'Cancel')
     const add = el('button', 'primary', 'Add')
-    row.append(shotLabel, backlogLabel, el('span', 'spacer'), cancel, add)
+    row.append(shotLabel, el('span', 'spacer'), cancel, add)
     card.append(crumbs, meta, box, hint, row)
     layer.append(card)
     openCard = card
@@ -497,15 +498,16 @@
 
     // ------------------------------------------------------------ intent
 
+    /** The button and the hint are the only confirmation that a marker took effect,
+        so both change on the keystroke that types it. */
     function paintIntent() {
-      const asking = isQuestion(box.value)
-      add.textContent = asking ? 'Ask' : backlogBox.checked ? 'Backlog' : 'Add'
-      add.classList.toggle('ask', asking)
-      hint.textContent = asking
-        ? 'question — Claude answers on the pin and changes no files'
-        : backlogBox.checked
-          ? 'goes to .pinpoint/backlog.md, not to the session'
-          : ''
+      const { kind } = intentOf(box.value)
+      add.textContent = kind === 'question' ? 'Ask' : kind === 'backlog' ? 'Backlog' : 'Add'
+      add.classList.toggle('ask', kind === 'question')
+      hint.textContent =
+        kind === 'question' ? 'question — Claude answers on the pin and changes no files'
+        : kind === 'backlog' ? 'parked — appended to .pinpoint/backlog.md, never dispatched'
+        : ''
       hint.classList.toggle('show', !!hint.textContent)
     }
 
@@ -516,7 +518,6 @@
       if (!note) { box.focus(); return }
 
       wantShot = shotBox.checked
-      wantBacklog = backlogBox.checked
       chrome.storage.local.set({ [PREFS_KEY]: { wantShot } }).catch(() => {})
 
       // Re-measure: the composer has been open for a while and the app may have moved.
@@ -533,26 +534,25 @@
         if (!shot) say(`no screenshot — ${lastShotError}`, true)
       }
 
-      const asking = isQuestion(note)
+      const { kind, text } = intentOf(note)
       const comment = {
         ...captured,
         rect,
         n: ++seq,
-        note: asking ? stripMarker(note) : note,
+        note: text,
         shot: shot || undefined,
-        question: asking || undefined,
-        status: wantBacklog ? 'backlog' : 'pending',
+        question: kind === 'question' || undefined,
+        status: kind === 'backlog' ? 'backlog' : 'pending',
       }
       comments.push(comment)
       closeCard()
       save()
       render()
-      if (wantBacklog) sendToBacklog(comment)
+      if (kind === 'backlog') sendToBacklog(comment)
     }
 
     add.onclick = submit
     cancel.onclick = closeCard
-    backlogBox.onchange = paintIntent
     box.addEventListener('input', paintIntent)
     box.addEventListener('keydown', ev => {
       if (onArrow(ev)) return

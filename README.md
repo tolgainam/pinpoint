@@ -96,19 +96,27 @@ follow, so walking up costs one keypress instead of a re-click.
 `↑`/`↓` are intercepted only while the note is still empty — once you start typing they
 belong to the textarea again, and the breadcrumb stays clickable.
 
-### Ask instead of fix
+### Say what kind of comment it is
 
-Start a note with `?` and it dispatches as a question. The button turns violet, no files
-are touched, and Claude answers with `reply` — the answer lands on the pin card.
+The first character of a note decides where it goes. There is no switch to find, and
+nothing on screen for the comments that don't need it.
 
-There is no switch to find: the marker is the mode.
+| Start the note with | What happens |
+|---|---|
+| nothing | Ordinary fix request — dispatched to the session |
+| `?` | A question. Claude answers with `reply` and changes no files; the answer lands on the pin card. The button turns violet. |
+| `!` | Parked on the backlog instead of dispatched. |
+
+Only the first marker counts, and it has to have a note after it — a comment that
+genuinely reads `!` is still a note. The button label and the line under the box both
+change on the keystroke that types the marker, so you can see it took.
 
 ### Park it for later
 
-Tick **backlog** in the composer and the comment is appended to `.pinpoint/backlog.md` in
-your project instead of being sent. Its pin goes grey, it never enters the dispatch queue,
-and it never expires. Screenshots land in `.pinpoint/shots/` (~20–80KB each — fifty items
-is a few MB in the repo).
+A note starting with `!` is appended to `.pinpoint/backlog.md` in your project instead of
+being sent. Its pin goes grey, it never enters the dispatch queue, and it never expires.
+Screenshots land in `.pinpoint/shots/` (~20–80KB each — fifty items is a few MB in the
+repo).
 
 That file is meant to be committed and hand-edited; Pinpoint only appends to `## Open`
 and moves finished items to `## Done`, leaving everything else where you put it. Work

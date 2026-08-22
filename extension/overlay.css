@@ -104,6 +104,8 @@
   position: absolute;
   z-index: 20;
   pointer-events: auto;
+  /* Wider than the pin card needs, for the breadcrumb: at 300px only four ancestors
+     fit before it starts scrolling, which is most of a chain hidden by default. */
   width: 320px;
   padding: 10px;
   border-radius: 10px;
@@ -237,7 +239,7 @@
 
 .row {
   display: flex;
-  gap: 5px;
+  gap: 6px;
   align-items: center;
   margin-top: 8px;
 }
@@ -249,7 +251,7 @@
 button {
   font: inherit;
   font-size: 12px;
-  padding: 5px 9px;
+  padding: 5px 10px;
   border-radius: 7px;
   border: 1px solid var(--pp-line);
   background: transparent;

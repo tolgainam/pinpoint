@@ -868,18 +868,37 @@
     backlog: 'backlog',
   }
 
-  function openPinCard(comment, x, y) {
-    const card = el('div', 'card')
-    card.append(el('div', 'meta', `${comment.component ? `<${comment.component}>  ` : ''}${comment.selector}`))
-    if (comment.question) card.append(el('div', 'kind', 'question — no files changed'))
-    if (comment.transient) card.append(el('div', 'kind frozen', 'pinned from a frozen frame'))
-    card.append(el('div', 'note', comment.note))
+  /**
+   * The three things a comment can be, which is the whole composer vocabulary: `?` asks,
+   * `!` parks, anything else is a fix request. Each gets its own band in the card, so a
+   * stack of comments on one element is readable without opening them one at a time.
+   */
+  const kindOf = c => (c.question ? 'question' : c.status === 'backlog' ? 'backlog' : 'action')
 
-    if (comment.answer) card.append(el('div', 'answer', comment.answer))
-    if (comment.resolution) card.append(el('div', 'resolution', `✓ ${comment.resolution}`))
+  /**
+   * What makes two comments share a pin. No selector means a node that vanished from a
+   * frozen frame: it has no element to share, so it keys to itself rather than pooling
+   * with every other orphan.
+   */
+  const stackKey = c => c.selector || `\u0000#${c.n}`
+
+  /** One comment, as a section of a pin card. `refresh` rebuilds the card around it. */
+  function commentSection(comment, stacked, refresh) {
+    const sect = el('div', `sect ${kindOf(comment)}`)
+    if (comment.status === 'resolved') sect.classList.add('done')
+
+    if (comment.question) sect.append(el('div', 'kind', 'question — no files changed'))
+    if (comment.status === 'backlog') sect.append(el('div', 'kind parked', 'parked — not dispatched'))
+    if (comment.transient) sect.append(el('div', 'kind frozen', 'pinned from a frozen frame'))
+    sect.append(el('div', 'note', comment.note))
+
+    if (comment.answer) sect.append(el('div', 'answer', comment.answer))
+    if (comment.resolution) sect.append(el('div', 'resolution', `✓ ${comment.resolution}`))
 
     const row = el('div', 'row')
-    const parts = [STATE_LABEL[comment.status] ?? comment.status]
+    // The number is only worth showing when there is more than one to tell apart — on a
+    // lone comment it just repeats what the pin already says.
+    const parts = [`${stacked ? `#${comment.n} · ` : ''}${STATE_LABEL[comment.status] ?? comment.status}`]
     if (comment.status === 'backlog' && comment.unsaved) parts.push('not written — bridge down')
     if (comment.debug?.length) parts.push(`${comment.debug.length} console`)
     if (!comment.shot) parts.push('no screenshot')
@@ -893,18 +912,54 @@
       row.append(retry)
     }
     row.append(remove)
-    card.append(row)
+    sect.append(row)
 
     remove.onclick = () => {
       comments = comments.filter(c => c !== comment)
-      closeCard()
       save()
       render()
+      // The card is rebuilt around what is left rather than closed. Clearing three
+      // comments off one element should not mean finding the pin again three times.
+      refresh()
+    }
+    return sect
+  }
+
+  /**
+   * A pin card covers every comment on that element, in the order they were written, and
+   * is rebuilt in place as they come and go — so it closes only when you close it, or when
+   * the last comment under it is gone.
+   */
+  function openPinCard(stack, x, y) {
+    const key = stackKey(stack[0])
+    const card = el('div', 'card')
+
+    function fill() {
+      const live = comments.filter(c => stackKey(c) === key)
+      if (!live.length) { closeCard(); return }
+
+      card.textContent = ''
+      const head = live[0]
+      const stacked = live.length > 1
+
+      const top = el('div', 'card-head')
+      top.append(el('div', 'meta',
+        `${head.component ? `<${head.component}>  ` : ''}${head.selector}${stacked ? `  ·  ${live.length} comments` : ''}`))
+      const close = el('button', 'close', '✕')
+      close.title = 'Close'
+      close.onclick = closeCard
+      top.append(close)
+      card.append(top)
+
+      for (const c of live) card.append(commentSection(c, stacked, fill))
+      // Re-anchor: the card is shorter now, and a clamped one should drift back toward
+      // the pin rather than stay pushed up against the viewport edge.
+      placeCard(card, x + 12, y + 12)
     }
 
     layer.append(card)
     openCard = card
-    placeCard(card, x + 12, y + 12)
+    fill()
   }
 
   // ---------------------------------------------------------------- pins
@@ -912,28 +967,54 @@
   const pins = el('div', 'layer')
   layer.append(pins)
 
-  /** Pin elements, one per comment, rebuilt only when the list itself changes. */
+  /** Pin elements, one per *element*, rebuilt only when the list itself changes. */
   let pinNodes = []
+
+  /**
+   * Comments on the same element share one pin. Every pin sits at its element's top-left,
+   * so a second comment on the same node used to land on the same pixel and hide the first
+   * one entirely — the older comment was still there, just unreachable. Grouping by selector
+   * rather than by coordinates keeps the key honest: same element, same stack, even while
+   * the page reflows underneath.
+   */
+  function stacks() {
+    const byEl = new Map()
+    for (const c of comments) {
+      const key = stackKey(c)
+      const got = byEl.get(key)
+      if (got) got.push(c)
+      else byEl.set(key, [c])
+    }
+    return [...byEl.values()]
+  }
+
+  /** Which comment a stacked pin looks like: the one most in need of attention, newest first. */
+  const PIN_RANK = { pending: 0, answered: 1, sent: 2, backlog: 3, resolved: 4 }
+  const leadOf = stack =>
+    [...stack].sort((a, b) => (PIN_RANK[a.status] ?? 9) - (PIN_RANK[b.status] ?? 9) || b.n - a.n)[0]
 
   function renderPins() {
     pins.textContent = ''
-    pinNodes = comments.map(c => {
+    pinNodes = stacks().map(stack => {
+      const c = leadOf(stack)
       const pin = el('div', 'pin', c.status === 'resolved' ? '✓' : String(c.n))
       pin.classList.toggle('sent', c.status === 'sent')
       pin.classList.toggle('resolved', c.status === 'resolved')
       pin.classList.toggle('answered', c.status === 'answered')
       pin.classList.toggle('backlog', c.status === 'backlog')
       pin.classList.toggle('question', !!c.question && c.status !== 'resolved')
-      pin.classList.toggle('unsaved', !!c.unsaved)
-      pin.title = c.note
+      pin.classList.toggle('unsaved', stack.some(x => x.unsaved))
+      pin.classList.toggle('stack', stack.length > 1)
+      if (stack.length > 1) pin.dataset.more = String(stack.length - 1)
+      pin.title = stack.map(x => `#${x.n} ${x.note}`).join('\n')
       pin.addEventListener('click', ev => {
         ev.preventDefault()
         ev.stopPropagation()
         if (openCard) { closeCard(); return }
-        openPinCard(c, ev.clientX, ev.clientY)
+        openPinCard(stack, ev.clientX, ev.clientY)
       })
       pins.append(pin)
-      return { pin, comment: c }
+      return { pin, comment: c, stack }
     })
     positionPins()
   }
@@ -944,13 +1025,17 @@
    * is genuinely gone the pin stays at its last document position, dimmed.
    */
   function positionPins() {
-    for (const { pin, comment } of pinNodes) {
+    for (const { pin, comment, stack } of pinNodes) {
       let live = null
       try { live = document.querySelector(comment.selector) } catch { /* stale selector */ }
       if (live) {
         const r = live.getBoundingClientRect()
-        comment.docX = Math.round(r.left + scrollX)
-        comment.docY = Math.round(r.top + scrollY)
+        // Every comment in the stack shares the element, so every one gets the fresh
+        // position — a comment that later stands alone must not carry a stale rect.
+        for (const c of stack) {
+          c.docX = Math.round(r.left + scrollX)
+          c.docY = Math.round(r.top + scrollY)
+        }
         pin.classList.remove('detached')
       } else {
         pin.classList.add('detached')
@@ -1002,7 +1087,6 @@
   clearBtn.onclick = () => {
     if (!comments.length) return
     comments = []
-    seq = 0
     closeCard()
     save()
     render()
@@ -1041,6 +1125,10 @@
   // ---------------------------------------------------------------- render
 
   function render() {
+    // Numbering is per page and purely cosmetic — the server numbers a batch by position,
+    // independently of this. So once the page is clear, the next comment is #1 again
+    // rather than continuing a count nobody can still see.
+    if (!comments.length) seq = 0
     const pending = comments.filter(c => c.status === 'pending').length
     count.textContent = String(pending)
     sendBtn.disabled = pending === 0

@@ -785,7 +785,8 @@ async function handleBacklog(req, res) {
 
   const title = titleFrom(note)
   const block = [
-    `- [ ] **${title}**${payload.pathname ? ` — ${payload.pathname}` : ''}`,
+    // The path is context, but the root path is not: `— /` reads as a stray slash.
+    `- [ ] **${title}**${payload.pathname && payload.pathname !== '/' ? ` — ${payload.pathname}` : ''}`,
     `  - id: \`${id}\``,
     `  - added: ${human()}`,
   ]

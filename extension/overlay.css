@@ -127,12 +127,34 @@
 .pin.backlog { background: #3f3f46; border-color: #a1a1aa; color: #d4d4d8; }
 .pin.backlog.unsaved { border-color: #f87171; border-style: dashed; }
 
+/* Comments on one element share a pin, because two pins at the same coordinates means the
+   newer one hides the older completely. The badge is how you know to expect more than one
+   section when you open it. */
+.pin.stack::after {
+  content: "+" attr(data-more);
+  position: absolute;
+  left: 14px;
+  bottom: 12px;
+  min-width: 13px;
+  padding: 0 2px;
+  border-radius: 999px;
+  border: 1.5px solid var(--pp-bg);
+  background: #f4f4f5;
+  color: #1b1b1d;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 12px;
+}
+
 /* ---------------------------------------------------------------- cards */
 
 .card {
   position: absolute;
   z-index: 20;
   pointer-events: auto;
+  /* A stack of comments can outgrow the viewport; scroll it rather than run off-screen. */
+  max-height: 70vh;
+  overflow-y: auto;
   /* Wider than the pin card needs, for the breadcrumb: at 300px only four ancestors
      fit before it starts scrolling, which is most of a chain hidden by default. */
   width: 320px;
@@ -251,6 +273,59 @@
   background: rgb(217 119 87 / 0.2);
   color: #f0b39c;
 }
+
+.card .kind.parked {
+  background: rgb(113 113 122 / 0.28);
+  color: #d4d4d8;
+}
+
+/* ---------------------------------------------------------------- card header */
+
+/* The card now outlives the comments inside it, so it needs a way out of its own:
+   removing the last section used to be the only thing that dismissed it. */
+.card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.card-head .meta {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+button.close {
+  flex: none;
+  padding: 1px 6px;
+  border-color: transparent;
+  color: var(--pp-dim);
+  font-size: 11px;
+}
+
+button.close:hover:not(:disabled) { color: var(--pp-fg); }
+
+/* ---------------------------------------------------------------- pin card sections */
+
+/* One section per comment on the element, banded by what the comment is: the colour says
+   which of the three things it is before you read a word of it. A stack stays scannable
+   and, more to the point, reachable — the second comment on an element used to have no
+   way in at all. */
+.card .sect {
+  padding: 8px;
+  border-radius: 8px;
+  border-left: 3px solid var(--pp-line);
+  background: rgb(255 255 255 / 0.03);
+}
+
+.card .sect + .sect { margin-top: 8px; }
+/* Resolved comments recede: what is still in flight should read loudest. */
+.card .sect.done { opacity: 0.7; }
+
+.card .sect.action { border-left-color: var(--pp-accent); background: rgb(217 119 87 / 0.07); }
+.card .sect.question { border-left-color: #7c6bd6; background: rgb(124 107 214 / 0.1); }
+.card .sect.backlog { border-left-color: #a1a1aa; background: rgb(161 161 170 / 0.08); }
 
 .card .answer {
   margin-bottom: 8px;

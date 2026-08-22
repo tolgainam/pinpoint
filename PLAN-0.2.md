@@ -14,8 +14,8 @@ without growing the UI: richer context rides along with each pin, and Claude's
 during scoping:
 
 - **Intent over UI.** New behaviour is triggered by what the user types or toggles per
-  comment (`?` prefix, a debug toggle), not by new persistent chrome. The overlay
-  stays uncrowded.
+  comment (`?` and `!` prefixes, a debug toggle), not by new persistent chrome. The
+  overlay stays uncrowded.
 - **The overlay speaks in pins.** Anything not about a specific element belongs in the
   terminal — full output, permissions, steering. The overlay renders outcomes only.
 - **Same trust model.** Localhost, single user, same machine. Nothing here crosses a
@@ -26,11 +26,13 @@ during scoping:
 Phase A — composer quick wins (all S) — **shipped**
 1. ~~**Backlog switch**~~ — pin without dispatching; writes to `.pinpoint/backlog.md`.
    No `prune()` for backlog items; shots to `.pinpoint/shots/`. Shipped with a third
-   tool, `finish_backlog_item`, so items can reach `## Done` without hand-editing.
+   tool, `finish_backlog_item`, so items can reach `## Done` without hand-editing —
+   and as a `!` marker rather than the planned checkbox, matching question mode's `?`.
 2. ~~**Selection depth control**~~ — after click, `↑`/`↓` walks the ancestor chain with a
    breadcrumb; screenshot re-crops to the final choice.
 3. ~~**Question mode**~~ — a note starting with `?` dispatches as a question; answered via
-   `reply` on the pin card, no files touched.
+   `reply` on the pin card, no files touched. The two markers are now the whole
+   composer vocabulary: `?` asks, `!` parks, anything else fixes.
 
 Phase B — richer capture (S, S, M)
 4. **Element state** — curated computed styles (box model, colour, typography,

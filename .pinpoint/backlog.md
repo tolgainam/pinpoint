@@ -226,7 +226,7 @@ Completed items move here with the date and a line on what changed, rather than 
 deleted — the record is the point.
 
 - [x] **Backlog switch in the composer** — pin a comment without dispatching it
-  - done: 2026-08-22 — a `backlog` checkbox in the composer posts the comment to a new
+  - done: 2026-08-22 — a note starting with `!` posts the comment to a new
     `POST /backlog` on the bridge, which appends it to `## Open` here and writes its
     screenshot to `.pinpoint/shots/`. The pin renders grey and never enters the queue,
     so `prune()` never sees it. `list_backlog`, `start_backlog_item`, and
@@ -237,6 +237,10 @@ deleted — the record is the point.
   - note: a third tool beyond the two planned — `finish_backlog_item`. Without it
     nothing could move an item to `## Done`, and the alternative was Claude hand-editing
     the file, which is exactly what the splice logic exists to avoid.
+  - note: shipped first as a composer checkbox, changed to the `!` marker the same day
+    on the user's call. Correct: it makes the switch the same shape as question mode's
+    `?`, and it takes the footer back to one toggle. A checkbox is chrome that sits
+    there for every comment that does not need it.
 
 - [x] **Selection depth control** — walk up the ancestor chain after clicking
   - done: 2026-08-22 — the composer opens with a scrollable breadcrumb of the clicked
@@ -254,4 +258,5 @@ deleted — the record is the point.
     violet through its whole life. The batch renders the comment with ❓ and a per-comment
     guardrail line naming the id to answer. `reply` grew an optional `id`: with one the
     text lands on that pin card as the answer, without one it is still a passing toast.
-  - note: no new chrome, as decided — the `?` is the entire switch.
+  - note: no new chrome, as decided — the `?` is the entire switch. `!` for the backlog
+    now rides the same mechanism; see that item.

@@ -3,7 +3,7 @@ description: Work through items the user parked in .pinpoint/backlog.md instead 
 ---
 
 The backlog is where comments go when the user pins something worth doing later rather
-than now. Unlike the dispatch queue it never expires, and it is committed with the
+than now — they write a note starting with `!`. Unlike the dispatch queue it never expires, and it is committed with the
 project, so it is also where hand-written items live.
 
 1. Call `list_backlog`. If nothing is open, say so and stop.

@@ -128,6 +128,29 @@ through it with:
 
 Add `.pinpoint/` to `.gitignore` if you'd rather keep yours private.
 
+### What rides along with a comment
+
+Every comment carries the element's curated computed styles — box model, layout,
+typography, colour — plus its rendered size and its parent chain. That is the difference
+between "this spacing is wrong" and "padding is 12px 22px on a flex row with a 12px gap".
+Colours are converted to hex (8-digit when there's alpha) because that's what stylesheets
+are written in.
+
+It is a curated subset on purpose: a full `getComputedStyle` dump is ~340 properties, and
+properties still sitting at their initial value are dropped, so what arrives is what
+somebody actually set.
+
+### Console errors and failed requests
+
+`probe.js` keeps a 20-entry ring buffer of `console.error`/`warn`, uncaught exceptions,
+unhandled rejections, failed `fetch`/XHR responses, and assets that didn't load. Repeats
+are counted rather than pushed, so a render loop that throws costs one slot, not twenty.
+
+Nothing attaches by default. When the page has logged something, the composer grows a
+**debug (n)** toggle; tick it and that comment carries the buffer, with stack traces.
+When the page is clean there's no toggle at all. The buffer is re-read at dispatch, so
+an error thrown while you were typing the note still makes it.
+
 ### Two ways to receive comments
 
 **On demand** — works in any session, no flags:
@@ -171,7 +194,10 @@ reconnecting with `?since=N` gets whatever it missed — necessary because Chrom
 extension's service worker whenever it feels like it.
 
 **`extension/`** — MV3, overlay mounted in a Shadow DOM so page CSS can't reach it and
-its own CSS can't leak. Selectors are built preferring `[data-testid]`, then `#id`, then a
+its own CSS can't leak. `probe.js` runs in the page's own world at `document_start` —
+the only place that can see framework internals and console output — and wraps `fetch`
+and `XMLHttpRequest`. Both wrappers delegate to the original and pass its result or its
+error through untouched; the buffer is a side effect, never a change in behaviour. Selectors are built preferring `[data-testid]`, then `#id`, then a
 stable class chain, then an `:nth-of-type` path. React component names come from a
 `_debugOwner` fiber walk where available.
 

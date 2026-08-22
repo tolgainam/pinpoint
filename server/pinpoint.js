@@ -21,6 +21,7 @@ import { createServer } from 'node:http'
 import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { homedir } from 'node:os'
+import { probeProject, withRuntime, tokenIndex, annotate, summaryLine, guardrailLine } from './design-system.js'
 
 const PORT = Number(process.env.PINPOINT_PORT ?? 8788)
 const PROJECT_DIR = process.env.PINPOINT_PROJECT_DIR ?? process.cwd()
@@ -286,6 +287,46 @@ function moveToDone(index, outcome) {
   return { title: titleOf(item.body), id: idOf(item.body) }
 }
 
+// ---------------------------------------------------------------- design system
+
+/** An empty summary, so every caller downstream can stay unaware that a probe can fail. */
+const NO_DESIGN_SYSTEM = {
+  detected: false,
+  libraries: [],
+  tokens: { color: [], spacing: [], type: [], radius: [] },
+  spacingStep: null,
+  sources: [],
+}
+
+/**
+ * Probed once and kept. A project's design system does not change while you are
+ * commenting on it, and the walk is by some distance the most expensive thing the bridge
+ * does — paying for it on every batch would put it in the way of the dispatch it decorates.
+ */
+let designSystem
+function projectDesignSystem() {
+  if (designSystem) return designSystem
+  try {
+    designSystem = probeProject(PROJECT_DIR)
+  } catch (err) {
+    // A probe that throws must cost nothing but its own output. The batch it was
+    // decorating is still a perfectly good batch.
+    console.error('[pinpoint] design-system probe failed:', err)
+    designSystem = NO_DESIGN_SYSTEM
+  }
+  return designSystem
+}
+
+/** The project's system plus whatever this page reported about itself. */
+function designSystemFor(batch) {
+  try {
+    return withRuntime(projectDesignSystem(), batch.designSystem)
+  } catch (err) {
+    console.error('[pinpoint] design-system merge failed:', err)
+    return projectDesignSystem()
+  }
+}
+
 // ---------------------------------------------------------------- context rendering
 
 /**
@@ -300,10 +341,15 @@ const STYLE_GROUPS = [
   ['paint', ['color', 'background-color', 'border-color', 'box-shadow', 'opacity']],
 ]
 
-function styleFacts(styles, rect) {
+function styleFacts(styles, rect, index) {
   const out = []
   for (const [name, props] of STYLE_GROUPS) {
-    const decls = props.filter(p => styles?.[p]).map(p => `${p}: ${styles[p]}`)
+    const decls = props.filter(p => styles?.[p]).map(p => {
+      // The token name, or the reason there isn't one. Silence is the common case:
+      // a note on every declaration would bury the two that matter.
+      const note = annotate(p, styles[p], index)
+      return `${p}: ${styles[p]}${note ? `  ← ${note}` : ''}`
+    })
     // The rendered size belongs with the box model, and it is the one number that is
     // always worth stating — "how wide is this" is the most common question there is.
     if (name === 'box' && rect) decls.unshift(`size: ${rect.w}×${rect.h}`)
@@ -346,6 +392,14 @@ function renderBatch(b) {
 
   const page = b.pageShot ? `\nwhole page: ${join(batchDir(b.id), b.pageShot)}` : ''
 
+  // Said once, at the top: the scale only means something stated whole, and repeating it
+  // per comment would cost more context than the comments themselves.
+  const ds = designSystemFor(b)
+  const index = tokenIndex(ds)
+  const summary = summaryLine(ds)
+  const guardrail = guardrailLine(ds)
+  const system = summary ? `\n\n**design system** — ${summary}\n${guardrail}` : ''
+
   const body = open.map(c => {
     const facts = [
       c.component ? `component: \`${c.component}\`` : null,
@@ -354,7 +408,7 @@ function renderBatch(b) {
       c.role ? `role: ${c.role}` : null,
       c.ariaLabel ? `aria-label: ${c.ariaLabel}` : null,
       c.parents?.length ? `parents: ${c.parents.join(' ‹ ')}` : null,
-      ...styleFacts(c.styles, c.rect),
+      ...styleFacts(c.styles, c.rect, index),
       // Worth spelling out: the usual "grep for this selector" advice is the wrong move
       // when the element only existed while a menu was open.
       c.transient
@@ -371,7 +425,7 @@ function renderBatch(b) {
     return `\n### [${b.id}#${c.n}]${c.question ? ' ❓' : ''} ${c.note}\n${facts}${debug}`
   }).join('\n')
 
-  return `${head}${page}\n${body}`
+  return `${head}${page}${system}\n${body}`
 }
 
 prune()
@@ -636,6 +690,31 @@ function sanitiseDebug(debug) {
   }))
 }
 
+/**
+ * What the page said about its own design system, trimmed to size.
+ *
+ * A page can declare as many custom properties as it likes, and the names are whatever
+ * its author typed. Both are page-controlled, so both are capped here rather than
+ * trusted — this rides into the session on every batch.
+ */
+function sanitiseRuntimeDesign(design) {
+  if (!design || typeof design !== 'object') return undefined
+  const vars = {}
+  let n = 0
+  for (const [name, value] of Object.entries(design.vars ?? {})) {
+    if (n >= 120) break
+    if (!/^--[\w-]{1,60}$/.test(name)) continue
+    const clean = String(value ?? '').trim().slice(0, 80)
+    if (!clean) continue
+    vars[name] = clean
+    n++
+  }
+  const fingerprints = Array.isArray(design.fingerprints)
+    ? design.fingerprints.filter(f => typeof f === 'string' && f.length < 24).slice(0, 12)
+    : []
+  return n || fingerprints.length ? { vars, fingerprints } : undefined
+}
+
 /** Channel meta keys must match [A-Za-z0-9_]+ — anything with a hyphen is silently dropped. */
 function stamp() {
   const d = new Date()
@@ -724,6 +803,7 @@ async function handleDispatch(req, res) {
     origin: origin ?? String(payload.origin ?? 'unknown'),
     url: payload.url, pathname: payload.pathname, title: payload.title,
     viewport: payload.viewport, dpr: payload.dpr, colorScheme: payload.colorScheme,
+    designSystem: sanitiseRuntimeDesign(payload.designSystem),
     pageShot,
     comments,
   }

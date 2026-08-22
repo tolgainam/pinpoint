@@ -1,0 +1,1 @@
+{ "name": "fx-mui", "dependencies": { "@mui/material": "^5.15.0", "react": "^18.2.0" } }

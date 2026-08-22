@@ -1,0 +1,11 @@
+:root {
+  --bg: #0e1117;
+  --panel: #161b24;
+  --fg: #e8ecf3;
+  --accent: #7c5cff;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --radius: 9px;
+  --font-size-body: 15px;
+}

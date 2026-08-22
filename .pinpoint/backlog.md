@@ -132,6 +132,22 @@ on its own. Add `.pinpoint/` to `.gitignore` if you'd rather keep yours private.
     `tolgainam/pinpoint` and `tolgainam.github.io/pinpoint`. If the repo lands anywhere
     else, `/plugin marketplace add` won't resolve.
 
+- [ ] **make this functional** — /
+  - id: `bk-20260822-132312-bj3p`
+  - added: 2026-08-22 13:23
+  - url: http://localhost:3000/
+  - selector: `[data-testid="cta-primary"]`
+  - text: "Start free"
+  - parents: div.hero-actions ‹ section.hero
+
+- [ ] **make larger** — /
+  - id: `bk-20260822-133132-poep`
+  - added: 2026-08-22 13:31
+  - url: http://localhost:3000/
+  - selector: `[data-testid="cta-primary"]`
+  - text: "Start free"
+  - parents: div.hero-actions ‹ section.hero
+
 ---
 
 ## Considered and dropped

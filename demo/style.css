@@ -9,6 +9,7 @@
   --dim: #97a2b5;
   --accent: #7c5cff;
   --accent-2: #21c8a8;
+  --yellow: #ffc233;
   --warm: #ff7a45;
 }
 
@@ -62,8 +63,8 @@ a { color: inherit; text-decoration: none; }
 }
 .btn:active { transform: translateY(1px); }
 
-.btn-primary { background: var(--accent); color: #fff; }
-.btn-primary:hover { background: #8f74ff; }
+.btn-primary { background: var(--yellow); color: #1a1206; }
+.btn-primary:hover { background: #ffd166; }
 
 .btn-secondary { background: var(--panel); color: var(--fg); border-color: var(--line); }
 .btn-secondary:hover { border-color: #3a4354; }

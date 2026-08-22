@@ -1,6 +1,6 @@
 # Pinpoint 0.2 — from dispatch tool to review cockpit
 
-> **Status: Phases A and B shipped, C half shipped (2026-08-22).** Scoped 2026-08-22 after a deliberate cut: 33 ideas
+> **Status: Phases A, B and C shipped (2026-08-22), Phase D next.** Scoped 2026-08-22 after a deliberate cut: 33 ideas
 > were generated and researched, 10 were dropped or parked with reasoning recorded in
 > [`.pinpoint/backlog.md`](.pinpoint/backlog.md) (the item-level source of truth), and
 > 15 survived. Mockups of the headline UX live at `.pinpoint/mockups.html`.
@@ -52,10 +52,15 @@ Phase C — design-system layer (M, M)
    properties are measured against the step (a 13px type size is not off a 4px grid —
    type scales are ratios), and fixture directories are excluded from the walk, because
    this repo's own fixtures made it read as a Tailwind v4 project.
-7. **Token chips** — chips show the element's current tokens; tapping opens pickers
+7. ~~**Token chips**~~ — chips show the element's current tokens; tapping opens pickers
    rendered from the project's own scale; picks dispatch as structured deltas. Phase 3
    (live preview in-page before dispatch) is where the dropped "live CSS trial" idea
-   now lives. Must degrade to raw values + steppers with no design system.
+   now lives. Degrades to raw values + steppers with no design system, and a colour with
+   no palette stays a readout rather than pretending to be a control. All three phases
+   shipped together: a picker with no preview is a worse version of typing the number.
+   The preview is the one place Pinpoint writes to the host page, and it is unwound on
+   every path out of the composer — including before the screenshot, so the picture
+   shows the problem and the delta carries the proposal.
 
 Phase D — the loop back (M, S, S, L)
 8. **Per-pin progress and results** — typed events over the existing SSE/`reply`

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ledger — a shadcn/ui demo</title>
+<link rel="stylesheet" href="./app/globals.css">
+<link rel="stylesheet" href="./style.css">
+<link rel="stylesheet" href="/switch.css">
+</head>
+<body class="bg-background text-foreground">
+
+<div class="mx-auto max-w-3xl px-6 py-16">
+
+  <header data-testid="sh-header">
+    <h1 class="text-3xl font-semibold tracking-tight" data-testid="sh-title">Team settings</h1>
+    <p class="mt-2 text-sm text-muted-foreground" data-testid="sh-sub">
+      Every colour on this page is an <code>hsl()</code> around a variable, so the payload
+      should name <code>--primary</code> rather than the hex the browser resolved.
+    </p>
+  </header>
+
+  <!-- data-slot is the mark shadcn leaves on its primitives, and the mark the runtime
+       probe fingerprints. -->
+  <section data-slot="card" class="mt-8 rounded-lg border bg-card text-card-foreground shadow-sm" data-testid="sh-card">
+    <div data-slot="card-header" class="p-6">
+      <h2 data-slot="card-title" class="text-xl font-semibold tracking-tight">Invite a member</h2>
+      <p data-slot="card-description" class="mt-1 text-sm text-muted-foreground">
+        They will get access to this workspace and every project in it.
+      </p>
+    </div>
+    <div data-slot="card-content" class="px-6 pb-6 flex gap-2">
+      <input data-slot="input" class="input flex-1 rounded-md border bg-background px-3 py-2 text-sm"
+             placeholder="name@company.com" data-testid="sh-input">
+      <button data-slot="button" class="btn rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+              data-testid="sh-invite">Send invite</button>
+    </div>
+    <div data-slot="card-footer" class="border-t px-6 py-4 flex items-center justify-between">
+      <span class="text-sm text-muted-foreground">Seats used</span>
+      <span data-slot="badge" class="rounded-md bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground"
+            data-testid="sh-badge">7 of 10</span>
+    </div>
+  </section>
+
+  <!-- A dropdown left open, so the page carries a Radix fingerprint as well as a
+       shadcn one — and so there is something menu-shaped to pin without freezing. -->
+  <div class="mt-8 relative" data-testid="sh-menu-anchor">
+    <button data-slot="button" class="btn rounded-md border bg-background px-4 py-2 text-sm font-medium"
+            data-testid="sh-menu-trigger">Role: Editor</button>
+    <div data-radix-popper-content-wrapper>
+      <div data-slot="dropdown-menu-content" class="menu rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+           data-testid="sh-menu">
+        <div data-slot="dropdown-menu-item" class="rounded-sm px-2 py-1 text-sm">Viewer</div>
+        <div data-slot="dropdown-menu-item" class="rounded-sm px-2 py-1 text-sm bg-accent text-accent-foreground">Editor</div>
+        <div data-slot="dropdown-menu-item" class="rounded-sm px-2 py-1 text-sm">Admin</div>
+        <div data-slot="dropdown-menu-separator" class="my-1 border-t"></div>
+        <div data-slot="dropdown-menu-item" class="rounded-sm px-2 py-1 text-sm text-destructive">Remove access</div>
+      </div>
+    </div>
+  </div>
+
+  <div data-slot="alert" class="mt-8 rounded-lg border p-4 text-sm alert-destructive" data-testid="sh-alert">
+    <strong class="font-medium">Billing failed.</strong>
+    This alert is painted with <code>--destructive</code>. Its border, though, is a
+    one-off <code>#e11d48</code> that belongs to no token — pin it and the payload should
+    say so.
+  </div>
+
+</div>
+
+<nav class="demo-switch" data-testid="demo-switch" aria-label="Demo pages">
+  <a href="/">Vanilla</a>
+  <a href="/fixtures/tailwind/">Tailwind</a>
+  <a href="/fixtures/shadcn/" aria-current="page">shadcn</a>
+  <a href="/fixtures/chakra/">Chakra</a>
+</nav>
+
+</body>
+</html>

@@ -15,27 +15,6 @@ on its own. Add `.pinpoint/` to `.gitignore` if you'd rather keep yours private.
 
 ## Open
 
-- [ ] **Token chips in the composer** — annotate in the design system's own vocabulary
-  - size: M
-  - why: prose is the wrong medium for "make this p-8 instead of p-6". Once the
-    design-system probe exists, the composer can show what the element *is* and let
-    you pick what it *should be*, Figma-inspector style.
-  - shape, phase 1: when the composer opens, a row of chips shows the element's
-    current values mapped to tokens (`p-6`, `text-muted-foreground`, `text-sm`);
-    off-scale values render with a warning. You learn an element is off-system
-    before typing a word.
-  - shape, phase 2: tapping a chip opens a picker rendered from the project's own
-    scale — spacing as a visual ramp, colours as a swatch grid of the real palette,
-    type at actual sizes. Picking sends a structured delta (`padding: p-6 → p-8`)
-    alongside any prose.
-  - note: must degrade without a design system — chips fall back to raw computed
-    values with ± steppers.
-  - note: cap the pickers. Show the ramp around the current value plus recently
-    used, not the entire Tailwind palette.
-  - note: phase 3 — applying the picked value live in the page before dispatch —
-    is where "try it in the browser first" now lives; the standalone live CSS trial
-    item was dropped in its favour.
-
 - [ ] **Per-pin progress and results** — Claude's outcomes, rendered on the pin
   - size: M
   - why: a pin is silent between Dispatch and green. The terminal keeps the
@@ -284,3 +263,25 @@ deleted — the record is the point.
     identify the component and its source file, which upgrades the scope dial — see
     that item.
   - done: 2026-08-22 13:54 — 2026-08-22 — server/design-system.js probes the project once per session (never executing project code: configs are read as text and parsed loosely) and merges what the page reports about itself — every custom property resolved on :root, plus library fingerprints from the DOM. Every batch now carries a one-line summary and a guardrail, and each computed declaration is annotated with the token it matches or the reason it matches none. 46 tests cover one fixture project per row of the matrix plus the hand-rolled and no-design-system cases. Two corrections the build forced: only spacing properties are measured against the step, since a 13px type size is not off a 4px grid; and fixture directories are excluded from the walk, because this repo's own fixtures made it read as a Tailwind v4 project.
+
+- [x] **Token chips in the composer** — annotate in the design system's own vocabulary
+  - size: M
+  - why: prose is the wrong medium for "make this p-8 instead of p-6". Once the
+    design-system probe exists, the composer can show what the element *is* and let
+    you pick what it *should be*, Figma-inspector style.
+  - shape, phase 1: when the composer opens, a row of chips shows the element's
+    current values mapped to tokens (`p-6`, `text-muted-foreground`, `text-sm`);
+    off-scale values render with a warning. You learn an element is off-system
+    before typing a word.
+  - shape, phase 2: tapping a chip opens a picker rendered from the project's own
+    scale — spacing as a visual ramp, colours as a swatch grid of the real palette,
+    type at actual sizes. Picking sends a structured delta (`padding: p-6 → p-8`)
+    alongside any prose.
+  - note: must degrade without a design system — chips fall back to raw computed
+    values with ± steppers.
+  - note: cap the pickers. Show the ramp around the current value plus recently
+    used, not the entire Tailwind palette.
+  - note: phase 3 — applying the picked value live in the page before dispatch —
+    is where "try it in the browser first" now lives; the standalone live CSS trial
+    item was dropped in its favour.
+  - done: 2026-08-22 14:05 — 2026-08-22 — all three phases together, since a picker with no preview is a worse version of typing the number. The composer asks the bridge once per page for the merged scales (new POST /design-system, the same merge a dispatch does, so a chip can never name a token the brief would not) and shows one chip per property the element actually sets: the token name where there is one, a ⚠ where a spacing value is off the step. Tapping a chip opens a picker built from the project's own scale — spacing and radius as a ramp sliced around the current value, colours as a swatch grid of the real palette, and ± steppers where there is no scale at all. A pick previews on the real element and dispatches as a structured delta, so a comment can now consist of nothing but the change. Notes: colours with no palette stay a readout rather than pretending to be a control; a shorthand like `12px 22px` is shown with its warnings but not offered a picker, because a scale answers one value and replacing four sides with one number is not what was asked; picks are abandoned when you walk the ancestor chain, since they belong to the element they were made on; and the preview — the one place Pinpoint writes to the host page — is unwound on every path out of the card, including before the screenshot, so the picture shows the problem and the delta carries the proposal.

@@ -396,3 +396,53 @@ test('withRuntime with nothing to add changes nothing', () => {
   assert.deepEqual(withRuntime(base, null), base)
   assert.deepEqual(libraries(withRuntime(base, { vars: {}, fingerprints: [] })), [])
 })
+
+// ---------------------------------------------------------------- what the composer needs
+
+import { chipData, deltaLine } from '../server/design-system.js'
+
+test('chipData hands the composer sorted, pre-normalised scales', () => {
+  const d = chipData(probe('tailwind4'))
+  assert.equal(d.detected, true)
+  assert.equal(d.step, 4)
+  // Sorted ascending, so a ramp can be sliced around the current value.
+  assert.deepEqual(d.spacing.map(t => t.px), [4, 8, 16, 24])
+  // Colours carry both forms: the hex is how a computed value is recognised, the authored
+  // value is what belongs in the fix.
+  const brand = d.color.find(t => t.name === '--color-brand-500')
+  assert.equal(brand.hex, '#6366f1')
+  assert.equal(brand.value, '#6366f1')
+})
+
+test('chipData drops colours it cannot resolve to a hex', () => {
+  const d = chipData(probe('tailwind4'))
+  // --color-surface is oklch(), which nothing here converts. A swatch that cannot be
+  // painted is worse than one that is missing.
+  assert.equal(d.color.some(t => t.name === '--color-surface'), false)
+})
+
+test('chipData resolves shadcn HSL triples into paintable swatches', () => {
+  const d = chipData(probe('shadcn'))
+  assert.equal(d.color.find(t => t.name === '--primary')?.hex, '#0f172a')
+})
+
+test('chipData on a project with no design system offers nothing', () => {
+  const d = chipData(probe('empty'))
+  assert.deepEqual(d, { detected: false, step: null, color: [], spacing: [], type: [], radius: [] })
+})
+
+test('deltaLine names both tokens when both are known', () => {
+  assert.equal(
+    deltaLine({ prop: 'padding', from: '24px', fromToken: 'spacing-6', to: '32px', toToken: 'spacing-8' }),
+    'padding: 24px (spacing-6) → **32px (spacing-8)**',
+  )
+})
+
+test('deltaLine falls back to raw values when nothing is named', () => {
+  assert.equal(deltaLine({ prop: 'gap', from: '18px', to: '16px' }), 'gap: 18px → **16px**')
+})
+
+test('deltaLine ignores a delta with no property', () => {
+  assert.equal(deltaLine({ to: '4px' }), null)
+  assert.equal(deltaLine(null), null)
+})

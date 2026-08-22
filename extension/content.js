@@ -7,7 +7,10 @@
  *
  * Two rules shape the whole file:
  *   - the host page's DOM is never mutated (highlights and pins are our own absolutely
- *     positioned elements, not outlines applied to page nodes)
+ *     positioned elements, not outlines applied to page nodes). The single exception is
+ *     the composer's token picker, which writes an inline style to show a picked value on
+ *     the real element — and unwinds it on every path out of the card, including before
+ *     the screenshot is taken.
  *   - the host page's CSS can never reach us, and ours can never reach it (shadow root)
  */
 ;(async function () {
@@ -235,6 +238,60 @@
     const vars = cssVariables()
     return { vars, fingerprints: fingerprints(vars) }
   }
+
+  const NO_SCALES = { detected: false, step: null, color: [], spacing: [], type: [], radius: [] }
+
+  /**
+   * The project's scales, as the bridge sees them: its config files merged with what this
+   * page reports. Asked for once and kept — the answer cannot change while you are
+   * commenting, and the composer must open at the speed of a click.
+   *
+   * The bridge does the merging and the normalising. What comes back is already sorted
+   * and already in px and hex, so nothing here has to re-implement colour parsing and
+   * then disagree with the brief about what a token is.
+   */
+  let scalesPromise = null
+  function scales() {
+    scalesPromise ??= chrome.runtime
+      .sendMessage({ type: 'design-system', payload: { designSystem: designSystem() } })
+      .then(r => (r?.ok && r.detected ? r : NO_SCALES))
+      .catch(() => NO_SCALES)
+    return scalesPromise
+  }
+
+  /** Computed values are always px; anything else is not a length we can put on a scale. */
+  const parsePx = value => {
+    const m = String(value).trim().match(/^(-?\d*\.?\d+)px$/)
+    return m ? Number(m[1]) : null
+  }
+
+  /**
+   * The properties worth a chip: the ones people comment on, and the ones a scale can
+   * actually answer. Order is the order they appear.
+   */
+  const CHIP_PROPS = [
+    { prop: 'padding', group: 'spacing', label: 'padding' },
+    { prop: 'gap', group: 'spacing', label: 'gap' },
+    { prop: 'font-size', group: 'type', label: 'size' },
+    { prop: 'border-radius', group: 'radius', label: 'radius' },
+    { prop: 'color', group: 'color', label: 'text' },
+    { prop: 'background-color', group: 'color', label: 'bg' },
+  ]
+
+  /** The token whose value this is, or null. */
+  function tokenFor(data, group, value) {
+    const scale = data[group]
+    if (!scale?.length) return null
+    if (group === 'color') {
+      const hex = String(value).trim().toLowerCase().slice(0, 7)
+      return scale.find(t => t.hex === hex) ?? null
+    }
+    const px = parsePx(value)
+    return px == null ? null : (scale.find(t => t.px === px) ?? null)
+  }
+
+  /** Token names are long and the chip row is narrow; the prefix is the least useful part. */
+  const shortToken = name => String(name).replace(/^--/, '')
 
   // ---------------------------------------------------------------- computed style
 
@@ -650,6 +707,10 @@
   // ---------------------------------------------------------------- cards
 
   function closeCard() {
+    // The composer can leave a preview applied to a page element. Every path out of the
+    // card has to unwind it — Escape, clicking away, submitting — so the hook lives here
+    // rather than on the one button anyone remembers to wire it to.
+    try { openCard?.cleanup?.() } catch { /* a broken cleanup must not trap the card open */ }
     openCard?.remove()
     openCard = null
     frozen = null
@@ -693,14 +754,228 @@
     const debugCount = document.createTextNode('debug')
     debugLabel.append(debugBox, debugCount)
 
+    const chips = el('div', 'chips')
+    const picker = el('div', 'picker')
+
     const cancel = el('button', '', 'Cancel')
     const add = el('button', 'primary', 'Add')
     row.append(shotLabel, el('span', 'spacer'), cancel, add)
-    card.append(crumbs, meta, box, hint, row)
+    card.append(crumbs, meta, chips, picker, box, hint, row)
     layer.append(card)
     openCard = card
+    card.cleanup = restorePreviews
     placeCard(card, x + 12, y + 12)
     box.focus()
+
+    // ------------------------------------------------------------ token chips
+
+    /** Picked values, by property. These are the comment's least ambiguous content. */
+    const deltas = new Map()
+    /** Inline styles we overwrote to show a pick, so they can be put back exactly. */
+    const previewed = new Map()
+    /** What the bridge knows about the project's scales; null until it answers. */
+    let data = null
+    let openPicker = null
+
+    /**
+     * Put the page back exactly as it was found.
+     *
+     * This is the one place Pinpoint writes to the host page's DOM, and it is a
+     * deliberate exception: seeing the value on the real element beats reading it as
+     * text. The exception is only defensible because it is always undone — on cancel, on
+     * Escape, on walking to another element, and before the screenshot is taken, so the
+     * picture shows the problem rather than the proposal.
+     */
+    function restorePreviews() {
+      for (const [node, saved] of previewed) {
+        for (const [prop, was] of saved) {
+          // Priority is part of the original: an inline `!important` that came back
+          // without it would be a change we made and did not admit to.
+          if (was.value) node.style.setProperty(prop, was.value, was.priority)
+          else node.style.removeProperty(prop)
+        }
+      }
+      previewed.clear()
+    }
+
+    function preview(node, prop, value) {
+      let saved = previewed.get(node)
+      if (!saved) previewed.set(node, (saved = new Map()))
+      // Only the first overwrite is the original. Picking twice must not save the preview.
+      if (!saved.has(prop)) {
+        saved.set(prop, { value: node.style.getPropertyValue(prop), priority: node.style.getPropertyPriority(prop) })
+      }
+      // `important`, because a preview that loses to the page's own stylesheet shows
+      // nothing and reads as a broken control.
+      node.style.setProperty(prop, value, 'important')
+    }
+
+    /** Record a pick, show it on the element, and repaint the row around it. */
+    function pick(entry, current, currentToken, value, token) {
+      const node = target
+      if (value === current) {
+        deltas.delete(entry.prop)
+      } else {
+        deltas.set(entry.prop, {
+          prop: entry.prop,
+          from: current,
+          fromToken: currentToken ? shortToken(currentToken.name) : undefined,
+          to: value,
+          toToken: token ? shortToken(token.name) : undefined,
+        })
+        preview(node, entry.prop, value)
+      }
+      closePicker()
+      paintChips()
+      paintIntent()
+      box.focus()
+    }
+
+    function closePicker() {
+      openPicker = null
+      picker.textContent = ''
+      picker.classList.remove('show')
+    }
+
+    /**
+     * The scale around the current value, not the whole scale. A spacing ramp is twenty
+     * steps long and a palette is a hundred swatches; what anyone actually wants is the
+     * next one up or down, and the cap is what keeps the card a card.
+     */
+    function nearby(scale, px, span = 4) {
+      if (px == null) return scale.slice(0, span * 2 + 1)
+      let closest = 0
+      scale.forEach((t, i) => {
+        if (Math.abs(t.px - px) < Math.abs(scale[closest].px - px)) closest = i
+      })
+      return scale.slice(Math.max(0, closest - span), closest + span + 1)
+    }
+
+    function openPickerFor(entry, current, currentToken) {
+      if (openPicker === entry.prop) { closePicker(); return }
+      picker.textContent = ''
+      openPicker = entry.prop
+      picker.classList.add('show')
+
+      const scale = data?.[entry.group] ?? []
+
+      if (entry.group === 'color') {
+        // Nothing to pick from without a palette: a colour has no neighbours to step to,
+        // so the chip stays a readout rather than pretending to be a control.
+        if (!scale.length) { closePicker(); return }
+        const grid = el('div', 'swatches')
+        for (const t of scale.slice(0, 28)) {
+          const swatch = el('button', 'swatch')
+          swatch.style.background = t.hex
+          swatch.title = `${shortToken(t.name)} — ${t.value}`
+          swatch.classList.toggle('on', t.hex === String(current).toLowerCase().slice(0, 7))
+          swatch.onclick = () => pick(entry, current, currentToken, t.hex, t)
+          grid.append(swatch)
+        }
+        picker.append(grid)
+        return
+      }
+
+      const px = parsePx(current)
+      if (scale.length) {
+        const ramp = el('div', 'ramp')
+        for (const t of nearby(scale, px)) {
+          const step = el('button', 'step')
+          step.classList.toggle('on', t.px === px)
+          const bar = el('span', 'bar')
+          // Spacing reads as a size, so show it as one. Capped, or one outlier token
+          // squashes every other rung flat.
+          bar.style.width = `${Math.min(t.px, 64)}px`
+          step.append(bar, el('span', 'name', shortToken(t.name)), el('span', 'val', t.value))
+          step.onclick = () => pick(entry, current, currentToken, `${t.px}px`, t)
+          ramp.append(step)
+        }
+        picker.append(ramp)
+        return
+      }
+
+      // No scale to pick from, so the honest fallback: nudge the number. Shift moves by
+      // four, which is the step almost every hand-rolled layout turns out to use anyway.
+      if (px == null) { closePicker(); return }
+      const stepper = el('div', 'stepper')
+      const readout = el('span', 'val', `${px}px`)
+      let next = px
+      const nudge = by => {
+        next = Math.max(0, Math.round((next + by) * 100) / 100)
+        readout.textContent = `${next}px`
+        preview(target, entry.prop, `${next}px`)
+      }
+      const down = el('button', '', '−')
+      const up = el('button', '', '+')
+      const apply = el('button', 'primary', 'Use')
+      down.onclick = ev => nudge(ev.shiftKey ? -4 : -1)
+      up.onclick = ev => nudge(ev.shiftKey ? 4 : 1)
+      apply.onclick = () => pick(entry, current, currentToken, `${next}px`, null)
+      stepper.append(down, readout, up, el('span', 'spacer'), apply)
+      picker.append(stepper)
+    }
+
+    /**
+     * One chip per property the element actually sets. A chip says what the value is in
+     * the project's own words — or says it belongs to no scale, which is the thing worth
+     * knowing before you write a word of the note.
+     */
+    function paintChips() {
+      chips.textContent = ''
+      const styles = captured.styles ?? {}
+
+      for (const entry of CHIP_PROPS) {
+        const current = styles[entry.prop]
+        if (!current) continue
+
+        const delta = deltas.get(entry.prop)
+        const shown = delta ? delta.to : current
+        const token = data ? tokenFor(data, entry.group, shown) : null
+        const px = parsePx(shown)
+        // A shorthand is several values; a scale answers one. Showing it is useful,
+        // offering to replace all four sides with one number is not.
+        const multi = /\s/.test(String(shown).trim())
+        const offScale = !token && !multi && entry.group === 'spacing'
+          && data?.step && px != null && px > 0 && px % data.step !== 0
+
+        const chip = el('button', 'chip')
+        chip.classList.toggle('warn', !!offScale)
+        chip.classList.toggle('changed', !!delta)
+        chip.append(el('span', 'chip-key', entry.label))
+        if (entry.group === 'color') {
+          const dot = el('span', 'chip-dot')
+          dot.style.background = String(shown)
+          chip.append(dot)
+        }
+        chip.append(el('span', 'chip-val', token ? shortToken(token.name) : String(shown)))
+        if (offScale) chip.append(el('span', 'chip-warn', '⚠'))
+
+        const pickable = !multi && (entry.group === 'color' ? (data?.color.length ?? 0) > 0 : px != null)
+        chip.disabled = !pickable
+        chip.title = [
+          `${entry.prop}: ${current}`,
+          token ? `matches ${shortToken(token.name)}` : null,
+          offScale ? `off the ${data.step}px scale` : null,
+          delta ? `will be requested as ${delta.to}` : null,
+          pickable ? null : 'no scale to pick from',
+        ].filter(Boolean).join(' · ')
+
+        const currentToken = data ? tokenFor(data, entry.group, current) : null
+        if (pickable) chip.onclick = () => openPickerFor(entry, current, currentToken)
+        chips.append(chip)
+      }
+
+      chips.classList.toggle('show', chips.childElementCount > 0)
+    }
+
+    // The scales arrive after the card does. Chips are painted twice on purpose: raw
+    // values immediately, token names a moment later, rather than an empty row while the
+    // bridge is asked.
+    scales().then(answer => {
+      if (openCard !== card) return
+      data = answer
+      paintChips()
+    })
 
     // ------------------------------------------------------------ depth
 
@@ -711,6 +986,14 @@
      * having clicked that element in the first place are indistinguishable downstream.
      */
     function selectDepth(i) {
+      const moved = chain[depth]?.node !== chain[Math.max(0, Math.min(i, chain.length - 1))]?.node
+      if (moved) {
+        // Picks belong to the element they were made on. Carrying them up the chain would
+        // silently retarget a request at a container nobody was looking at.
+        restorePreviews()
+        deltas.clear()
+        closePicker()
+      }
       depth = Math.max(0, Math.min(i, chain.length - 1))
       const entry = chain[depth]
       target = entry.node
@@ -722,6 +1005,7 @@
       showHighlight(target, true, depth === 0 ? snapRect : null)
       paintCrumbs()
       paintMeta()
+      paintChips()
 
       if (entry.probed) return
       entry.probed = true
@@ -786,6 +1070,7 @@
       hint.textContent =
         kind === 'question' ? 'question — Claude answers on the pin and changes no files'
         : kind === 'backlog' ? 'parked — appended to .pinpoint/backlog.md, never dispatched'
+        : deltas.size ? `${deltas.size} picked value${deltas.size === 1 ? '' : 's'} ride with this comment`
         : ''
       hint.classList.toggle('show', !!hint.textContent)
     }
@@ -793,8 +1078,17 @@
     // ------------------------------------------------------------ submit
 
     const submit = async () => {
+      const picks = [...deltas.values()]
+      // A picked value is a complete request on its own — "padding → p-8" leaves nothing
+      // to ask about — so the note stops being mandatory once there is one.
       const note = box.value.trim()
+        || picks.map(d => `${d.prop} → ${d.toToken ?? d.to}`).join(', ')
       if (!note) { box.focus(); return }
+
+      // Put the page back before the picture is taken. The screenshot is evidence of the
+      // problem; the deltas are the proposal. A shot of the proposal would document a
+      // change that has not been made anywhere.
+      restorePreviews()
 
       wantShot = shotBox.checked
 
@@ -831,6 +1125,7 @@
         n: ++seq,
         note: text,
         transient: frame ? true : undefined,
+        deltas: picks.length ? picks : undefined,
         debug: debug.length ? debug : undefined,
         shot: shot || undefined,
         question: kind === 'question' || undefined,
@@ -901,6 +1196,7 @@
             styles: comment.styles,
             parents: comment.parents,
             transient: comment.transient,
+            deltas: comment.deltas,
             debug: comment.debug,
             component: comment.component,
             question: comment.question,
@@ -955,6 +1251,14 @@
     if (comment.status === 'backlog') sect.append(el('div', 'kind parked', 'parked — not dispatched'))
     if (comment.transient) sect.append(el('div', 'kind frozen', 'pinned from a frozen frame'))
     sect.append(el('div', 'note', comment.note))
+
+    if (comment.deltas?.length) {
+      const asked = el('div', 'deltas')
+      for (const d of comment.deltas) {
+        asked.append(el('div', 'delta', `${d.prop}: ${d.fromToken ?? d.from} → ${d.toToken ?? d.to}`))
+      }
+      sect.append(asked)
+    }
 
     if (comment.answer) sect.append(el('div', 'answer', comment.answer))
     if (comment.resolution) sect.append(el('div', 'resolution', `✓ ${comment.resolution}`))
@@ -1246,6 +1550,7 @@
         styles: c.styles,
         parents: c.parents,
         transient: c.transient,
+        deltas: c.deltas,
         debug: c.debug,
         component: c.component,
         question: c.question,

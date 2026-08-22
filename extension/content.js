@@ -33,6 +33,9 @@
   /** Sticky: whatever you chose last time is the default next time, so turning
       screenshots off once keeps them off without a separate global switch. */
   let wantShot = true
+  /** Same stickiness, but the toggle only exists when the page has actually logged
+      something — see the composer. */
+  let wantDebug = false
 
   // ---------------------------------------------------------------- shadow root
 
@@ -60,8 +63,15 @@
   // ---------------------------------------------------------------- selector
 
   const TEST_ATTRS = ['data-testid', 'data-test-id', 'data-test', 'data-cy', 'data-qa', 'data-component']
-  /** Hashed class names from CSS-in-JS: stable within a build, meaningless across one. */
-  const GENERATED_CLASS = /^(css|sc|emotion|jsx|styled|makeStyles)[-_]|^[A-Za-z]+__[A-Za-z0-9]{5,}$|^[a-z]{1,4}-[a-z0-9]{6,}$/
+  /**
+   * Hashed class names from CSS-in-JS: stable within a build, meaningless across one.
+   *
+   * The short-prefix arm requires a digit in the tail. Without one it also swallowed
+   * ordinary hyphenated names — `hero-actions`, `card-header`, `nav-wrapper` all match
+   * "up to four letters, hyphen, six or more alphanumerics" — which quietly cost every
+   * selector and breadcrumb the most descriptive class on the element.
+   */
+  const GENERATED_CLASS = /^(css|sc|emotion|jsx|styled|makeStyles)[-_]|^[A-Za-z]+__[A-Za-z0-9]{5,}$|^[a-z]{1,4}-(?=[a-z0-9]{6,}$)[a-z]*\d[a-z0-9]*$/
   /** Runtime-generated ids: React useId, Radix, Headless UI. */
   const GENERATED_ID = /^(:r|radix-|headlessui-|mui-|react-aria)|\d{5,}/
 
@@ -132,10 +142,11 @@
     return parts.join(' > ')
   }
 
-  // ---------------------------------------------------------------- component probe
+  // ---------------------------------------------------------------- main-world probe
 
-  /** Ask the main-world probe which component rendered this. Never blocks for long. */
-  function probeComponent(selector, x, y) {
+  /** One round trip to the page's own world. Resolves null on timeout — the probe is
+      an enrichment, so nothing it answers is ever worth blocking a comment on. */
+  function ask(req, timeout = 250) {
     return new Promise(resolve => {
       const id = Math.random().toString(36).slice(2)
       const done = value => {
@@ -143,15 +154,117 @@
         window.removeEventListener('message', onMessage)
         resolve(value)
       }
-      const timer = setTimeout(() => done(null), 250)
+      const timer = setTimeout(() => done(null), timeout)
       function onMessage(ev) {
         const d = ev.data
         if (ev.source !== window || !d || d.tag !== 'pinpoint:probe' || d.dir !== 'res' || d.id !== id) return
-        done(d.component || null)
+        done(d)
       }
       window.addEventListener('message', onMessage)
-      window.postMessage({ tag: 'pinpoint:probe', dir: 'req', id, selector, x, y }, location.origin)
+      window.postMessage({ tag: 'pinpoint:probe', dir: 'req', id, ...req }, location.origin)
     })
+  }
+
+  /** Which component rendered this. */
+  const probeComponent = (selector, x, y) =>
+    ask({ kind: 'component', selector, x, y }).then(r => r?.component || null)
+
+  /** The page's console/network ring buffer. */
+  const probeDebug = () => ask({ kind: 'debug' }).then(r => (Array.isArray(r?.debug) ? r.debug : []))
+
+  // ---------------------------------------------------------------- computed style
+
+  /**
+   * The properties people actually comment on. A full getComputedStyle dump is ~340
+   * entries of noise; the point of this subset is that "this spacing is wrong" arrives
+   * with the box model instead of making Claude guess between margin, padding, and gap.
+   *
+   * Width and height are deliberately absent — `rect` already carries the rendered size,
+   * and the computed values only restate it.
+   */
+  const STYLE_PROPS = [
+    'display', 'position', 'flex-direction', 'flex-wrap', 'justify-content', 'align-items',
+    'gap', 'grid-template-columns', 'flex', 'overflow',
+    'padding', 'margin', 'border-width', 'border-radius', 'box-sizing',
+    'font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing',
+    'text-align', 'text-transform', 'white-space',
+    'color', 'background-color', 'border-color', 'box-shadow', 'opacity',
+  ]
+
+  /** Values that mean "nobody set this". Reporting them is what turns a useful payload
+      into a wall of `margin: 0px` — but a property missing from this map is always kept,
+      because for those the default is itself worth seeing. */
+  const STYLE_DEFAULT = {
+    position: 'static', 'flex-direction': 'row', 'flex-wrap': 'nowrap',
+    'justify-content': 'normal', 'align-items': 'normal', gap: 'normal',
+    'grid-template-columns': 'none', flex: '0 1 auto', overflow: 'visible',
+    padding: '0px', margin: '0px', 'border-width': '0px', 'border-radius': '0px',
+    'box-sizing': 'content-box', 'letter-spacing': 'normal', 'text-align': 'start',
+    'text-transform': 'none', 'white-space': 'normal', 'box-shadow': 'none',
+    opacity: '1', 'background-color': 'transparent',
+  }
+
+  /** Computed colours come back as `rgb(...)`; stylesheets are written in hex, and hex
+      is what Claude greps for. Alpha becomes the 8-digit form rather than a prose
+      suffix, because the result has to stay valid CSS — a colour inside a `box-shadow`
+      is rewritten in place, and `#00000059 0 2px 8px` must still parse. */
+  function toHex(value) {
+    const m = String(value).match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,/]\s*([\d.%]+))?\s*\)$/)
+    if (!m) return value
+    let a = 1
+    if (m[4] != null) a = m[4].endsWith('%') ? parseFloat(m[4]) / 100 : Number(m[4])
+    if (a === 0) return 'transparent'
+    const byte = n => Math.max(0, Math.min(255, Math.round(Number(n)))).toString(16).padStart(2, '0')
+    return '#' + byte(m[1]) + byte(m[2]) + byte(m[3]) + (a < 1 ? byte(a * 255) : '')
+  }
+
+  /** Computed lengths carry layout sub-pixels — `455.65625px` for a `1fr` track. Left
+      raw they read as authored values somebody could grep for, which they are not. */
+  const roundPx = v => v.replace(/(\d+\.\d+)px/g, (_, n) => `${Math.round(Number(n) * 10) / 10}px`)
+
+  function tidy(prop, value) {
+    if (prop === 'font-family') return String(value).split(',')[0].replace(/["']/g, '').trim()
+    let out = String(value)
+    if (/color|shadow/.test(prop)) out = out.replace(/rgba?\([^)]*\)/g, toHex)
+    return roundPx(out).slice(0, 120)
+  }
+
+  /** @returns {Record<string,string>} only the properties worth sending. */
+  function styleOf(node) {
+    const cs = getComputedStyle(node)
+    const out = {}
+    for (const prop of STYLE_PROPS) {
+      const raw = cs.getPropertyValue(prop)
+      if (!raw) continue
+      const value = tidy(prop, raw.trim())
+      if (!value) continue
+      // border-color without a border is noise no matter what it says.
+      if (prop === 'border-color' && (!out['border-width'] || out['border-width'] === '0px')) continue
+      if (STYLE_DEFAULT[prop] === value) continue
+      out[prop] = value
+    }
+    return out
+  }
+
+  /** tag plus whatever classes survive the generated-name filter — the shortest label
+      that still tells you which element you are looking at. */
+  function nodeLabel(node, maxClasses = 2) {
+    const cls = Array.from(node.classList || [])
+      .filter(c => c && c.length < 24 && !GENERATED_CLASS.test(c))
+      .slice(0, maxClasses)
+    return node.tagName.toLowerCase() + cls.map(c => `.${c}`).join('')
+  }
+
+  /** Where this element sits, nearest ancestor first. Answers "is the gap on the parent?"
+      without a second round trip. */
+  function parentChain(node, max = 4) {
+    const out = []
+    let n = node.parentElement
+    while (n && n !== document.body && n !== document.documentElement && out.length < max) {
+      out.push(nodeLabel(n))
+      n = n.parentElement
+    }
+    return out
   }
 
   // ---------------------------------------------------------------- element capture
@@ -161,6 +274,8 @@
     const cls = typeof target.className === 'string' ? target.className.trim() : ''
     return {
       selector: buildSelector(target),
+      styles: styleOf(target),
+      parents: parentChain(target),
       tag: target.tagName.toLowerCase(),
       elementId: target.id || undefined,
       classes: cls ? cls.slice(0, 200) : undefined,
@@ -203,12 +318,7 @@
   }
 
   /** What a crumb says before its component name comes back from the probe. */
-  function crumbLabel(entry) {
-    if (entry.component) return entry.component
-    const node = entry.node
-    const cls = Array.from(node.classList || []).find(c => c && c.length < 24 && !GENERATED_CLASS.test(c))
-    return node.tagName.toLowerCase() + (cls ? `.${cls}` : '')
-  }
+  const crumbLabel = entry => entry.component || nodeLabel(entry.node, 1)
 
   // ---------------------------------------------------------------- intent
 
@@ -416,6 +526,15 @@
     shotBox.type = 'checkbox'
     shotBox.checked = wantShot
     shotLabel.append(shotBox, document.createTextNode('screenshot'))
+    // Only mounted if the page has logged something. A toggle that is greyed out on
+    // every healthy page is worse than no toggle: it is chrome you learn to ignore.
+    const debugLabel = el('label', 'toggle')
+    const debugBox = document.createElement('input')
+    debugBox.type = 'checkbox'
+    debugBox.checked = wantDebug
+    const debugCount = document.createTextNode('debug')
+    debugLabel.append(debugBox, debugCount)
+
     const cancel = el('button', '', 'Cancel')
     const add = el('button', 'primary', 'Add')
     row.append(shotLabel, el('span', 'spacer'), cancel, add)
@@ -518,7 +637,6 @@
       if (!note) { box.focus(); return }
 
       wantShot = shotBox.checked
-      chrome.storage.local.set({ [PREFS_KEY]: { wantShot } }).catch(() => {})
 
       // Re-measure: the composer has been open for a while and the app may have moved.
       const live = (() => { try { return document.querySelector(captured.selector) } catch { return null } })() || target
@@ -534,17 +652,24 @@
         if (!shot) say(`no screenshot — ${lastShotError}`, true)
       }
 
+      wantDebug = debugBox.checked
+      // Re-read rather than reusing what the composer saw: the interesting error is
+      // often the one thrown while the note was being typed.
+      const debug = debugBox.checked && debugLabel.isConnected ? await probeDebug() : []
+
       const { kind, text } = intentOf(note)
       const comment = {
         ...captured,
         rect,
         n: ++seq,
         note: text,
+        debug: debug.length ? debug : undefined,
         shot: shot || undefined,
         question: kind === 'question' || undefined,
         status: kind === 'backlog' ? 'backlog' : 'pending',
       }
       comments.push(comment)
+      chrome.storage.local.set({ [PREFS_KEY]: { wantShot, wantDebug } }).catch(() => {})
       closeCard()
       save()
       render()
@@ -562,6 +687,15 @@
     crumbs.addEventListener('keydown', ev => {
       if (onArrow(ev)) return
       if (ev.key === 'Enter') { ev.preventDefault(); box.focus() }
+    })
+
+    // The buffer is read again at submit — this first look only decides whether the
+    // toggle is worth showing, and what to label it.
+    probeDebug().then(entries => {
+      if (!entries.length || !openCard || openCard !== card) return
+      debugCount.textContent = ` debug (${entries.length})`
+      debugLabel.title = entries.slice(0, 3).map(e => `${e.kind}: ${e.text}`).join('\n')
+      row.insertBefore(debugLabel, row.querySelector('.spacer'))
     })
 
     selectDepth(0)
@@ -596,6 +730,9 @@
             text: comment.text,
             html: comment.html,
             rect: comment.rect,
+            styles: comment.styles,
+            parents: comment.parents,
+            debug: comment.debug,
             component: comment.component,
             question: comment.question,
             shot: comment.shot,
@@ -638,6 +775,7 @@
     const row = el('div', 'row')
     const parts = [STATE_LABEL[comment.status] ?? comment.status]
     if (comment.status === 'backlog' && comment.unsaved) parts.push('not written — bridge down')
+    if (comment.debug?.length) parts.push(`${comment.debug.length} console`)
     if (!comment.shot) parts.push('no screenshot')
     const status = el('span', 'meta', parts.join(' · '))
     const remove = el('button', 'danger', comment.status === 'resolved' ? 'Dismiss' : 'Remove')
@@ -846,6 +984,9 @@
         text: c.text,
         html: c.html,
         rect: c.rect,
+        styles: c.styles,
+        parents: c.parents,
+        debug: c.debug,
         component: c.component,
         question: c.question,
         shot: c.shot,
@@ -955,7 +1096,9 @@
 
   async function load() {
     const got = await chrome.storage.local.get([KEY, BAR_KEY, PREFS_KEY])
-    if (got[PREFS_KEY] && typeof got[PREFS_KEY].wantShot === 'boolean') wantShot = got[PREFS_KEY].wantShot
+    const prefs = got[PREFS_KEY]
+    if (prefs && typeof prefs.wantShot === 'boolean') wantShot = prefs.wantShot
+    if (prefs && typeof prefs.wantDebug === 'boolean') wantDebug = prefs.wantDebug
     const saved = got[KEY]
     if (saved) {
       comments = Array.isArray(saved.comments) ? saved.comments : []

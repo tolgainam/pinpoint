@@ -48,6 +48,8 @@ mkdirSync(QUEUE, { recursive: true })
  * @typedef {{n: number, note: string, selector?: string, tag?: string, elementId?: string,
  *   classes?: string, role?: string, ariaLabel?: string, text?: string, html?: string,
  *   rect?: {x: number, y: number, w: number, h: number}, component?: string, shot?: string,
+ *   styles?: Record<string, string>, parents?: string[],
+ *   debug?: {at: number, kind: string, text: string, stack?: string, n?: number}[],
  *   question?: boolean, status?: 'pending' | 'resolved', resolution?: string}} Comment
  *
  * @typedef {{id: string, receivedAt: string, origin: string, url?: string, pathname?: string,
@@ -284,6 +286,45 @@ function moveToDone(index, outcome) {
   return { title: titleOf(item.body), id: idOf(item.body) }
 }
 
+// ---------------------------------------------------------------- context rendering
+
+/**
+ * The curated computed styles arrive as a flat map. Grouping them on the way out is
+ * what makes the brief scannable — and each group is written as real CSS declarations,
+ * because that is the form Claude can match against the project's stylesheets.
+ */
+const STYLE_GROUPS = [
+  ['layout', ['display', 'position', 'flex-direction', 'flex-wrap', 'justify-content', 'align-items', 'gap', 'grid-template-columns', 'flex', 'overflow']],
+  ['box', ['padding', 'margin', 'border-width', 'border-radius', 'box-sizing']],
+  ['type', ['font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing', 'text-align', 'text-transform', 'white-space']],
+  ['paint', ['color', 'background-color', 'border-color', 'box-shadow', 'opacity']],
+]
+
+function styleFacts(styles, rect) {
+  const out = []
+  for (const [name, props] of STYLE_GROUPS) {
+    const decls = props.filter(p => styles?.[p]).map(p => `${p}: ${styles[p]}`)
+    // The rendered size belongs with the box model, and it is the one number that is
+    // always worth stating — "how wide is this" is the most common question there is.
+    if (name === 'box' && rect) decls.unshift(`size: ${rect.w}×${rect.h}`)
+    if (decls.length) out.push(`${name} — ${decls.join('; ')}`)
+  }
+  return out
+}
+
+const DEBUG_MARK = { error: '×', warn: '⚠', exception: '✗', rejection: '✗', network: '↯', resource: '↯' }
+
+/** Pre-indented so it can drop straight into the fact list as one block. */
+function debugBlock(debug) {
+  const lines = []
+  for (const e of debug) {
+    const times = e.n > 1 ? ` ×${e.n}` : ''
+    lines.push(`      ${DEBUG_MARK[e.kind] ?? '·'} ${e.kind}${times} · ${e.text}`)
+    if (e.stack) for (const l of String(e.stack).split('\n')) lines.push(`          ${l}`)
+  }
+  return lines.join('\n')
+}
+
 // ---------------------------------------------------------------- rendering
 
 /**
@@ -312,12 +353,17 @@ function renderBatch(b) {
       c.text ? `text: "${c.text.slice(0, 120)}"` : null,
       c.role ? `role: ${c.role}` : null,
       c.ariaLabel ? `aria-label: ${c.ariaLabel}` : null,
+      c.parents?.length ? `parents: ${c.parents.join(' ‹ ')}` : null,
+      ...styleFacts(c.styles, c.rect),
       c.shot ? `screenshot: ${join(batchDir(b.id), c.shot)}` : null,
       // Said on the comment rather than once at the top, because a batch mixes the two
       // and a guardrail the reader has to remember four comments later is not a guardrail.
       c.question ? `**this is a question — answer it with \`reply\` (id \`${b.id}#${c.n}\`) and change no files**` : null,
     ].filter(Boolean).map(f => `  - ${f}`).join('\n')
-    return `\n### [${b.id}#${c.n}]${c.question ? ' ❓' : ''} ${c.note}\n${facts}`
+    const debug = c.debug?.length
+      ? `\n  - console & network (${c.debug.length}), newest last:\n${debugBlock(c.debug)}`
+      : ''
+    return `\n### [${b.id}#${c.n}]${c.question ? ' ❓' : ''} ${c.note}\n${facts}${debug}`
   }).join('\n')
 
   return `${head}${page}\n${body}`
@@ -571,6 +617,18 @@ function readBody(req) {
 
 // ---------------------------------------------------------------- dispatch
 
+/** The buffer is page-controlled, so it is trimmed here rather than trusted for length. */
+function sanitiseDebug(debug) {
+  if (!Array.isArray(debug) || !debug.length) return undefined
+  return debug.slice(0, 20).map(e => ({
+    at: Number(e?.at) || 0,
+    kind: String(e?.kind ?? 'log').slice(0, 20),
+    text: String(e?.text ?? '').slice(0, 400),
+    stack: typeof e?.stack === 'string' ? e.stack.slice(0, 500) : undefined,
+    n: Number(e?.n) > 1 ? Number(e.n) : undefined,
+  }))
+}
+
 /** Channel meta keys must match [A-Za-z0-9_]+ — anything with a hyphen is silently dropped. */
 function stamp() {
   const d = new Date()
@@ -636,6 +694,9 @@ async function handleDispatch(req, res) {
       text: typeof c.text === 'string' ? c.text.slice(0, 300) : undefined,
       html: typeof c.html === 'string' ? c.html.slice(0, 800) : undefined,
       rect: c.rect, component: c.component,
+      styles: c.styles && typeof c.styles === 'object' ? c.styles : undefined,
+      parents: Array.isArray(c.parents) ? c.parents.slice(0, 6) : undefined,
+      debug: sanitiseDebug(c.debug),
       question: c.question === true || undefined,
       shot,
       status: 'pending',
@@ -725,6 +786,15 @@ async function handleBacklog(req, res) {
   if (c.component) block.push(`  - component: \`${c.component}\``)
   if (c.selector) block.push(`  - selector: \`${c.selector}\``)
   if (c.text) block.push(`  - text: "${String(c.text).slice(0, 120)}"`)
+  if (Array.isArray(c.parents) && c.parents.length) block.push(`  - parents: ${c.parents.slice(0, 4).join(' ‹ ')}`)
+  // Computed styles are deliberately not written here. A backlog item is read weeks
+  // later, and stale layout numbers read as current fact — the screenshot is at least
+  // visibly a photograph. An error message keeps its meaning, so that one is kept.
+  const debug = sanitiseDebug(c.debug)
+  if (debug) {
+    block.push(`  - console: ${debug.length} entr${debug.length === 1 ? 'y' : 'ies'} at capture`)
+    for (const e of debug.slice(0, 3)) block.push(`    - ${e.kind}${e.n > 1 ? ` ×${e.n}` : ''}: ${e.text.slice(0, 160)}`)
+  }
   if (shotRel) block.push(`  - shot: ${shotRel}`)
   // Only when the title lost something — repeating a one-line note twice is noise.
   if (note !== title) block.push(`  - note: ${note.replace(/\n/g, '\n    ')}`)

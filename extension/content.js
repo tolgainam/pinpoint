@@ -22,7 +22,8 @@
 
   // ---------------------------------------------------------------- state
 
-  /** @type {{n:number, note:string, selector:string, docX:number, docY:number, status:'pending'|'sent'|'resolved'}[]} */
+  /** @type {{n:number, note:string, selector:string, docX:number, docY:number,
+      status:'pending'|'sent'|'resolved'|'answered'|'backlog'}[]} */
   let comments = []
   let seq = 0
   let mode = false
@@ -32,6 +33,11 @@
   /** Sticky: whatever you chose last time is the default next time, so turning
       screenshots off once keeps them off without a separate global switch. */
   let wantShot = true
+  /** Sticky for this page load only, deliberately not persisted. A review pass where
+      everything goes to the backlog should not have to tick the box fifteen times, but
+      the next page you open must default to dispatching — silently backlogging an
+      urgent comment is the one failure mode worth spending a click to avoid. */
+  let wantBacklog = false
 
   // ---------------------------------------------------------------- shadow root
 
@@ -177,6 +183,46 @@
       docY: Math.round(rect.top + scrollY),
     }
   }
+
+  // ---------------------------------------------------------------- ancestor chain
+
+  const MAX_DEPTH = 8
+
+  /**
+   * The clicked element first, then its ancestors. Stops before <body>: a comment on
+   * the document body says nothing useful, and the chain is a menu — every entry in it
+   * has to be worth choosing.
+   */
+  function ancestorChain(target) {
+    const list = []
+    let node = target
+    while (
+      node && node.nodeType === 1 &&
+      node !== document.body && node !== document.documentElement &&
+      list.length < MAX_DEPTH
+    ) {
+      list.push({ node, component: undefined, probed: false })
+      node = node.parentElement
+    }
+    return list.length ? list : [{ node: target, component: undefined, probed: false }]
+  }
+
+  /** What a crumb says before its component name comes back from the probe. */
+  function crumbLabel(entry) {
+    if (entry.component) return entry.component
+    const node = entry.node
+    const cls = Array.from(node.classList || []).find(c => c && c.length < 24 && !GENERATED_CLASS.test(c))
+    return node.tagName.toLowerCase() + (cls ? `.${cls}` : '')
+  }
+
+  // ---------------------------------------------------------------- intent
+
+  /** A note that opens with `?` is a question: answer it, do not touch files. */
+  const isQuestion = note => /^\s*\?/.test(note)
+
+  /** The `?` is a mode switch, not part of the sentence — carrying it through would put
+      it in the batch heading and in backlog titles, where it reads as a typo. */
+  const stripMarker = note => note.replace(/^\s*\?+\s*/, '').trim() || note.trim()
 
   // ---------------------------------------------------------------- highlight
 
@@ -338,46 +384,139 @@
 
   /** Keep a card fully on screen no matter which corner the element sits in. */
   function placeCard(card, x, y) {
-    const w = 300
+    const w = card.offsetWidth || 320
     const h = card.offsetHeight || 160
     card.style.left = `${Math.max(8, Math.min(x, innerWidth - w - 8))}px`
     card.style.top = `${Math.max(8, Math.min(y, innerHeight - h - 8))}px`
   }
 
   function openComposer(target, x, y) {
+    const chain = ancestorChain(target)
+    let depth = 0        // index into chain; 0 is the element you clicked
+    let captured         // always describes chain[depth].node; set by selectDepth below
+
     const card = el('div', 'card')
+    const crumbs = el('div', 'crumbs')
+    crumbs.tabIndex = 0
+    crumbs.title = '↑ parent · ↓ child — or click a level'
     const meta = el('div', 'meta', '…')
     const box = el('textarea')
-    box.placeholder = 'What is wrong here?   (⌘↵ to add)'
+    box.placeholder = 'What is wrong here?   (⌘↵ to add · start with ? to ask)'
+    const hint = el('div', 'hint')
 
     const row = el('div', 'row')
-    const shotLabel = el('label', 'shot-toggle')
+    const shotLabel = el('label', 'toggle')
     const shotBox = document.createElement('input')
     shotBox.type = 'checkbox'
     shotBox.checked = wantShot
     shotLabel.append(shotBox, document.createTextNode('screenshot'))
+    const backlogLabel = el('label', 'toggle')
+    const backlogBox = document.createElement('input')
+    backlogBox.type = 'checkbox'
+    backlogBox.checked = wantBacklog
+    backlogLabel.append(backlogBox, document.createTextNode('backlog'))
     const cancel = el('button', '', 'Cancel')
     const add = el('button', 'primary', 'Add')
-    row.append(shotLabel, el('span', 'spacer'), cancel, add)
-    card.append(meta, box, row)
+    row.append(shotLabel, backlogLabel, el('span', 'spacer'), cancel, add)
+    card.append(crumbs, meta, box, hint, row)
     layer.append(card)
     openCard = card
     placeCard(card, x + 12, y + 12)
     box.focus()
 
-    const captured = describe(target)
-    meta.textContent = captured.selector
-    probeComponent(captured.selector, x, y).then(component => {
-      if (!component) return
-      captured.component = component
-      meta.textContent = `<${component}>  ${captured.selector}`
-    })
+    // ------------------------------------------------------------ depth
+
+    /**
+     * Move the selection to one level of the chain. Everything the composer shows and
+     * everything the comment will carry — selector, component, highlight, and the rect
+     * the screenshot is cropped to — is derived from here, so walking the chain and
+     * having clicked that element in the first place are indistinguishable downstream.
+     */
+    function selectDepth(i) {
+      depth = Math.max(0, Math.min(i, chain.length - 1))
+      const entry = chain[depth]
+      target = entry.node
+      frozen = target
+      captured = describe(target)
+      if (entry.component) captured.component = entry.component
+      showHighlight(target, true)
+      paintCrumbs()
+      paintMeta()
+
+      if (entry.probed) return
+      entry.probed = true
+      const r = target.getBoundingClientRect()
+      probeComponent(captured.selector, r.left + r.width / 2, r.top + r.height / 2).then(component => {
+        if (!component) return
+        entry.component = component
+        if (chain[depth] !== entry) return   // walked on while the probe was in flight
+        captured.component = component
+        paintCrumbs()
+        paintMeta()
+      })
+    }
+
+    function paintMeta() {
+      const c = chain[depth].component
+      meta.textContent = c ? `<${c}>  ${captured.selector}` : captured.selector
+      meta.title = captured.selector
+    }
+
+    function paintCrumbs() {
+      crumbs.textContent = ''
+      chain.forEach((entry, i) => {
+        if (i) crumbs.append(el('span', 'sep', '‹'))
+        const crumb = el('span', 'crumb', crumbLabel(entry))
+        crumb.classList.toggle('on', i === depth)
+        crumb.onclick = () => { selectDepth(i); box.focus() }
+        crumbs.append(crumb)
+        // Centre the current crumb by hand rather than with scrollIntoView, which is
+        // allowed to scroll every ancestor — including the page we promised not to touch.
+        if (i === depth) requestAnimationFrame(() => {
+          const c = crumb.getBoundingClientRect()
+          const strip = crumbs.getBoundingClientRect()
+          crumbs.scrollLeft += (c.left - strip.left) - (strip.width - c.width) / 2
+        })
+      })
+    }
+
+    /**
+     * ↑/↓ walk the chain, but a textarea owns those keys once there is text to move a
+     * caret through. Intercepting them only while the box is empty costs nothing — an
+     * empty textarea has nowhere for the caret to go — and covers the actual gesture:
+     * click, press ↑ twice to reach the card you meant, then start typing. After that
+     * the crumbs stay clickable.
+     */
+    function onArrow(ev) {
+      if (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown') return false
+      if (ev.target === box && box.value !== '') return false
+      ev.preventDefault()
+      selectDepth(depth + (ev.key === 'ArrowUp' ? 1 : -1))
+      return true
+    }
+
+    // ------------------------------------------------------------ intent
+
+    function paintIntent() {
+      const asking = isQuestion(box.value)
+      add.textContent = asking ? 'Ask' : backlogBox.checked ? 'Backlog' : 'Add'
+      add.classList.toggle('ask', asking)
+      hint.textContent = asking
+        ? 'question — Claude answers on the pin and changes no files'
+        : backlogBox.checked
+          ? 'goes to .pinpoint/backlog.md, not to the session'
+          : ''
+      hint.classList.toggle('show', !!hint.textContent)
+    }
+
+    // ------------------------------------------------------------ submit
 
     const submit = async () => {
       const note = box.value.trim()
       if (!note) { box.focus(); return }
 
       wantShot = shotBox.checked
+      wantBacklog = backlogBox.checked
       chrome.storage.local.set({ [PREFS_KEY]: { wantShot } }).catch(() => {})
 
       // Re-measure: the composer has been open for a while and the app may have moved.
@@ -394,35 +533,122 @@
         if (!shot) say(`no screenshot — ${lastShotError}`, true)
       }
 
-      comments.push({ ...captured, rect, n: ++seq, note, shot: shot || undefined, status: 'pending' })
+      const asking = isQuestion(note)
+      const comment = {
+        ...captured,
+        rect,
+        n: ++seq,
+        note: asking ? stripMarker(note) : note,
+        shot: shot || undefined,
+        question: asking || undefined,
+        status: wantBacklog ? 'backlog' : 'pending',
+      }
+      comments.push(comment)
       closeCard()
       save()
       render()
+      if (wantBacklog) sendToBacklog(comment)
     }
 
     add.onclick = submit
     cancel.onclick = closeCard
+    backlogBox.onchange = paintIntent
+    box.addEventListener('input', paintIntent)
     box.addEventListener('keydown', ev => {
+      if (onArrow(ev)) return
       if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); submit() }
       if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); closeCard() }
     })
+    crumbs.addEventListener('keydown', ev => {
+      if (onArrow(ev)) return
+      if (ev.key === 'Enter') { ev.preventDefault(); box.focus() }
+    })
+
+    selectDepth(0)
+    paintIntent()
+  }
+
+  /**
+   * Backlog items never enter the queue: they are appended to the project's own
+   * `.pinpoint/backlog.md` and have no expiry, where a dispatched batch is a delivery
+   * buffer pruned after a day. A write that fails leaves the pin marked unsaved rather
+   * than vanishing, because the alternative is losing the comment silently.
+   */
+  async function sendToBacklog(comment) {
+    let res
+    try {
+      res = await chrome.runtime.sendMessage({
+        type: 'backlog',
+        payload: {
+          origin: location.origin,
+          url: location.href,
+          pathname: location.pathname,
+          title: document.title,
+          viewport: { w: innerWidth, h: innerHeight },
+          comment: {
+            note: comment.note,
+            selector: comment.selector,
+            tag: comment.tag,
+            elementId: comment.elementId,
+            classes: comment.classes,
+            role: comment.role,
+            ariaLabel: comment.ariaLabel,
+            text: comment.text,
+            html: comment.html,
+            rect: comment.rect,
+            component: comment.component,
+            question: comment.question,
+            shot: comment.shot,
+          },
+        },
+      })
+    } catch (err) {
+      res = { ok: false, error: String(err) }
+    }
+
+    if (res?.ok) {
+      comment.backlogId = res.id
+      comment.unsaved = false
+      say(`#${comment.n} → backlog`)
+    } else {
+      comment.unsaved = true
+      say(res?.error || 'backlog write failed', true)
+    }
+    save()
+    render()
+  }
+
+  const STATE_LABEL = {
+    pending: 'pending',
+    sent: 'dispatched',
+    resolved: 'resolved',
+    answered: 'answered',
+    backlog: 'backlog',
   }
 
   function openPinCard(comment, x, y) {
     const card = el('div', 'card')
-    card.append(
-      el('div', 'meta', `${comment.component ? `<${comment.component}>  ` : ''}${comment.selector}`),
-      el('div', 'note', comment.note),
-    )
+    card.append(el('div', 'meta', `${comment.component ? `<${comment.component}>  ` : ''}${comment.selector}`))
+    if (comment.question) card.append(el('div', 'kind', 'question — no files changed'))
+    card.append(el('div', 'note', comment.note))
 
+    if (comment.answer) card.append(el('div', 'answer', comment.answer))
     if (comment.resolution) card.append(el('div', 'resolution', `✓ ${comment.resolution}`))
 
     const row = el('div', 'row')
-    const state = comment.status === 'resolved' ? 'resolved' : comment.status === 'sent' ? 'dispatched' : 'pending'
-    const label = comment.shot ? state : `${state} · no screenshot`
-    const status = el('span', 'meta', label)
+    const parts = [STATE_LABEL[comment.status] ?? comment.status]
+    if (comment.status === 'backlog' && comment.unsaved) parts.push('not written — bridge down')
+    if (!comment.shot) parts.push('no screenshot')
+    const status = el('span', 'meta', parts.join(' · '))
     const remove = el('button', 'danger', comment.status === 'resolved' ? 'Dismiss' : 'Remove')
-    row.append(status, el('span', 'spacer'), remove)
+    row.append(status, el('span', 'spacer'))
+
+    if (comment.status === 'backlog' && comment.unsaved) {
+      const retry = el('button', '', 'Retry')
+      retry.onclick = () => { closeCard(); sendToBacklog(comment) }
+      row.append(retry)
+    }
+    row.append(remove)
     card.append(row)
 
     remove.onclick = () => {
@@ -451,6 +677,10 @@
       const pin = el('div', 'pin', c.status === 'resolved' ? '✓' : String(c.n))
       pin.classList.toggle('sent', c.status === 'sent')
       pin.classList.toggle('resolved', c.status === 'resolved')
+      pin.classList.toggle('answered', c.status === 'answered')
+      pin.classList.toggle('backlog', c.status === 'backlog')
+      pin.classList.toggle('question', !!c.question && c.status !== 'resolved')
+      pin.classList.toggle('unsaved', !!c.unsaved)
       pin.title = c.note
       pin.addEventListener('click', ev => {
         ev.preventDefault()
@@ -617,6 +847,7 @@
         html: c.html,
         rect: c.rect,
         component: c.component,
+        question: c.question,
         shot: c.shot,
       })),
     }
@@ -666,16 +897,38 @@
    * only signal that the fix has landed without switching to the terminal. Events are
    * matched on the server's own numbering, recorded at dispatch time.
    */
+  const byServerId = id => comments.find(c => c.batch && `${c.batch}#${c.serverN}` === id)
+
   function onBridgeEvent(ev) {
     if (!ev) return
 
+    // An addressed reply is the answer to a question pin, so it lands on the card and
+    // stays there. An unaddressed one is a status line, and a toast is all it deserves.
     if (ev.type === 'reply') {
-      if (ev.text) say(ev.text)
+      const hit = ev.id ? byServerId(ev.id) : null
+      if (hit) {
+        hit.answer = ev.text
+        if (hit.status !== 'resolved') hit.status = 'answered'
+        save()
+        render()
+      }
+      if (ev.text) say(`${hit ? `#${hit.n} — ` : ''}${ev.text}`.slice(0, 180))
+      return
+    }
+
+    if (ev.type === 'backlog-done') {
+      const done = comments.find(c => c.backlogId && c.backlogId === ev.id)
+      if (!done || done.status === 'resolved') return
+      done.status = 'resolved'
+      if (ev.outcome) done.resolution = ev.outcome
+      save()
+      render()
+      say(`✓ #${done.n} done${ev.outcome ? ` — ${ev.outcome}` : ''}`)
       return
     }
 
     if (ev.type !== 'resolved') return
-    const hit = comments.find(c => c.batch && `${c.batch}#${c.serverN}` === ev.id)
+    const hit = byServerId(ev.id)
     if (!hit || hit.status === 'resolved') return
 
     hit.status = 'resolved'

@@ -1,53 +1,19 @@
 # Pinpoint backlog
 
-Things worth building, in the order they're worth building. Hand-edited for now — once
-the backlog feature ships, Pinpoint appends pinned items here itself.
+Things worth building, in the order they're worth building. Pinpoint appends
+browser-pinned items to `## Open` and moves finished ones to `## Done`; everything else
+here is hand-written.
 
 This file is **committed on purpose**. A gitignored backlog is a private todo list; a
 committed one is a record of what was asked and why, which git history doesn't capture
 on its own. Add `.pinpoint/` to `.gitignore` if you'd rather keep yours private.
 
-**Format:** one checkbox per item. Sub-bullets are optional and free-form; `selector`,
-`shot`, and `batch` appear on items Pinpoint wrote itself.
+**Format:** one checkbox per item. Sub-bullets are optional and free-form; `id`,
+`selector`, and `shot` appear on items Pinpoint wrote itself.
 
 ---
 
 ## Open
-
-- [ ] **Backlog switch in the composer** — pin a comment without dispatching it
-  - size: S
-  - why: Pinpoint is binary today — comment, dispatch, fix now. Reviewing a page
-    doesn't work that way. You spot fifteen things and three are urgent. Right now you
-    either dispatch all fifteen and get a mediocre pass on twelve, or you lose the
-    twelve entirely. This is the difference between a fix tool and a review tool.
-  - shape: a checkbox in the composer, next to the screenshot one. Ticked, the comment
-    is written to `.pinpoint/backlog.md` in the project directory instead of being sent.
-    Its pin renders in a third, muted state.
-  - needs: a bridge endpoint that writes here, `list_backlog` and `start_backlog_item`
-    MCP tools, and a `/pinpoint:backlog` command to pick items and work them.
-  - note: backlog items must **not** go through `prune()`. The queue expires after 24h
-    because it's a delivery buffer; a backlog item has no expiry. Different lifecycle,
-    separate handling.
-  - note: screenshots land in `.pinpoint/shots/`. ~20–80KB each, so fifty items is a
-    few MB in the repo. Acceptable, but worth saying out loud in the README.
-
-- [ ] **Selection depth control** — walk up the ancestor chain after clicking
-  - size: S
-  - why: click-to-pin grabs whatever node is on top, which is often a span three
-    levels below the thing you meant. The "comment on the shared parent" answer to
-    multi-element and region select only holds if reaching that parent is effortless.
-  - shape: after clicking, `↑`/`↓` moves the highlight through the ancestor chain, a
-    breadcrumb shows the tag/component at each level, and the screenshot re-crops to
-    the final choice.
-
-- [ ] **Question mode** — ask about an element without requesting a change
-  - size: S
-  - why: not every pin is a change request — "why is this 3px off?", "which component
-    renders this?". Today every dispatch reads as "fix it", and the most common
-    complaint about coding agents is that they rush off and edit files.
-  - shape: no new UI — a note starting with `?` dispatches as a question. Answered
-    via `reply` onto the pin card; no code is touched.
-  - decided (2026-08-22): intent-based via a trigger keyword, not a composer switch.
 
 - [ ] **Capture element state beyond the screenshot** — computed styles and parent chain
   - size: S
@@ -256,5 +222,36 @@ Kept so they don't get re-litigated.
 
 ## Done
 
-Nothing yet. Completed items move here with the date and a line on what changed, rather
-than being deleted — the record is the point.
+Completed items move here with the date and a line on what changed, rather than being
+deleted — the record is the point.
+
+- [x] **Backlog switch in the composer** — pin a comment without dispatching it
+  - done: 2026-08-22 — a `backlog` checkbox in the composer posts the comment to a new
+    `POST /backlog` on the bridge, which appends it to `## Open` here and writes its
+    screenshot to `.pinpoint/shots/`. The pin renders grey and never enters the queue,
+    so `prune()` never sees it. `list_backlog`, `start_backlog_item`, and
+    `finish_backlog_item` work the file by whole-line splice, so hand-written items and
+    hand-written prose around them survive every operation; finishing one broadcasts
+    `backlog-done` over the existing SSE channel and clears the pin. `/pinpoint:backlog`
+    drives it.
+  - note: a third tool beyond the two planned — `finish_backlog_item`. Without it
+    nothing could move an item to `## Done`, and the alternative was Claude hand-editing
+    the file, which is exactly what the splice logic exists to avoid.
+
+- [x] **Selection depth control** — walk up the ancestor chain after clicking
+  - done: 2026-08-22 — the composer opens with a scrollable breadcrumb of the clicked
+    element's ancestors (capped at 8, stopping before `<body>`). `↑`/`↓` walk it and
+    crumbs are clickable; selector, highlight, component probe, and the screenshot crop
+    all re-derive from the chosen level, so walking is indistinguishable downstream from
+    having clicked that element.
+  - note: `↑`/`↓` are intercepted only while the note is empty. An empty textarea has no
+    caret to move, so nothing is taken away — and the gesture it serves is click, press
+    `↑` twice, start typing. After that the crumbs carry it.
+
+- [x] **Question mode** — ask about an element without requesting a change
+  - done: 2026-08-22 — a note starting with `?` sets `question` on the comment; the
+    marker is stripped from the text, the primary button turns violet, and the pin is
+    violet through its whole life. The batch renders the comment with ❓ and a per-comment
+    guardrail line naming the id to answer. `reply` grew an optional `id`: with one the
+    text lands on that pin card as the answer, without one it is still a passing toast.
+  - note: no new chrome, as decided — the `?` is the entire switch.

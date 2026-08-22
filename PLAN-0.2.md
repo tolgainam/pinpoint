@@ -1,6 +1,6 @@
 # Pinpoint 0.2 — from dispatch tool to review cockpit
 
-> **Status: planned, not started.** Scoped 2026-08-22 after a deliberate cut: 33 ideas
+> **Status: Phase A shipped (2026-08-22), Phase B next.** Scoped 2026-08-22 after a deliberate cut: 33 ideas
 > were generated and researched, 10 were dropped or parked with reasoning recorded in
 > [`.pinpoint/backlog.md`](.pinpoint/backlog.md) (the item-level source of truth), and
 > 15 survived. Mockups of the headline UX live at `.pinpoint/mockups.html`.
@@ -23,12 +23,13 @@ during scoping:
 
 ## Build order
 
-Phase A — composer quick wins (all S)
-1. **Backlog switch** — pin without dispatching; writes to `.pinpoint/backlog.md`.
-   No `prune()` for backlog items; shots to `.pinpoint/shots/`.
-2. **Selection depth control** — after click, `↑`/`↓` walks the ancestor chain with a
+Phase A — composer quick wins (all S) — **shipped**
+1. ~~**Backlog switch**~~ — pin without dispatching; writes to `.pinpoint/backlog.md`.
+   No `prune()` for backlog items; shots to `.pinpoint/shots/`. Shipped with a third
+   tool, `finish_backlog_item`, so items can reach `## Done` without hand-editing.
+2. ~~**Selection depth control**~~ — after click, `↑`/`↓` walks the ancestor chain with a
    breadcrumb; screenshot re-crops to the final choice.
-3. **Question mode** — a note starting with `?` dispatches as a question; answered via
+3. ~~**Question mode**~~ — a note starting with `?` dispatches as a question; answered via
    `reply` on the pin card, no files touched.
 
 Phase B — richer capture (S, S, M)

@@ -88,6 +88,15 @@
    version of this was indistinguishable from the grey "dispatched" state. */
 .pin.resolved { background: #2ea36c; border-color: #d7f5e6; opacity: 1; }
 .pin.detached { opacity: 0.4; border-style: dashed; }
+/* A question never changes code, so it must never read like a fix request waiting to
+   land. Violet across pending, dispatched, and answered — the colour says "intent",
+   the fill says "how far along". */
+.pin.question { background: #7c6bd6; }
+.pin.question.sent { background: #5a5182; }
+.pin.answered { background: #7c6bd6; border-color: #ded8f7; }
+/* Parked, not queued: no colour, so it recedes behind anything actually in flight. */
+.pin.backlog { background: #3f3f46; border-color: #a1a1aa; color: #d4d4d8; }
+.pin.backlog.unsaved { border-color: #f87171; border-style: dashed; }
 
 /* ---------------------------------------------------------------- cards */
 
@@ -95,7 +104,7 @@
   position: absolute;
   z-index: 20;
   pointer-events: auto;
-  width: 300px;
+  width: 320px;
   padding: 10px;
   border-radius: 10px;
   border: 1px solid var(--pp-line);
@@ -141,6 +150,84 @@
   word-break: break-word;
 }
 
+/* ---------------------------------------------------------------- breadcrumb */
+
+/* One line, scrolled rather than wrapped: the chain can be eight deep and a card that
+   changes height as you walk it moves the thing you are aiming at. */
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  white-space: nowrap;
+  font-size: 11px;
+  outline: none;
+}
+
+.crumbs::-webkit-scrollbar { display: none; }
+.crumbs:focus-visible { box-shadow: 0 0 0 1px var(--pp-accent); border-radius: 5px; }
+
+.crumb {
+  padding: 2px 5px;
+  border-radius: 5px;
+  color: var(--pp-dim);
+  cursor: pointer;
+  flex: none;
+}
+
+.crumb:hover { background: var(--pp-hover); }
+
+.crumb.on {
+  background: var(--pp-accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.crumbs .sep {
+  color: var(--pp-line);
+  flex: none;
+}
+
+/* ---------------------------------------------------------------- card parts */
+
+/* Reserved even when empty, so typing `?` does not shove the buttons down a row. */
+.card .hint {
+  min-height: 14px;
+  margin-top: 5px;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--pp-dim);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.card .hint.show { opacity: 1; }
+
+.card .kind {
+  display: inline-block;
+  margin-bottom: 6px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgb(124 107 214 / 0.22);
+  color: #c3b8f5;
+  font-size: 11px;
+}
+
+.card .answer {
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  background: rgb(124 107 214 / 0.16);
+  color: #cfc7f2;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .card .note {
   white-space: pre-wrap;
   line-height: 1.45;
@@ -150,7 +237,7 @@
 
 .row {
   display: flex;
-  gap: 6px;
+  gap: 5px;
   align-items: center;
   margin-top: 8px;
 }
@@ -162,7 +249,7 @@
 button {
   font: inherit;
   font-size: 12px;
-  padding: 5px 10px;
+  padding: 5px 9px;
   border-radius: 7px;
   border: 1px solid var(--pp-line);
   background: transparent;
@@ -182,6 +269,13 @@ button.primary {
 }
 
 button.primary:hover:not(:disabled) { filter: brightness(1.08); }
+
+/* The primary button changes colour the moment the note starts with `?`. That colour
+   is the whole confirmation that question mode is on — there is no switch to look at. */
+button.primary.ask {
+  background: #7c6bd6;
+  border-color: #7c6bd6;
+}
 button.danger:hover { color: #f87171; }
 
 /* ---------------------------------------------------------------- toolbar */
@@ -271,7 +365,7 @@ button.mode.on {
   --pp-hover: #2a2a2e;
 }
 
-.shot-toggle {
+.toggle {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -281,7 +375,7 @@ button.mode.on {
   user-select: none;
 }
 
-.shot-toggle input {
+.toggle input {
   accent-color: var(--pp-accent);
   margin: 0;
   cursor: pointer;

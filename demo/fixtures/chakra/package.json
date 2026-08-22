@@ -1,0 +1,11 @@
+{
+  "name": "chakra-demo",
+  "private": true,
+  "description": "A Chakra UI project for the design-system probe to read. Not built — see ../README.md.",
+  "dependencies": {
+    "@chakra-ui/react": "^2.8.2",
+    "@emotion/react": "^11.13.0",
+    "@emotion/styled": "^11.13.0",
+    "framer-motion": "^11.3.0"
+  }
+}

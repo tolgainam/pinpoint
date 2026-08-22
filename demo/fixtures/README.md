@@ -27,6 +27,10 @@ PINPOINT_PROJECT_DIR=demo/fixtures/tailwind npm run server     # probe reads tha
 Running the bridge with `PINPOINT_PROJECT_DIR` set here also puts that project's
 `.pinpoint/backlog.md` and `.pinpoint/shots/` inside it. Those are gitignored.
 
+These pages are the same test bed for the token chips in the composer: the chips read
+the merged summary a dispatch would carry, so a chip that names the wrong token here
+names the wrong token everywhere.
+
 ## No build step
 
 The stylesheets are hand-written to match what each framework would have generated for

@@ -80,14 +80,20 @@ const server = createServer(async (req, res) => {
   }
 
   // normalize() collapses any ../ before it can escape the demo directory.
-  const rel = normalize(url.pathname === '/' ? '/index.html' : url.pathname).replace(/^(\.\.[/\\])+/, '')
-  const path = join(DIR, rel)
+  let rel = normalize(url.pathname === '/' ? '/index.html' : url.pathname).replace(/^(\.\.[/\\])+/, '')
+  let path = join(DIR, rel)
   if (!path.startsWith(DIR)) {
     res.writeHead(403).end('forbidden')
     return
   }
 
   try {
+    // A directory means its index.html. The demo pages link to each other by folder,
+    // and a folder that 404s would make the switcher a list of broken links.
+    if ((await stat(path)).isDirectory()) {
+      rel = join(rel, 'index.html')
+      path = join(DIR, rel)
+    }
     await stat(path)
   } catch {
     res.writeHead(404).end('not found')

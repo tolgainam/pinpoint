@@ -45,8 +45,50 @@ a { color: inherit; text-decoration: none; }
 .brand-mark { color: var(--accent); font-size: 20px; }
 .brand-name { font-size: 17px; letter-spacing: -0.01em; }
 
-.site-nav { display: flex; gap: 22px; margin-left: 12px; font-size: 14px; color: var(--dim); }
+.site-nav { display: flex; align-items: center; gap: 22px; margin-left: 12px; font-size: 14px; color: var(--dim); }
 .site-nav a:hover { color: var(--fg); }
+
+/* Pure :hover, no JS. Nothing in here can be pinned without freezing the page first —
+   moving the pointer to Pinpoint's toolbar closes the menu on the way. */
+.nav-menu { position: relative; }
+.nav-menu > a { display: inline-flex; align-items: center; gap: 5px; }
+.caret { font-size: 10px; opacity: 0.7; }
+
+.menu {
+  position: absolute;
+  top: 100%;
+  left: -14px;
+  display: none;
+  flex-direction: column;
+  min-width: 190px;
+  margin-top: 10px;
+  padding: 7px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: 0 16px 40px rgb(0 0 0 / 0.45);
+}
+
+.nav-menu:hover .menu { display: flex; }
+
+.menu a { padding: 8px 10px; border-radius: 8px; font-size: 14px; }
+.menu a:hover { background: rgb(255 255 255 / 0.06); color: var(--fg); }
+
+/* Removed from the DOM three seconds after it appears — the other half of what freeze
+   is for, and the half that cannot keep its selector afterwards. */
+.app-toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 50;
+  padding: 12px 16px;
+  border-radius: 11px;
+  border: 1px solid #5b2f2f;
+  background: #2a1a1a;
+  color: #ffb4a8;
+  font-size: 14px;
+  box-shadow: 0 14px 36px rgb(0 0 0 / 0.5);
+}
 
 .site-header .btn { margin-left: auto; }
 

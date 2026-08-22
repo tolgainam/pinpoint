@@ -269,8 +269,8 @@
 
   // ---------------------------------------------------------------- element capture
 
-  function describe(target) {
-    const rect = target.getBoundingClientRect()
+  function describe(target, snapRect) {
+    const rect = snapRect || target.getBoundingClientRect()
     const cls = typeof target.className === 'string' ? target.className.trim() : ''
     return {
       selector: buildSelector(target),
@@ -347,14 +347,16 @@
   highlight.append(tagLabel)
   layer.append(highlight)
 
-  function showHighlight(target, isFrozen) {
-    const r = target.getBoundingClientRect()
+  function showHighlight(target, isSelected, snapRect) {
+    // A frozen frame's element may be gone from the DOM, in which case its live rect is
+    // all zeros — the snapshot taken at freeze time is the only honest geometry left.
+    const r = snapRect || target.getBoundingClientRect()
     highlight.style.display = 'block'
     highlight.style.left = `${r.left}px`
     highlight.style.top = `${r.top}px`
     highlight.style.width = `${r.width}px`
     highlight.style.height = `${r.height}px`
-    highlight.classList.toggle('frozen', !!isFrozen)
+    highlight.classList.toggle('frozen', !!isSelected)
     const id = target.id && !GENERATED_ID.test(target.id) ? `#${target.id}` : ''
     tagLabel.textContent = `${target.tagName.toLowerCase()}${id}  ${Math.round(r.width)}×${Math.round(r.height)}`
   }
@@ -369,16 +371,20 @@
   capture.style.display = 'none'
   layer.append(capture)
 
-  /** The topmost page element under the cursor, ignoring our own overlay. */
+  /** The topmost page element under the cursor, ignoring our own overlay. Returns the
+      snapshot rect alongside it when a frozen frame is up, because the live one has
+      moved on — that is the whole point of having frozen. */
   function elementUnder(x, y) {
+    if (frame) return frameHit(x, y)
     const stack = document.elementsFromPoint(x, y)
-    return stack.find(n => n !== host) || null
+    const node = stack.find(n => n !== host) || null
+    return node ? { node, rect: null } : null
   }
 
   capture.addEventListener('mousemove', ev => {
     if (openCard) return
-    const target = elementUnder(ev.clientX, ev.clientY)
-    if (target) showHighlight(target, false)
+    const hit = elementUnder(ev.clientX, ev.clientY)
+    if (hit) showHighlight(hit.node, false, hit.rect)
     else hideHighlight()
   })
 
@@ -386,11 +392,11 @@
     ev.preventDefault()
     ev.stopPropagation()
     if (openCard) { closeCard(); return }
-    const target = elementUnder(ev.clientX, ev.clientY)
-    if (!target) return
-    frozen = target
-    showHighlight(target, true)
-    openComposer(target, ev.clientX, ev.clientY)
+    const hit = elementUnder(ev.clientX, ev.clientY)
+    if (!hit) return
+    frozen = hit.node
+    showHighlight(hit.node, true, hit.rect)
+    openComposer(hit.node, ev.clientX, ev.clientY, hit.rect)
   })
 
   function setMode(on) {
@@ -398,7 +404,7 @@
     capture.style.display = on ? 'block' : 'none'
     modeBtn.classList.toggle('on', on)
     modeBtn.textContent = on ? 'Commenting' : 'Comment'
-    if (!on) { closeCard(); hideHighlight(); frozen = null }
+    if (!on) { closeCard(); hideHighlight(); frozen = null; if (frame) releaseFrame() }
   }
 
   // ---------------------------------------------------------------- screenshots
@@ -489,6 +495,94 @@
     }
   }
 
+  // ---------------------------------------------------------------- frozen frame
+
+  /**
+   * Hover menus, dropdowns, and toasts are the hardest things to report anywhere,
+   * because they are gone by the time you have reached for the tool. Freezing takes a
+   * picture of the viewport and, in the same breath, the geometry of everything visible
+   * in it — then pins are placed against that picture instead of against the live page.
+   *
+   * Deliberately no `chrome.debugger`. Pausing JS would keep timers from firing, but it
+   * cannot hold a CSS `:hover` open either (the pointer still has to leave), it breaks
+   * whenever DevTools is attached, it puts a banner across the top of the browser, and
+   * it is a frightening permission on a store listing. A picture plus geometry needs
+   * none of that and covers the same cases.
+   *
+   * The honest limitation: the DOM moves on. A node that unmounts is still described
+   * from the reference we kept — tag, classes, text, and markup all survive — but it has
+   * no computed style and no unique selector any more. The comment says so, and the
+   * screenshot is the primary evidence.
+   *
+   * @type {{shot: string, items: {node: Element, rect: DOMRect}[]} | null}
+   */
+  let frame = null
+
+  const frameImg = el('div', 'frame')
+  frameImg.style.display = 'none'
+  layer.append(frameImg)
+
+  const frameNote = el('div', 'frame-note')
+  frameNote.style.display = 'none'
+  layer.append(frameNote)
+
+  /**
+   * Every visible element and where it was, captured synchronously so it reflects the
+   * instant the hotkey was pressed. All reads and no writes, so this is one forced
+   * layout rather than a thrash.
+   */
+  function snapshotGeometry() {
+    const items = []
+    for (const node of document.body?.querySelectorAll('*') ?? []) {
+      if (node === host) continue
+      const rect = node.getBoundingClientRect()
+      if (rect.width < 1 || rect.height < 1) continue
+      if (rect.bottom < 0 || rect.top > innerHeight || rect.right < 0 || rect.left > innerWidth) continue
+      items.push({ node, rect })
+    }
+    return items
+  }
+
+  /** Smallest rect containing the point — a good stand-in for "topmost" that also picks
+      the leaf, and it puts an open dropdown above the content it covers. */
+  function frameHit(x, y) {
+    let best = null
+    let bestArea = Infinity
+    for (const it of frame.items) {
+      const r = it.rect
+      if (x < r.left || x > r.right || y < r.top || y > r.bottom) continue
+      const area = r.width * r.height
+      if (area < bestArea) { best = it; bestArea = area }
+    }
+    return best
+  }
+
+  async function freezeFrame() {
+    if (frame) { releaseFrame(); return }
+
+    const items = snapshotGeometry()
+    const shot = await captureViewport()
+    if (!shot) { say(`cannot freeze — ${lastShotError}`, true); return }
+
+    frame = { shot, items }
+    frameImg.style.backgroundImage = `url("${shot}")`
+    frameImg.style.display = 'block'
+    frameNote.textContent = 'frozen — pin what you see · Esc to release'
+    frameNote.style.display = 'block'
+    setMode(true)
+  }
+
+  function releaseFrame() {
+    if (!frame) return
+    frame = null
+    frameImg.style.display = 'none'
+    frameImg.style.backgroundImage = ''
+    frameNote.style.display = 'none'
+    closeCard()
+    hideHighlight()
+    say('frame released')
+  }
+
   // ---------------------------------------------------------------- cards
 
   function closeCard() {
@@ -506,7 +600,7 @@
     card.style.top = `${Math.max(8, Math.min(y, innerHeight - h - 8))}px`
   }
 
-  function openComposer(target, x, y) {
+  function openComposer(target, x, y, snapRect) {
     const chain = ancestorChain(target)
     let depth = 0        // index into chain; 0 is the element you clicked
     let captured         // always describes chain[depth].node; set by selectDepth below
@@ -557,9 +651,11 @@
       const entry = chain[depth]
       target = entry.node
       frozen = target
-      captured = describe(target)
+      // Only the element actually clicked has a snapshot rect; its ancestors are measured
+      // live, which is right — a container that outlives a transient child still exists.
+      captured = describe(target, depth === 0 ? snapRect : null)
       if (entry.component) captured.component = entry.component
-      showHighlight(target, true)
+      showHighlight(target, true, depth === 0 ? snapRect : null)
       paintCrumbs()
       paintMeta()
 
@@ -639,15 +735,22 @@
       wantShot = shotBox.checked
 
       // Re-measure: the composer has been open for a while and the app may have moved.
-      const live = (() => { try { return document.querySelector(captured.selector) } catch { return null } })() || target
-      const r = live.getBoundingClientRect()
-      const rect = { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }
+      // Never against a frozen frame though — there the snapshot is the truth, and the
+      // live page has by definition moved past the state being reported.
+      let rect = captured.rect
+      if (!frame) {
+        const live = (() => { try { return document.querySelector(captured.selector) } catch { return null } })() || target
+        const r = live.getBoundingClientRect()
+        rect = { x: Math.round(r.left), y: Math.round(r.top), w: Math.round(r.width), h: Math.round(r.height) }
+      }
 
       let shot = null
       if (wantShot) {
         add.disabled = true
         add.textContent = 'Capturing…'
-        const viewport = await captureViewport()
+        // Crop out of the frame that was frozen, not a fresh capture of a page that has
+        // since closed the menu.
+        const viewport = frame ? frame.shot : await captureViewport()
         shot = viewport ? await cropTo(viewport, rect) : null
         if (!shot) say(`no screenshot — ${lastShotError}`, true)
       }
@@ -663,6 +766,7 @@
         rect,
         n: ++seq,
         note: text,
+        transient: frame ? true : undefined,
         debug: debug.length ? debug : undefined,
         shot: shot || undefined,
         question: kind === 'question' || undefined,
@@ -732,6 +836,7 @@
             rect: comment.rect,
             styles: comment.styles,
             parents: comment.parents,
+            transient: comment.transient,
             debug: comment.debug,
             component: comment.component,
             question: comment.question,
@@ -767,6 +872,7 @@
     const card = el('div', 'card')
     card.append(el('div', 'meta', `${comment.component ? `<${comment.component}>  ` : ''}${comment.selector}`))
     if (comment.question) card.append(el('div', 'kind', 'question — no files changed'))
+    if (comment.transient) card.append(el('div', 'kind frozen', 'pinned from a frozen frame'))
     card.append(el('div', 'note', comment.note))
 
     if (comment.answer) card.append(el('div', 'answer', comment.answer))
@@ -957,7 +1063,7 @@
     let pageShot = null
     if (outgoing.some(c => c.shot)) {
       sendBtn.textContent = 'Capturing…'
-      pageShot = await captureViewport()
+      pageShot = frame ? frame.shot : await captureViewport()
     }
     // Screenshots are the whole point of the batch arriving with context. Say so when
     // one is missing, rather than letting Claude receive a text-only comment quietly.
@@ -986,6 +1092,7 @@
         rect: c.rect,
         styles: c.styles,
         parents: c.parents,
+        transient: c.transient,
         debug: c.debug,
         component: c.component,
         question: c.question,
@@ -1116,6 +1223,7 @@
     // it decides to inject. It must answer, or the worker injects a second copy.
     if (msg?.type === 'ping-content') { respond({ ok: true }); return false }
     if (msg?.type === 'toggle') { setMode(!mode); respond({ ok: true, mode }); return false }
+    if (msg?.type === 'freeze') { freezeFrame(); respond({ ok: true }); return false }
     if (msg?.type === 'bridge-event') { onBridgeEvent(msg.event); respond({ ok: true }); return false }
     return false
   })
@@ -1123,6 +1231,7 @@
   addEventListener('keydown', ev => {
     if (ev.key !== 'Escape') return
     if (openCard) { closeCard(); return }
+    if (frame) { releaseFrame(); setMode(false); return }
     if (mode) setMode(false)
   }, true)
 

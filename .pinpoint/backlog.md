@@ -15,29 +15,6 @@ on its own. Add `.pinpoint/` to `.gitignore` if you'd rather keep yours private.
 
 ## Open
 
-- [ ] **Capture element state beyond the screenshot** — computed styles and parent chain
-  - size: S
-  - why: "this spacing is wrong" currently makes Claude guess between margin, padding,
-    and gap. The screenshot shows the symptom; the computed box model shows the cause.
-  - shape: only the properties people actually comment on — box model, colours,
-    typography, flex/grid — plus the tag/class chain up to a sensible ancestor. Not the
-    full `getComputedStyle` dump, which is hundreds of properties of noise.
-
-- [ ] **Attach console errors and network failures** — when you ask for them
-  - size: S
-  - why: the biggest gap between Pinpoint and what a developer would paste by hand.
-    Pin a button that does nothing and Claude currently receives "this button does
-    nothing" with no stack trace. Half the time the answer is already in the console.
-  - shape: `probe.js` already runs at `document_start` in the MAIN world — hook
-    `console.error`, `window.onerror`, and `unhandledrejection` there and keep a small
-    ring buffer (last ~20 entries, truncated). Nothing attaches by default: a "debug
-    info" toggle in the composer attaches the buffer to that comment. Styling
-    comments stay lean; "this is broken" comments carry the trace.
-  - decided (2026-08-22): user-triggered on intent, not automatic on every dispatch.
-  - note: if behaviour bugs turn out to need it, the same toggle can later include
-    recent clicks and route changes (the dropped action-trail idea) — one intent,
-    one toggle.
-
 - [ ] **Design-system awareness** — speak the project's token vocabulary
   - size: M
   - why: fixes that invent raw px and hex values rot a design system, and "this
@@ -110,14 +87,6 @@ on its own. Add `.pinpoint/` to `.gitignore` if you'd rather keep yours private.
   - note: capped, not a chat. After ~2 unresolved rounds on one pin, the card says
     "take it to the terminal" and stops offering the reply box — long negotiation
     belongs in the session, not the overlay.
-
-- [ ] **Transient-state capture** — pin hover menus, dropdowns, toasts, mid-animation
-  - size: M
-  - why: these states vanish the moment the mouse moves to click them, which makes
-    them the hardest visual bugs to report anywhere, not just here.
-  - shape: a hotkey that freezes the page (pause JS via the debugger API, or emulate
-    a focused page) while the state is live, then pin as normal inside the frozen
-    frame.
 
 - [ ] **Batch history on disk** — a markdown log, not a panel
   - size: S
@@ -224,6 +193,44 @@ Kept so they don't get re-litigated.
 
 Completed items move here with the date and a line on what changed, rather than being
 deleted — the record is the point.
+
+- [x] **Capture element state beyond the screenshot** — computed styles and parent chain
+  - done: 2026-08-22 — every comment carries a curated computed-style map plus the
+    rendered size and the parent chain; the bridge groups it back into CSS declarations.
+    Properties still at their initial value are dropped, colours become hex (8-digit
+    with alpha, so a colour rewritten inside a `box-shadow` stays valid CSS), and
+    computed lengths are rounded — a `1fr` track reported as `455.65625px` reads like an
+    authored value someone could grep for.
+  - note: found and fixed a 0.1 bug on the way. `GENERATED_CLASS` matched `hero-actions`,
+    `card-header`, and `nav-wrapper` as hashes, so every selector and breadcrumb had been
+    quietly dropping the most descriptive class on the element. The tail now needs a digit.
+
+- [x] **Attach console errors and network failures** — when you ask for them
+  - done: 2026-08-22 — `probe.js` keeps a 20-entry ring of console errors and warnings,
+    uncaught exceptions, unhandled rejections, failed fetch/XHR responses, and assets
+    that did not load, with stacks. Repeats are counted rather than pushed, so a render
+    loop that throws costs one slot instead of the buffer. The fetch and XHR wrappers
+    delegate to the originals and pass results and errors through untouched.
+  - note: the toggle only exists when the page has logged something. A control greyed
+    out on every healthy page is chrome you learn to ignore, and most comments are about
+    styling. The buffer is re-read at submit — the interesting error is often the one
+    thrown while the note was being typed.
+
+- [x] **Transient-state capture** — pin hover menus, dropdowns, toasts, mid-animation
+  - done: 2026-08-22 — Alt+Shift+F (a `chrome.commands` shortcut, so a focus-trapped
+    menu cannot swallow it) captures the viewport and, synchronously in the same breath,
+    the geometry of everything visible. The frame renders over the page, comment mode
+    turns on, and clicks hit-test against the snapshot instead of the live DOM.
+  - decided (2026-08-22): no `chrome.debugger`. Pausing JS stops timers but still cannot
+    hold a CSS `:hover` open — the pointer has to leave either way — and it breaks with
+    DevTools attached, banners the browser, and is a frightening permission on a store
+    listing. A picture plus geometry covers the same cases for none of that.
+  - note: the documented limit is that the DOM moves on. A node that unmounts is still
+    described from the reference kept at freeze time (tag, classes, text, markup all
+    survive) but has no computed style and no unique selector. Verified both paths: a
+    CSS-`:hover` menu item stays fully attached and keeps its styles; a self-removing
+    toast degrades to text and tag. Those comments are labelled, and the brief tells
+    Claude to trust the screenshot over the selector.
 
 - [x] **Backlog switch in the composer** — pin a comment without dispatching it
   - done: 2026-08-22 — a note starting with `!` posts the comment to a new

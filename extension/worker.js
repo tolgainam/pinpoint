@@ -249,6 +249,18 @@ chrome.action.onClicked.addListener(async tab => {
   }
 })
 
+/**
+ * The freeze hotkey. A page keydown listener would do for most sites, but the states
+ * worth freezing — an open dropdown, a focus-trapped menu — are exactly the ones that
+ * swallow keys. A browser command is above all of that.
+ */
+chrome.commands?.onCommand.addListener(async (command, tab) => {
+  if (command !== 'freeze' || !tab?.id) return
+  if (!LOCAL.test(tab.url ?? '')) return
+  if (!(await ensureInjected(tab.id))) return
+  chrome.tabs.sendMessage(tab.id, { type: 'freeze' }).catch(() => {})
+})
+
 // Attach to localhost tabs that were already open at install or reload time.
 chrome.runtime.onInstalled.addListener(async () => {
   ensureStream()

@@ -1,6 +1,6 @@
 # Pinpoint 0.2 — from dispatch tool to review cockpit
 
-> **Status: Phase A shipped (2026-08-22), Phase B next.** Scoped 2026-08-22 after a deliberate cut: 33 ideas
+> **Status: Phases A and B shipped (2026-08-22), Phase C next.** Scoped 2026-08-22 after a deliberate cut: 33 ideas
 > were generated and researched, 10 were dropped or parked with reasoning recorded in
 > [`.pinpoint/backlog.md`](.pinpoint/backlog.md) (the item-level source of truth), and
 > 15 survived. Mockups of the headline UX live at `.pinpoint/mockups.html`.
@@ -34,15 +34,15 @@ Phase A — composer quick wins (all S) — **shipped**
    `reply` on the pin card, no files touched. The two markers are now the whole
    composer vocabulary: `?` asks, `!` parks, anything else fixes.
 
-Phase B — richer capture (S, S, M)
-4. **Element state** — curated computed styles (box model, colour, typography,
+Phase B — richer capture (S, S, M) — **shipped**
+4. ~~**Element state**~~ — curated computed styles (box model, colour, typography,
    flex/grid) + tag/class parent chain. Foundation for Phase C.
-5. **Console errors & network failures** — ring buffer in `probe.js`; attached only
-   when the composer's "debug info" toggle is on. May later fold in recent
-   clicks/route changes if behaviour bugs demand it.
-10. **Transient-state capture** — freeze hotkey (debugger pause / emulate focused
-    page) so hover menus, dropdowns, and toasts can be pinned. (Sequenced later; listed
-    with capture for coherence.)
+5. ~~**Console errors & network failures**~~ — ring buffer in `probe.js`; attached only
+   when the composer's debug toggle is on, and that toggle only exists when the page
+   has actually logged something.
+10. ~~**Transient-state capture**~~ — freeze hotkey. Shipped as a screenshot plus a
+    synchronous geometry snapshot, *not* a debugger pause: pausing JS still cannot hold
+    a CSS `:hover` open, and the permission was not worth it. See the backlog.
 
 Phase C — design-system layer (M, M)
 6. **Design-system awareness** — see the detection matrix below. Payloads speak

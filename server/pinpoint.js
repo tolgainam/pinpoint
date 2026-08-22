@@ -48,7 +48,7 @@ mkdirSync(QUEUE, { recursive: true })
  * @typedef {{n: number, note: string, selector?: string, tag?: string, elementId?: string,
  *   classes?: string, role?: string, ariaLabel?: string, text?: string, html?: string,
  *   rect?: {x: number, y: number, w: number, h: number}, component?: string, shot?: string,
- *   styles?: Record<string, string>, parents?: string[],
+ *   styles?: Record<string, string>, parents?: string[], transient?: boolean,
  *   debug?: {at: number, kind: string, text: string, stack?: string, n?: number}[],
  *   question?: boolean, status?: 'pending' | 'resolved', resolution?: string}} Comment
  *
@@ -355,6 +355,11 @@ function renderBatch(b) {
       c.ariaLabel ? `aria-label: ${c.ariaLabel}` : null,
       c.parents?.length ? `parents: ${c.parents.join(' ‹ ')}` : null,
       ...styleFacts(c.styles, c.rect),
+      // Worth spelling out: the usual "grep for this selector" advice is the wrong move
+      // when the element only existed while a menu was open.
+      c.transient
+        ? '**captured from a frozen frame** — a transient state (hover menu, dropdown, toast). The element may no longer be in the DOM, so the selector and computed styles can be incomplete; the screenshot is the primary evidence.'
+        : null,
       c.shot ? `screenshot: ${join(batchDir(b.id), c.shot)}` : null,
       // Said on the comment rather than once at the top, because a batch mixes the two
       // and a guardrail the reader has to remember four comments later is not a guardrail.
@@ -390,6 +395,8 @@ const mcp = new Server(
       'When you have fixed one, call resolve_comment with its id so the pin clears in the browser.',
       'A comment marked ❓ is a question, not a change request: answer it with reply (passing that',
       'comment id) and edit no files for it.',
+      'A comment marked as captured from a frozen frame describes a state that no longer exists —',
+      'trust its screenshot over its selector.',
       'Comments the user parked instead of dispatching live in .pinpoint/backlog.md — reach them',
       'with list_backlog, start_backlog_item, and finish_backlog_item, never by editing that file by hand.',
       'Use reply without an id to send a short status line back to the toolbar.',
@@ -696,6 +703,7 @@ async function handleDispatch(req, res) {
       rect: c.rect, component: c.component,
       styles: c.styles && typeof c.styles === 'object' ? c.styles : undefined,
       parents: Array.isArray(c.parents) ? c.parents.slice(0, 6) : undefined,
+      transient: c.transient === true || undefined,
       debug: sanitiseDebug(c.debug),
       question: c.question === true || undefined,
       shot,
@@ -782,6 +790,7 @@ async function handleBacklog(req, res) {
     `  - added: ${human()}`,
   ]
   if (c.question) block.push('  - kind: question')
+  if (c.transient) block.push('  - kind: transient state (frozen frame — see the shot)')
   if (payload.url) block.push(`  - url: ${payload.url}`)
   if (c.component) block.push(`  - component: \`${c.component}\``)
   if (c.selector) block.push(`  - selector: \`${c.selector}\``)

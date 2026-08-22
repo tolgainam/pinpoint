@@ -1,0 +1,1 @@
+{ "style": "new-york", "tailwind": { "css": "app/globals.css", "baseColor": "slate" }, "aliases": { "components": "@/components" } }

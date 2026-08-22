@@ -1,0 +1,1 @@
+{ "name": "fx-shadcn", "dependencies": { "tailwindcss": "^3.4.0", "class-variance-authority": "^0.7.0" } }

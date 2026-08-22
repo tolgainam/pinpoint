@@ -1,0 +1,1 @@
+{ "name": "fx-mantine", "dependencies": { "@mantine/core": "^7.5.0", "@mantine/hooks": "^7.5.0" } }

@@ -1,6 +1,6 @@
 # Pinpoint 0.2 — from dispatch tool to review cockpit
 
-> **Status: Phases A and B shipped (2026-08-22), Phase C next.** Scoped 2026-08-22 after a deliberate cut: 33 ideas
+> **Status: Phases A and B shipped, C half shipped (2026-08-22).** Scoped 2026-08-22 after a deliberate cut: 33 ideas
 > were generated and researched, 10 were dropped or parked with reasoning recorded in
 > [`.pinpoint/backlog.md`](.pinpoint/backlog.md) (the item-level source of truth), and
 > 15 survived. Mockups of the headline UX live at `.pinpoint/mockups.html`.
@@ -45,8 +45,13 @@ Phase B — richer capture (S, S, M) — **shipped**
     a CSS `:hover` open, and the permission was not worth it. See the backlog.
 
 Phase C — design-system layer (M, M)
-6. **Design-system awareness** — see the detection matrix below. Payloads speak
+6. ~~**Design-system awareness**~~ — see the detection matrix below. Payloads speak
    tokens, off-scale values get flagged, a guardrail line rides with every batch.
+   Shipped with a test suite: one fixture project per row of the matrix, plus the
+   hand-rolled and no-design-system cases. Two things the build changed: only spacing
+   properties are measured against the step (a 13px type size is not off a 4px grid —
+   type scales are ratios), and fixture directories are excluded from the walk, because
+   this repo's own fixtures made it read as a Tailwind v4 project.
 7. **Token chips** — chips show the element's current tokens; tapping opens pickers
    rendered from the project's own scale; picks dispatch as structured deltas. Phase 3
    (live preview in-page before dispatch) is where the dropped "live CSS trial" idea

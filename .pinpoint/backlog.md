@@ -15,29 +15,6 @@ on its own. Add `.pinpoint/` to `.gitignore` if you'd rather keep yours private.
 
 ## Open
 
-- [ ] **Design-system awareness** — speak the project's token vocabulary
-  - size: M
-  - why: fixes that invent raw px and hex values rot a design system, and "this
-    spacing is wrong" has a better answer when the payload can say "this is `p-6` on
-    a 4px scale". Off-scale values — a 13px font, a hex that's not in the palette —
-    are very often the actual bug, and spotting them requires knowing the scale.
-  - shape: two probes. Static (bridge): `tailwind.config.*` / `@theme` blocks,
-    `components.json` (shadcn), and `package.json` deps for MUI, Chakra, Mantine,
-    Ant Design, Bootstrap, DaisyUI. Runtime (extension): all CSS custom properties on
-    `:root` — the universal token source, covers styled-components/Emotion and
-    hand-rolled systems — plus component fingerprints (`data-slot`, `data-radix-*`,
-    `Mui*`, `ant-*`, `mantine-*`, `chakra-*`). Cached as a compact summary: spacing
-    scale, palette with token names, type scale, which library is in play. Tailwind +
-    shadcn are first-class; everything else rides the CSS-variable path. Full matrix
-    in PLAN-0.2.md. Every batch carries it, plus a guardrail line telling
-    Claude to fix within the scale and prefer class/variant changes over raw CSS.
-  - shape: the computed-styles item above then maps raw values to the nearest token
-    before dispatch (`padding: 24px` → `p-6`), and values that map to no token are
-    flagged as off-scale in the payload.
-  - note: library fingerprints (`data-slot`, `data-radix-*`, MUI class prefixes)
-    identify the component and its source file, which upgrades the scope dial — see
-    that item.
-
 - [ ] **Token chips in the composer** — annotate in the design system's own vocabulary
   - size: M
   - why: prose is the wrong medium for "make this p-8 instead of p-6". Once the
@@ -283,3 +260,27 @@ deleted — the record is the point.
     text lands on that pin card as the answer, without one it is still a passing toast.
   - note: no new chrome, as decided — the `?` is the entire switch. `!` for the backlog
     now rides the same mechanism; see that item.
+
+- [x] **Design-system awareness** — speak the project's token vocabulary
+  - size: M
+  - why: fixes that invent raw px and hex values rot a design system, and "this
+    spacing is wrong" has a better answer when the payload can say "this is `p-6` on
+    a 4px scale". Off-scale values — a 13px font, a hex that's not in the palette —
+    are very often the actual bug, and spotting them requires knowing the scale.
+  - shape: two probes. Static (bridge): `tailwind.config.*` / `@theme` blocks,
+    `components.json` (shadcn), and `package.json` deps for MUI, Chakra, Mantine,
+    Ant Design, Bootstrap, DaisyUI. Runtime (extension): all CSS custom properties on
+    `:root` — the universal token source, covers styled-components/Emotion and
+    hand-rolled systems — plus component fingerprints (`data-slot`, `data-radix-*`,
+    `Mui*`, `ant-*`, `mantine-*`, `chakra-*`). Cached as a compact summary: spacing
+    scale, palette with token names, type scale, which library is in play. Tailwind +
+    shadcn are first-class; everything else rides the CSS-variable path. Full matrix
+    in PLAN-0.2.md. Every batch carries it, plus a guardrail line telling
+    Claude to fix within the scale and prefer class/variant changes over raw CSS.
+  - shape: the computed-styles item above then maps raw values to the nearest token
+    before dispatch (`padding: 24px` → `p-6`), and values that map to no token are
+    flagged as off-scale in the payload.
+  - note: library fingerprints (`data-slot`, `data-radix-*`, MUI class prefixes)
+    identify the component and its source file, which upgrades the scope dial — see
+    that item.
+  - done: 2026-08-22 13:54 — 2026-08-22 — server/design-system.js probes the project once per session (never executing project code: configs are read as text and parsed loosely) and merges what the page reports about itself — every custom property resolved on :root, plus library fingerprints from the DOM. Every batch now carries a one-line summary and a guardrail, and each computed declaration is annotated with the token it matches or the reason it matches none. 46 tests cover one fixture project per row of the matrix plus the hand-rolled and no-design-system cases. Two corrections the build forced: only spacing properties are measured against the step, since a 13px type size is not off a 4px grid; and fixture directories are excluded from the walk, because this repo's own fixtures made it read as a Tailwind v4 project.

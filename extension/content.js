@@ -172,6 +172,70 @@
   /** The page's console/network ring buffer. */
   const probeDebug = () => ask({ kind: 'debug' }).then(r => (Array.isArray(r?.debug) ? r.debug : []))
 
+  // ---------------------------------------------------------------- design system
+
+  /**
+   * The runtime half of the design-system probe. The bridge reads the project's config
+   * files; this reads what the page actually resolved, which is the only path that reaches
+   * a theme built with styled-components, Emotion, vanilla-extract, or nothing at all.
+   *
+   * Custom properties are read off `:root` through getComputedStyle rather than out of
+   * the stylesheets: a cross-origin sheet refuses `.cssRules`, and a value set from JS is
+   * in no sheet at all. The computed style is where every source ends up regardless.
+   */
+  const MAX_VARS = 120
+
+  function cssVariables() {
+    const out = {}
+    try {
+      const style = getComputedStyle(document.documentElement)
+      for (let i = 0; i < style.length && Object.keys(out).length < MAX_VARS; i++) {
+        const name = style[i]
+        if (!name.startsWith('--')) continue
+        const value = style.getPropertyValue(name).trim()
+        // A whole gradient or font stack is not a token worth carrying into the payload.
+        if (value && value.length <= 80) out[name] = value
+      }
+    } catch { /* a page can do surprising things to its own root; a missing probe is fine */ }
+    return out
+  }
+
+  /**
+   * Which component library rendered this page, by the marks its components leave.
+   *
+   * Ids only — the names live on the bridge, so there is one table to correct when a
+   * library renames its marks rather than two that can disagree.
+   */
+  const DOM_MARKS = [
+    ['shadcn', '[data-slot]'],
+    ['radix', '[data-radix-popper-content-wrapper],[data-radix-scroll-area-viewport]'],
+    ['mui', '[class*="Mui"]'],
+    ['antd', '[class*="ant-"]'],
+    ['chakra', '[class*="chakra-"]'],
+    ['mantine', '[class*="mantine-"]'],
+  ]
+
+  /** Libraries that announce themselves in the variables rather than in the markup. */
+  const VAR_MARKS = [['bootstrap', '--bs-'], ['mantine', '--mantine-']]
+
+  function fingerprints(vars) {
+    const found = new Set()
+    for (const [id, selector] of DOM_MARKS) {
+      try { if (document.querySelector(selector)) found.add(id) } catch { /* skip */ }
+    }
+    const names = Object.keys(vars)
+    for (const [id, prefix] of VAR_MARKS) {
+      if (names.some(n => n.startsWith(prefix))) found.add(id)
+    }
+    return [...found]
+  }
+
+  /** Gathered once per dispatch: it describes the page, not any one element. */
+  function designSystem() {
+    const vars = cssVariables()
+    return { vars, fingerprints: fingerprints(vars) }
+  }
+
   // ---------------------------------------------------------------- computed style
 
   /**
@@ -1167,6 +1231,7 @@
       viewport: { w: innerWidth, h: innerHeight },
       dpr: devicePixelRatio,
       colorScheme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+      designSystem: designSystem(),
       comments: outgoing.map(c => ({
         note: c.note,
         selector: c.selector,

@@ -11,7 +11,8 @@
   },
   "scripts": {
     "server": "node server/pinpoint.js",
-    "demo": "node demo/serve.js"
+    "demo": "node demo/serve.js",
+    "test": "node --test \"test/**/*.test.js\""
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0"

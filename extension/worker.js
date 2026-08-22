@@ -36,9 +36,9 @@ async function health() {
   }
 }
 
-async function dispatch(payload) {
+async function post(path, payload) {
   try {
-    const r = await call('/dispatch', {
+    const r = await call(path, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -214,7 +214,8 @@ async function ensureInjected(tabId) {
 
 chrome.runtime.onMessage.addListener((msg, sender, respond) => {
   if (msg?.type === 'ping') { ensureStream(); health().then(respond); return true }
-  if (msg?.type === 'dispatch') { dispatch(msg.payload).then(respond); return true }
+  if (msg?.type === 'dispatch') { post('/dispatch', msg.payload).then(respond); return true }
+  if (msg?.type === 'backlog') { post('/backlog', msg.payload).then(respond); return true }
   if (msg?.type === 'capture') { capture().then(respond); return true }
   if (msg?.type === 'count') {
     const tabId = sender.tab?.id

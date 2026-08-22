@@ -86,6 +86,40 @@ Open your dev app on `http://localhost:…`, then click the Pinpoint icon in the
 When Claude fixes a comment it calls `resolve_comment`, and the pin turns green with a ✓
 and the one-line resolution. You never have to switch to the terminal to know it landed.
 
+### Pick the right element
+
+Clicking grabs whatever node is on top, which is often a span three levels below the
+thing you meant. The composer opens with a breadcrumb of that element's ancestors: press
+`↑` and `↓` to walk it, or click a level. The highlight, the selector, and the crop all
+follow, so walking up costs one keypress instead of a re-click.
+
+`↑`/`↓` are intercepted only while the note is still empty — once you start typing they
+belong to the textarea again, and the breadcrumb stays clickable.
+
+### Ask instead of fix
+
+Start a note with `?` and it dispatches as a question. The button turns violet, no files
+are touched, and Claude answers with `reply` — the answer lands on the pin card.
+
+There is no switch to find: the marker is the mode.
+
+### Park it for later
+
+Tick **backlog** in the composer and the comment is appended to `.pinpoint/backlog.md` in
+your project instead of being sent. Its pin goes grey, it never enters the dispatch queue,
+and it never expires. Screenshots land in `.pinpoint/shots/` (~20–80KB each — fifty items
+is a few MB in the repo).
+
+That file is meant to be committed and hand-edited; Pinpoint only appends to `## Open`
+and moves finished items to `## Done`, leaving everything else where you put it. Work
+through it with:
+
+```
+/pinpoint:backlog
+```
+
+Add `.pinpoint/` to `.gitignore` if you'd rather keep yours private.
+
 ### Two ways to receive comments
 
 **On demand** — works in any session, no flags:
@@ -136,6 +170,10 @@ stable class chain, then an `:nth-of-type` path. React component names come from
 **Queue** — `~/.claude/pinpoint/queue/<batch>/`, global rather than per-project so a
 dispatch is never stranded in the wrong repo. Resolved batches are pruned after 24h.
 
+**Backlog** — `<project>/.pinpoint/backlog.md`, deliberately somewhere else. The queue is
+a delivery buffer that expires; the backlog is a record that belongs to the repo and
+never does. Nothing prunes it.
+
 ### Security
 
 The bridge binds `127.0.0.1` only, and any page you visit can `fetch()` a localhost port —
@@ -155,6 +193,7 @@ Set `PINPOINT_TOKEN` to also require an `X-Pinpoint-Token` header.
 | `PINPOINT_TOKEN` | — | Shared secret for `/dispatch` |
 | `PINPOINT_RETAIN_HOURS` | `24` | How long resolved batches are kept |
 | `PINPOINT_MAX_BATCHES` | `200` | Hard ceiling on batches kept |
+| `PINPOINT_PROJECT_DIR` | cwd | Where `.pinpoint/backlog.md` and `shots/` live |
 
 ## Try it without a project
 

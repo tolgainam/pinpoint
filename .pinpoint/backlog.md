@@ -31,16 +31,23 @@ on its own. Add `.pinpoint/` to `.gitignore` if you'd rather keep yours private.
   - note: screenshots land in `.pinpoint/shots/`. ~20–80KB each, so fifty items is a
     few MB in the repo. Acceptable, but worth saying out loud in the README.
 
-- [ ] **Attach console errors and network failures** — automatically, per comment
+- [ ] **Selection depth control** — walk up the ancestor chain after clicking
   - size: S
-  - why: the biggest gap between Pinpoint and what a developer would paste by hand.
-    Pin a button that does nothing and Claude currently receives "this button does
-    nothing" with no stack trace. Half the time the answer is already in the console.
-  - shape: `probe.js` already runs at `document_start` in the MAIN world — hook
-    `console.error`, `window.onerror`, and `unhandledrejection` there, keep a small ring
-    buffer, and attach whatever landed in the last ~30s to each comment.
-  - open question: how much to send. A ring buffer of the last 20 entries, truncated,
-    is probably right — the whole console is noise.
+  - why: click-to-pin grabs whatever node is on top, which is often a span three
+    levels below the thing you meant. The "comment on the shared parent" answer to
+    multi-element and region select only holds if reaching that parent is effortless.
+  - shape: after clicking, `↑`/`↓` moves the highlight through the ancestor chain, a
+    breadcrumb shows the tag/component at each level, and the screenshot re-crops to
+    the final choice.
+
+- [ ] **Question mode** — ask about an element without requesting a change
+  - size: S
+  - why: not every pin is a change request — "why is this 3px off?", "which component
+    renders this?". Today every dispatch reads as "fix it", and the most common
+    complaint about coding agents is that they rush off and edit files.
+  - shape: no new UI — a note starting with `?` dispatches as a question. Answered
+    via `reply` onto the pin card; no code is touched.
+  - decided (2026-08-22): intent-based via a trigger keyword, not a composer switch.
 
 - [ ] **Capture element state beyond the screenshot** — computed styles and parent chain
   - size: S
@@ -49,6 +56,111 @@ on its own. Add `.pinpoint/` to `.gitignore` if you'd rather keep yours private.
   - shape: only the properties people actually comment on — box model, colours,
     typography, flex/grid — plus the tag/class chain up to a sensible ancestor. Not the
     full `getComputedStyle` dump, which is hundreds of properties of noise.
+
+- [ ] **Attach console errors and network failures** — when you ask for them
+  - size: S
+  - why: the biggest gap between Pinpoint and what a developer would paste by hand.
+    Pin a button that does nothing and Claude currently receives "this button does
+    nothing" with no stack trace. Half the time the answer is already in the console.
+  - shape: `probe.js` already runs at `document_start` in the MAIN world — hook
+    `console.error`, `window.onerror`, and `unhandledrejection` there and keep a small
+    ring buffer (last ~20 entries, truncated). Nothing attaches by default: a "debug
+    info" toggle in the composer attaches the buffer to that comment. Styling
+    comments stay lean; "this is broken" comments carry the trace.
+  - decided (2026-08-22): user-triggered on intent, not automatic on every dispatch.
+  - note: if behaviour bugs turn out to need it, the same toggle can later include
+    recent clicks and route changes (the dropped action-trail idea) — one intent,
+    one toggle.
+
+- [ ] **Design-system awareness** — speak the project's token vocabulary
+  - size: M
+  - why: fixes that invent raw px and hex values rot a design system, and "this
+    spacing is wrong" has a better answer when the payload can say "this is `p-6` on
+    a 4px scale". Off-scale values — a 13px font, a hex that's not in the palette —
+    are very often the actual bug, and spotting them requires knowing the scale.
+  - shape: two probes. Static (bridge): `tailwind.config.*` / `@theme` blocks,
+    `components.json` (shadcn), and `package.json` deps for MUI, Chakra, Mantine,
+    Ant Design, Bootstrap, DaisyUI. Runtime (extension): all CSS custom properties on
+    `:root` — the universal token source, covers styled-components/Emotion and
+    hand-rolled systems — plus component fingerprints (`data-slot`, `data-radix-*`,
+    `Mui*`, `ant-*`, `mantine-*`, `chakra-*`). Cached as a compact summary: spacing
+    scale, palette with token names, type scale, which library is in play. Tailwind +
+    shadcn are first-class; everything else rides the CSS-variable path. Full matrix
+    in PLAN-0.2.md. Every batch carries it, plus a guardrail line telling
+    Claude to fix within the scale and prefer class/variant changes over raw CSS.
+  - shape: the computed-styles item above then maps raw values to the nearest token
+    before dispatch (`padding: 24px` → `p-6`), and values that map to no token are
+    flagged as off-scale in the payload.
+  - note: library fingerprints (`data-slot`, `data-radix-*`, MUI class prefixes)
+    identify the component and its source file, which upgrades the scope dial — see
+    that item.
+
+- [ ] **Token chips in the composer** — annotate in the design system's own vocabulary
+  - size: M
+  - why: prose is the wrong medium for "make this p-8 instead of p-6". Once the
+    design-system probe exists, the composer can show what the element *is* and let
+    you pick what it *should be*, Figma-inspector style.
+  - shape, phase 1: when the composer opens, a row of chips shows the element's
+    current values mapped to tokens (`p-6`, `text-muted-foreground`, `text-sm`);
+    off-scale values render with a warning. You learn an element is off-system
+    before typing a word.
+  - shape, phase 2: tapping a chip opens a picker rendered from the project's own
+    scale — spacing as a visual ramp, colours as a swatch grid of the real palette,
+    type at actual sizes. Picking sends a structured delta (`padding: p-6 → p-8`)
+    alongside any prose.
+  - note: must degrade without a design system — chips fall back to raw computed
+    values with ± steppers.
+  - note: cap the pickers. Show the ramp around the current value plus recently
+    used, not the entire Tailwind palette.
+  - note: phase 3 — applying the picked value live in the page before dispatch —
+    is where "try it in the browser first" now lives; the standalone live CSS trial
+    item was dropped in its favour.
+
+- [ ] **Per-pin progress and results** — Claude's outcomes, rendered on the pin
+  - size: M
+  - why: a pin is silent between Dispatch and green. The terminal keeps the
+    transcript; the overlay should show outcomes — the difference between a dispatch
+    tool and a place you can actually work from.
+  - shape: extend the reply protocol to typed events the overlay renders on the pin
+    card — `working` (pin pulses, "editing card.tsx…"), `edited` (files touched plus
+    a diffstat), `resolved` (the existing one-liner, plus before/after once
+    re-capture ships). The SSE channel and `reply` plumbing already exist; this is
+    structure, not new transport.
+  - scope guard: not a chat client. If it isn't about a specific element, it doesn't
+    belong in the overlay — full output, permissions, and steering stay in the
+    terminal.
+
+- [ ] **Follow-up threads on resolved pins** — "still 2px off" without starting over
+  - size: S
+  - why: when a fix is almost right, the current move is a fresh comment with no
+    history. Round-tripping is the defining complaint about agent UI work; the second
+    round should carry the first round's context.
+  - shape: a reply box on green pins. Replying reopens the comment, takes a fresh
+    capture, and dispatches it linked to the original batch and resolution.
+  - note: the same reply box answers Claude's mid-fix questions ("move the portal to
+    body, or drop overflow-hidden?") — surfaced on the pin via per-pin progress
+    events, answered inline. Most terminal round-trips during UI work are exactly
+    these.
+  - note: capped, not a chat. After ~2 unresolved rounds on one pin, the card says
+    "take it to the terminal" and stops offering the reply box — long negotiation
+    belongs in the session, not the overlay.
+
+- [ ] **Transient-state capture** — pin hover menus, dropdowns, toasts, mid-animation
+  - size: M
+  - why: these states vanish the moment the mouse moves to click them, which makes
+    them the hardest visual bugs to report anywhere, not just here.
+  - shape: a hotkey that freezes the page (pause JS via the debugger API, or emulate
+    a focused page) while the state is live, then pin as normal inside the frozen
+    frame.
+
+- [ ] **Batch history on disk** — a markdown log, not a panel
+  - size: S
+  - why: the queue is on disk and pruned after 24h, but invisible. You can't see what
+    you asked for last week or what came of it.
+  - shape: the bridge appends each dispatched batch and its resolutions to
+    `.pinpoint/history.md` — browsable in the editor and in git, no overlay UI.
+  - decided (2026-08-22): reshaped from a toolbar panel/dock to a file. The overlay
+    stays uncrowded; per-pin progress already covers the live view.
 
 - [ ] **Re-capture after a fix, so Claude can verify its own work**
   - size: L
@@ -66,22 +178,6 @@ on its own. Add `.pinpoint/` to `.gitignore` if you'd rather keep yours private.
     granted. Fails often enough that the failure path has to be graceful.
   - sequencing: after the three items above. It's the most expensive thing here and it
     only pays off once there's something worth verifying.
-
-- [ ] **A panel of past batches and their resolutions**
-  - size: M
-  - why: the queue is on disk and pruned after 24h, but invisible. You can't see what
-    you asked for last week or what came of it.
-
-- [ ] **Voice notes in the composer**
-  - size: M
-  - why: people describe visual problems better out loud than in text, and it's faster
-    than typing for anything longer than a sentence.
-  - open question: transcribe locally, or ship the audio and let Claude handle it.
-
-- [ ] **Firefox support**
-  - size: L
-  - why: the overlay is portable; `captureVisibleTab` and the MV3 specifics are not.
-    Safari is a bigger job — different extension packaging entirely.
 
 - [ ] **Chrome Web Store listing**
   - size: M
@@ -106,6 +202,42 @@ on its own. Add `.pinpoint/` to `.gitignore` if you'd rather keep yours private.
 ## Considered and dropped
 
 Kept so they don't get re-litigated.
+
+- **Voice notes in the composer** — typing a one-line note is not the bottleneck, and
+  transcription (a local model, or shipping audio) is a heavy dependency for marginal
+  speed. Revisit only if notes regularly run longer than a sentence.
+
+- **Breakpoint sweep** — capturing the element at other widths means resizing the
+  visible tab (disruptive) or an offscreen copy that doesn't share app state
+  (dishonest). An L for a case that "put the viewport width prominently in the
+  payload" mostly covers — and that half ships with the computed-state item.
+
+- **Copy-edit mode** (pre-fill the element's text, dispatch an exact before/after) —
+  if you already know the exact replacement, a model round-trip is token waste: edit
+  the source, or put it in a plain note. The ordinary note flow covers fuzzy copy
+  work ("make this friendlier") already.
+
+- **Action trail** (recent clicks/inputs as steps-to-reproduce) — a whole
+  event-recording system for a case that's rare in a styling-first workflow. Folded
+  into the console-errors debug toggle as a possible later addition.
+
+- **Design reference attachment** — paste-only would have avoided any Figma auth,
+  but it's an M for "make it look like this picture", which pasting the picture into
+  the terminal already does.
+
+- **Scope dial per comment** — replaced by behaviour, not UI: default to the narrow
+  fix, and when the edit lands in a shared component Claude asks on the pin ("this
+  instance or everywhere?"). A toggle puts the risky choice one accidental click
+  away; a question makes it deliberate.
+
+- **Live CSS trial** (Claude proposes CSS, extension previews, user approves) —
+  DevTools already covers the experiment; the part worth keeping — carrying the
+  tuned value into code — ships as token chips phase 3. A standalone L would
+  duplicate it.
+
+- **Firefox support** — parked, not rejected: an L-sized port with zero current
+  users. `captureVisibleTab` and the MV3 specifics don't travel; Safari is a bigger
+  job still. Revisit when the Chrome version has traction.
 
 - **Multi-element comments** (shift-click to add elements to one comment) — commenting
   on the shared parent already covers this, and gives Claude a better framing: a

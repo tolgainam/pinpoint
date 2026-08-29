@@ -19,6 +19,8 @@ module.exports = {
         },
         surface: '#ffffff',
         canvas: '#f8fafc',
+        warm: '#ff7a45',
+        'pp-bg': '#1b1b1d',
       },
       spacing: {
         1: '4px',

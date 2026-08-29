@@ -3,7 +3,7 @@
    sheet would look the same, because that is exactly what the compiler emits.
 
    Values come from tailwind.config.js and nowhere else, with one deliberate exception:
-   the `p-[13px]` / `bg-rose-500` strip, which is the thing the probe should catch. */
+   the `p-[13px]` strip, which is the thing the probe should catch. */
 
 *, *::before, *::after { box-sizing: border-box; }
 body { margin: 0; font-family: ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
@@ -16,6 +16,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0
 .mx-auto { margin-left: auto; margin-right: auto; }
 .max-w-4xl { max-width: 896px; }
 .max-w-xl { max-width: 576px; }
+.w-1\/2 { width: 50%; }
 
 .flex { display: flex; }
 .grid { display: grid; }
@@ -59,13 +60,12 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0
 .bg-brand-50 { background-color: #eef2ff; }
 .bg-brand-600 { background-color: #4f46e5; }
 
-/* Not in the palette. Tailwind ships a `rose` scale the config never extended, so this
-   class is real Tailwind output and still an off-system colour for this project. */
-.bg-rose-500 { background-color: #f43f5e; }
+.bg-warm { background-color: #ff7a45; }
 
 .text-ink { color: #0f172a; }
 .text-ink-muted { color: #64748b; }
 .text-white { color: #ffffff; }
+.text-pp-bg { color: #1b1b1d; }
 .text-brand-100 { color: #e0e7ff; }
 .text-brand-600 { color: #4f46e5; }
 .text-brand-700 { color: #4338ca; }

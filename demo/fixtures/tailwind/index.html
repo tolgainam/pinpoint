@@ -60,12 +60,12 @@
     </article>
   </section>
 
-  <!-- Deliberately wrong, and wrong in the two ways the probe is meant to catch: a
-       padding nobody chose, and a colour that is in no palette. -->
-  <aside class="mt-10 rounded-md p-[13px] bg-rose-500 text-white text-sm" data-testid="tw-off-scale">
+  <!-- Still deliberately wrong in the way the probe is meant to catch: a padding
+       nobody chose. The colour is on the palette now. -->
+  <aside class="mt-10 w-1/2 rounded-md p-[13px] bg-warm text-pp-bg text-sm" data-testid="tw-off-scale">
     <strong class="font-semibold">Off the scale.</strong>
-    This strip is padded <code>13px</code> and painted <code>#f43f5e</code>. Neither value
-    exists in the config — pin it and both should come back flagged.
+    This strip is padded <code>13px</code>, a value that exists in no config — pin it
+    and the padding should come back flagged.
   </aside>
 
   <section class="mt-10 flex items-center justify-between p-6 rounded-lg bg-brand-600 text-white" data-testid="tw-cta-band">
@@ -73,7 +73,7 @@
       <h2 class="text-2xl font-semibold tracking-tight">Ship it in the vocabulary you wrote it in</h2>
       <p class="mt-2 text-sm text-brand-100">Fixes land as class changes, not as raw px.</p>
     </div>
-    <button class="px-6 py-3 rounded-lg bg-surface text-brand-700 text-base font-medium" data-testid="tw-cta-band-button">
+    <button class="px-6 py-3 rounded-lg bg-surface text-brand-700 text-base font-medium" data-testid="tw-cta-band-button" data-misbehave="kestrel">
       Get started
     </button>
   </section>
@@ -86,6 +86,8 @@
   <a href="/fixtures/shadcn/">shadcn</a>
   <a href="/fixtures/chakra/">Chakra</a>
 </nav>
+
+<script src="/misbehave.js"></script>
 
 </body>
 </html>

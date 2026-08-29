@@ -254,3 +254,33 @@ function lastBatchId() {
 function readBatch(id) {
   return JSON.parse(readFileSync(join(queueDir, id, 'batch.json'), 'utf8'))
 }
+
+// Last on purpose: the suite shares one queue and the tests above key off the newest
+// batch, so anything that dispatches another one has to come after them.
+test('what the page logged is stated once for the batch, not once per comment', async () => {
+  const res = await post('/dispatch', {
+    origin: 'http://localhost:3000',
+    url: 'http://localhost:3000/fixtures/tailwind/',
+    // Page-level: sent alongside the comments rather than inside any of them, because
+    // neither element caused it.
+    debug: [
+      { at: 120, kind: 'network', text: '404 POST /api/waitlist' },
+      { at: 121, kind: 'error', text: 'could not join the waitlist', stack: 'at HTMLButtonElement.<anonymous>' },
+    ],
+    comments: [
+      { note: 'padding is off the scale', selector: '[data-testid="tw-off-scale"]' },
+      { note: 'this band is too loud', selector: '[data-testid="tw-cta-band"]' },
+    ],
+  })
+  assert.equal(res.ok, true)
+
+  const brief = textOf(await call('list_comments'))
+  assert.match(brief, /the page logged 2 things/)
+  assert.match(brief, /404 POST \/api\/waitlist/)
+  assert.match(brief, /at HTMLButtonElement/)
+  // Once. Repeating it under each comment is what made it read as evidence about the
+  // element, which is the whole reason it moved off the comment in the first place.
+  assert.equal(brief.match(/404 POST \/api\/waitlist/g).length, 1)
+  // And it is above the comments, not buried among them.
+  assert.ok(brief.indexOf('404 POST') < brief.indexOf('padding is off the scale'))
+})

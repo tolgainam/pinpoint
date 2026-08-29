@@ -49,6 +49,30 @@ on its own. Add `.pinpoint/` to `.gitignore` if you'd rather keep yours private.
   - text: "Start free"
   - parents: div.hero-actions ‹ section.hero
 
+- [ ] **Hello** — /fixtures/tailwind/
+  - id: `bk-20260822-150436-c633`
+  - added: 2026-08-22 15:04
+  - url: http://localhost:3000/fixtures/tailwind/
+  - selector: `[data-testid="tw-cta-primary"]`
+  - text: "Start free"
+  - parents: div.mt-6.flex ‹ header.mx-auto.max-w-4xl
+
+- [ ] **check** — /fixtures/shadcn/
+  - id: `bk-20260822-220406-1fjs`
+  - added: 2026-08-22 22:04
+  - url: http://localhost:3000/fixtures/shadcn/
+  - selector: `[data-testid="sh-alert"]`
+  - text: "Billing failed. This alert is painted with --destructive. Its border, though, is a one-off #e11d48 that belongs to no to"
+  - parents: div.mx-auto.max-w-3xl
+
+- [ ] **asdasdasdasda** — /c-spec.html
+  - id: `bk-20260824-121614-w0sh`
+  - added: 2026-08-24 12:16
+  - url: http://127.0.0.1:8098/c-spec.html
+  - selector: `div.secbody > p`
+  - text: ""a bit more padding" is a negotiation. Click the element and Pinpoint reads what it actually computes, then offers the s"
+  - parents: div.secbody ‹ section ‹ main
+
 ---
 
 ## Considered and dropped

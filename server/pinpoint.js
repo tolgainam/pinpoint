@@ -58,12 +58,18 @@ mkdirSync(QUEUE, { recursive: true })
  *   classes?: string, role?: string, ariaLabel?: string, text?: string, html?: string,
  *   rect?: {x: number, y: number, w: number, h: number}, component?: string, shot?: string,
  *   styles?: Record<string, string>, parents?: string[], transient?: boolean,
- *   debug?: {at: number, kind: string, text: string, stack?: string, n?: number}[],
+ *   debug?: DebugEntry[],
  *   question?: boolean, status?: 'pending' | 'resolved', resolution?: string}} Comment
+ *
+ * @typedef {{at: number, kind: string, text: string, stack?: string, n?: number}} DebugEntry
  *
  * @typedef {{id: string, receivedAt: string, origin: string, url?: string, pathname?: string,
  *   title?: string, viewport?: {w: number, h: number}, dpr?: number, colorScheme?: string,
- *   pageShot?: string, comments: Comment[]}} Batch
+ *   debug?: DebugEntry[], pageShot?: string, comments: Comment[]}} Batch
+ *
+ * `debug` on the batch is what the page logged, sent once for all of it. `debug` on a
+ * comment only appears on backlog items, which are written to a file with no batch
+ * around them, and on batches from extension versions before the split.
  */
 
 // ---------------------------------------------------------------- queue
@@ -413,13 +419,16 @@ function styleFacts(styles, rect, index) {
 
 const DEBUG_MARK = { error: '×', warn: '⚠', exception: '✗', rejection: '✗', network: '↯', resource: '↯' }
 
-/** Pre-indented so it can drop straight into the fact list as one block. */
-function debugBlock(debug) {
+/**
+ * Pre-indented so it can drop straight into whatever encloses it — the batch preamble at
+ * two spaces, a backlog item's fact list at six.
+ */
+function debugBlock(debug, pad = '      ') {
   const lines = []
   for (const e of debug) {
     const times = e.n > 1 ? ` ×${e.n}` : ''
-    lines.push(`      ${DEBUG_MARK[e.kind] ?? '·'} ${e.kind}${times} · ${e.text}`)
-    if (e.stack) for (const l of String(e.stack).split('\n')) lines.push(`          ${l}`)
+    lines.push(`${pad}${DEBUG_MARK[e.kind] ?? '·'} ${e.kind}${times} · ${e.text}`)
+    if (e.stack) for (const l of String(e.stack).split('\n')) lines.push(`${pad}    ${l}`)
   }
   return lines.join('\n')
 }
@@ -471,6 +480,14 @@ function renderBatch(b) {
   const guardrail = guardrailLine(ds)
   const system = summary ? `\n\n**design system** — ${summary}\n${guardrail}` : ''
 
+  // Also said once, and for the same reason as the design system: these belong to the
+  // page, not to any comment on it. Hanging them off whichever element happened to be
+  // pinned would read as evidence about that element, which is exactly what they are
+  // not — the error may well have been thrown by a button nobody commented on.
+  const logged = b.debug?.length
+    ? `\n\n**the page logged ${b.debug.length} thing${b.debug.length === 1 ? '' : 's'}** while these comments were written, newest last. Page-level, so treat it as context for the batch rather than as a fact about any one element:\n${debugBlock(b.debug, '  ')}`
+    : ''
+
   const body = open.map(c => {
     const facts = [
       // Above the element facts on purpose: a picked value is the least ambiguous thing
@@ -502,7 +519,7 @@ function renderBatch(b) {
     return `\n### [${b.id}#${c.n}]${c.question ? ' ❓' : ''} ${c.note}\n${facts}${debug}`
   }).join('\n')
 
-  return `${head}${page}${system}\n${body}`
+  return `${head}${page}${system}${logged}\n${body}`
 }
 
 prune()
@@ -1032,6 +1049,7 @@ async function handleDispatch(req, res) {
     url: payload.url, pathname: payload.pathname, title: payload.title,
     viewport: payload.viewport, dpr: payload.dpr, colorScheme: payload.colorScheme,
     designSystem: sanitiseRuntimeDesign(payload.designSystem),
+    debug: sanitiseDebug(payload.debug),
     pageShot,
     comments,
   }

@@ -14,8 +14,25 @@
  *   - the host page's CSS can never reach us, and ours can never reach it (shadow root)
  */
 ;(async function () {
-  if (window.__PINPOINT__) return
-  window.__PINPOINT__ = true
+  /**
+   * Reloading an unpacked extension does not clear the isolated world it already has in
+   * every open tab. The previous copy of this script keeps running there — orphaned, its
+   * `chrome.runtime` dead, its overlay still painted — and the flag it set is still on
+   * `window`. A bare `if (flag) return` therefore made a freshly injected copy bail out
+   * and hand the page straight back to the corpse, which is what "I reloaded the
+   * extension and nothing changed" actually is.
+   *
+   * So the marker carries a liveness test instead of a boolean. `chrome.runtime.id` is
+   * captured in the *previous* copy's closure and reads undefined once that copy is
+   * orphaned, which is the only reliable way to tell "someone already owns this page"
+   * from "someone used to".
+   */
+  const prior = window.__PINPOINT__
+  if (prior?.alive?.()) return
+  try { prior?.unmount?.() } catch { /* it is going away either way */ }
+  // Versions before this one had nothing to unmount with, so evict their host by hand.
+  document.getElementById('pinpoint-host')?.remove()
+  window.__PINPOINT__ = { alive: () => !!chrome.runtime?.id, unmount: () => {} }
 
   const KEY = `pinpoint:${location.origin}${location.pathname}`
   const BAR_KEY = 'pinpoint:bar'
@@ -38,7 +55,10 @@
   let wantShot = true
   /** Same stickiness, but the toggle only exists when the page has actually logged
       something — see the composer. */
-  let wantDebug = false
+  // On by default, unlike the screenshot toggle. The ring only ever holds the page's own
+  // errors — everything other extensions log is invisible to it — so a non-empty one is
+  // almost always worth sending, and the ⚠ on the toolbar makes it easy to see and undo.
+  let wantDebug = true
 
   // ---------------------------------------------------------------- shadow root
 
@@ -745,14 +765,12 @@
     shotBox.type = 'checkbox'
     shotBox.checked = wantShot
     shotLabel.append(shotBox, document.createTextNode('screenshot'))
-    // Only mounted if the page has logged something. A toggle that is greyed out on
-    // every healthy page is worse than no toggle: it is chrome you learn to ignore.
-    const debugLabel = el('label', 'toggle')
-    const debugBox = document.createElement('input')
-    debugBox.type = 'checkbox'
-    debugBox.checked = wantDebug
-    const debugCount = document.createTextNode('debug')
-    debugLabel.append(debugBox, debugCount)
+    // The page's console and network failures are deliberately NOT here. They are a
+    // property of the page, not of the element: an error thrown by clicking one button
+    // would ride along with a comment pinned to another, which reads as evidence and is
+    // not. What the composer says about this element is what it measured on it — the
+    // chips, and the ⚠ on any value that is off the project's scale. The page's errors
+    // live on the toolbar, next to Dispatch, where a page-level fact belongs.
 
     const chips = el('div', 'chips')
     const picker = el('div', 'picker')
@@ -1113,12 +1131,12 @@
         if (!shot) say(`no screenshot — ${lastShotError}`, true)
       }
 
-      wantDebug = debugBox.checked
-      // Re-read rather than reusing what the composer saw: the interesting error is
-      // often the one thrown while the note was being typed.
-      const debug = debugBox.checked && debugLabel.isConnected ? await probeDebug() : []
-
       const { kind, text } = intentOf(note)
+
+      // A backlog item is written straight to a file with no batch around it, so it is
+      // the one comment that has nowhere else to carry the page's errors. Dispatched
+      // comments do not need them here — the batch sends them once, for all of them.
+      const debug = kind === 'backlog' && wantDebug ? await probeDebug() : []
       const comment = {
         ...captured,
         rect,
@@ -1150,15 +1168,6 @@
     crumbs.addEventListener('keydown', ev => {
       if (onArrow(ev)) return
       if (ev.key === 'Enter') { ev.preventDefault(); box.focus() }
-    })
-
-    // The buffer is read again at submit — this first look only decides whether the
-    // toggle is worth showing, and what to label it.
-    probeDebug().then(entries => {
-      if (!entries.length || !openCard || openCard !== card) return
-      debugCount.textContent = ` debug (${entries.length})`
-      debugLabel.title = entries.slice(0, 3).map(e => `${e.kind}: ${e.text}`).join('\n')
-      row.insertBefore(debugLabel, row.querySelector('.spacer'))
     })
 
     selectDepth(0)
@@ -1515,8 +1524,11 @@
     requestAnimationFrame(() => { queued = false; positionPins() })
   }
 
-  addEventListener('scroll', schedulePins, { passive: true, capture: true })
-  addEventListener('resize', () => { schedulePins(); clampBar() }, { passive: true })
+  // Named, because unmount has to be able to take them off again.
+  const onScroll = schedulePins
+  const onResize = () => { schedulePins(); clampBar() }
+  addEventListener('scroll', onScroll, { passive: true, capture: true })
+  addEventListener('resize', onResize, { passive: true })
 
   // ---------------------------------------------------------------- toolbar
 
@@ -1526,10 +1538,118 @@
   const modeBtn = el('button', 'mode', 'Comment')
   const count = el('div', 'count', '0')
   const sendBtn = el('button', 'primary', 'Dispatch')
-  const clearBtn = el('button', '', '✕')
-  clearBtn.title = 'Clear all pins on this page'
-  bar.append(grip, dot, modeBtn, count, sendBtn, clearBtn)
+  /**
+   * ✕ dismisses the overlay. It used to mean "clear all pins", which made it a dead
+   * button on every page that had none — you press the one control that looks like a
+   * close button and nothing at all happens. A ✕ on a floating widget means close; the
+   * destructive action needed its own affordance rather than the universal glyph.
+   */
+  const closeBtn = el('button', '', '✕')
+  closeBtn.title = 'Hide Pinpoint — the toolbar icon brings it back'
+  // Only mounted when there is something to clear, for the same reason the ⚠ is.
+  const clearBtn = el('button', 'danger', 'Clear')
+  clearBtn.title = 'Remove every pin on this page'
+  // Mounted only when the page has actually logged something, and sitting next to
+  // Dispatch because that is what it modifies: what the whole batch carries with it.
+  const bugBtn = el('button', 'bug', '')
+  bar.append(grip, dot, modeBtn, count, sendBtn, closeBtn)
   layer.append(bar)
+
+  // ---------------------------------------------------------------- page errors
+
+  /**
+   * What the page logged, as opposed to what an element looks like.
+   *
+   * This lives on the toolbar rather than in the composer because it is true of the
+   * page, not of any element on it: a fetch that 404s on click is not evidence about
+   * whichever button you happen to pin afterwards. So it is read once, shown once, and
+   * sent once — with the batch, not with a comment.
+   *
+   * The console you can already see is a poor substitute: almost everything in it comes
+   * from other extensions running in their own isolated worlds, which this cannot see
+   * and would not want to send. This list is only the page's own.
+   */
+  let pageDebug = []
+
+  const bugPanel = el('div', 'debug bug-panel')
+  const bugHead = el('div', 'debug-head')
+  const bugLabel = el('label', 'toggle')
+  const bugBox = document.createElement('input')
+  bugBox.type = 'checkbox'
+  const bugLabelText = document.createTextNode('send with the batch')
+  bugLabel.append(bugBox, bugLabelText)
+  const bugClose = el('button', 'debug-more', 'close')
+  const bugList = el('div', 'debug-list')
+  bugHead.append(bugLabel, el('span', 'spacer'), bugClose)
+  bugPanel.append(bugHead, bugList)
+  layer.append(bugPanel)
+
+  function paintBugList() {
+    bugList.textContent = ''
+    // Newest first: the thing that just went wrong is why the panel is open.
+    for (const e of pageDebug.slice().reverse()) {
+      const item = el('div', 'debug-entry')
+      item.append(el('span', `debug-kind ${e.kind}`, e.kind), el('span', 'debug-text', e.text))
+      if (e.n > 1) item.append(el('span', 'debug-n', `×${e.n}`))
+      bugList.append(item)
+      // Where it came from, on demand. The stack is the answer to "what generates this",
+      // and a `title` was never an answer: a tooltip is invisible until you already know
+      // to hover, which is the same as not being there.
+      if (!e.stack) continue
+      item.classList.add('has-stack')
+      const stack = el('div', 'debug-stack', e.stack)
+      bugList.append(stack)
+      item.onclick = () => {
+        item.classList.toggle('open', stack.classList.toggle('show'))
+        placeBugPanel()   // it just changed height, and it is anchored by its bottom edge
+      }
+    }
+  }
+
+  /**
+   * Above the bar, never below it — the bar already sits at the bottom of the viewport.
+   * Measured rather than assumed: the list grows when a stack is expanded, and `bottom`
+   * is no use here because everything else in the layer is positioned from the top.
+   */
+  function placeBugPanel() {
+    const r = bar.getBoundingClientRect()
+    const w = bugPanel.offsetWidth || 320
+    const h = bugPanel.offsetHeight || 140
+    bugPanel.style.left = `${Math.max(8, Math.min(r.left, innerWidth - w - 8))}px`
+    bugPanel.style.top = `${Math.max(8, r.top - h - 8)}px`
+  }
+
+  function closeBugPanel() {
+    bugPanel.classList.remove('show')
+  }
+
+  /** Re-read the ring and keep the button honest about what is in it. */
+  async function refreshDebug() {
+    pageDebug = await probeDebug()
+    const n = pageDebug.length
+    bugBtn.textContent = `⚠ ${n}`
+    bugBtn.title = n
+      ? `${n} error${n === 1 ? '' : 's'} logged by this page — click to read them`
+      : ''
+    if (n && !bugBtn.isConnected) bar.insertBefore(bugBtn, sendBtn)
+    if (!n) { bugBtn.remove(); closeBugPanel() }
+    if (bugPanel.classList.contains('show')) { paintBugList(); placeBugPanel() }
+  }
+
+  bugBtn.onclick = async () => {
+    if (bugPanel.classList.contains('show')) { closeBugPanel(); return }
+    await refreshDebug()
+    if (!pageDebug.length) return
+    bugBox.checked = wantDebug
+    paintBugList()
+    bugPanel.classList.add('show')
+    placeBugPanel()
+  }
+  bugClose.onclick = closeBugPanel
+  bugBox.onchange = () => {
+    wantDebug = bugBox.checked
+    chrome.storage.local.set({ [PREFS_KEY]: { wantShot, wantDebug } }).catch(() => {})
+  }
 
   const toast = el('div', 'toast')
   layer.append(toast)
@@ -1555,11 +1675,28 @@
     render()
   }
 
+  /**
+   * Hidden, not unloaded. The pins stay in storage and the probe keeps its ring buffer —
+   * this is "get out of my way while I look at the page", not "forget everything". The
+   * toolbar icon brings it back, which is also how it was summoned in the first place.
+   */
+  let hidden = false
+  function setHidden(on) {
+    hidden = on
+    if (on) { setMode(false); closeBugPanel() }
+    bar.style.display = on ? 'none' : ''
+    pins.style.display = on ? 'none' : ''
+  }
+
+  closeBtn.onclick = () => setHidden(true)
+
   // Drag by the grip only, so the buttons stay clickable.
   let drag = null
   grip.addEventListener('pointerdown', ev => {
     const r = bar.getBoundingClientRect()
     drag = { dx: ev.clientX - r.left, dy: ev.clientY - r.top }
+    // The panel is anchored to where the bar was, so it cannot come along for the ride.
+    closeBugPanel()
     grip.setPointerCapture(ev.pointerId)
   })
   grip.addEventListener('pointermove', ev => {
@@ -1597,6 +1734,9 @@
     sendBtn.disabled = pending === 0
     sendBtn.textContent = pending ? `Dispatch ${pending}` : 'Dispatch'
     renderPins()
+    // Clear only exists while there is something to clear.
+    if (comments.length && !clearBtn.isConnected) bar.insertBefore(clearBtn, closeBtn)
+    if (!comments.length) clearBtn.remove()
     // Mirror the count onto the toolbar icon, so a tab you scrolled away from still shows it.
     chrome.runtime.sendMessage({ type: 'count', n: pending }).catch(() => {})
   }
@@ -1633,6 +1773,10 @@
       dpr: devicePixelRatio,
       colorScheme: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
       designSystem: designSystem(),
+      // Once for the batch, not once per comment: the page logged these, not the
+      // elements. Re-read now — the interesting error is often the last one, thrown
+      // while the notes were being written.
+      debug: wantDebug ? await probeDebug() : undefined,
       comments: outgoing.map(c => ({
         note: c.note,
         selector: c.selector,
@@ -1845,21 +1989,44 @@
     // ping-content is how the worker checks whether this page already has us, before
     // it decides to inject. It must answer, or the worker injects a second copy.
     if (msg?.type === 'ping-content') { respond({ ok: true }); return false }
-    if (msg?.type === 'toggle') { setMode(!mode); respond({ ok: true, mode }); return false }
+    // Un-hide first: toggling comment mode on an overlay that is not on screen looks
+    // exactly like the icon doing nothing.
+    if (msg?.type === 'toggle') {
+      if (hidden) setHidden(false)
+      else setMode(!mode)
+      respond({ ok: true, mode })
+      return false
+    }
     if (msg?.type === 'freeze') { freezeFrame(); respond({ ok: true }); return false }
     if (msg?.type === 'bridge-event') { onBridgeEvent(msg.event); respond({ ok: true }); return false }
     return false
   })
 
-  addEventListener('keydown', ev => {
+  function onKeydown(ev) {
     if (ev.key !== 'Escape') return
     if (openCard) { closeCard(); return }
     if (frame) { releaseFrame(); setMode(false); return }
     if (mode) setMode(false)
-  }, true)
+  }
+  addEventListener('keydown', onKeydown, true)
+
+  /**
+   * Everything this script put outside its own shadow root. The next copy of the script
+   * calls this before it mounts, so a reloaded extension replaces the overlay instead of
+   * stacking a second one on top of a dead one.
+   */
+  window.__PINPOINT__.unmount = () => {
+    removeEventListener('scroll', onScroll, { capture: true })
+    removeEventListener('resize', onResize)
+    removeEventListener('keydown', onKeydown, true)
+    host.remove()
+  }
 
   await load()
   render()
   ping()
-  setInterval(ping, 5000)
+  refreshDebug()
+  // Same beat as the health ping. The ring only changes when the page does something,
+  // and five seconds is soon enough for a button you are about to go and click.
+  setInterval(() => { ping(); refreshDebug() }, 5000)
 })()

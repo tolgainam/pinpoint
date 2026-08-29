@@ -33,7 +33,7 @@
       <input data-slot="input" class="input flex-1 rounded-md border bg-background px-3 py-2 text-sm"
              placeholder="name@company.com" data-testid="sh-input">
       <button data-slot="button" class="btn rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
-              data-testid="sh-invite">Send invite</button>
+              data-testid="sh-invite" data-misbehave="shadcn">Send invite</button>
     </div>
     <div data-slot="card-footer" class="border-t px-6 py-4 flex items-center justify-between">
       <span class="text-sm text-muted-foreground">Seats used</span>
@@ -75,6 +75,8 @@
   <a href="/fixtures/shadcn/" aria-current="page">shadcn</a>
   <a href="/fixtures/chakra/">Chakra</a>
 </nav>
+
+<script src="/misbehave.js"></script>
 
 </body>
 </html>

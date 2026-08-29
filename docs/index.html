@@ -10,93 +10,121 @@
 <meta property="og:type" content="website">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>◈</text></svg>">
 <style>
+  /*
+   * Swiss stock: white paper, near-black ink, one accent, nothing else.
+   *
+   * The drawing-office pass before this one leaned on a graph-paper ground and a
+   * schematic blue to say "engineering document". Both were doing the job that white
+   * space and a hard grid do better, and the grid competed with every hairline on the
+   * page. What is left is the International Style skeleton — flush-left type on a
+   * 120px rail, one rule weight for structure and one for division — carrying the
+   * drawing-office content unchanged.
+   *
+   * The accent is Claude's orange darkened to #c0552f: same hue and saturation as the
+   * brand #d97757, lightness dropped 59% -> 46% so it clears 4.5:1 on white and can be
+   * used at 12px. The brand value itself is only 3.12:1 and stays where it belongs —
+   * inside the drawings of the overlay, on their own dark panels.
+   */
   :root {
-    --paper:     #fbfaf7;
-    --paper-2:   #f4f2ec;
+    --paper:     #ffffff;
+    --paper-2:   #f4f5f7;
     --card:      #ffffff;
-    --ink:       #17181b;
-    --ink-2:     #4a4d55;
-    --ink-3:     #83878f;
-    --rule:      #e2ded4;
-    --rule-2:    #cfcabb;
-    --accent:    #c25a34;
-    --accent-sf: #fdf1eb;
-    --green:     #2e7d55;
-    --blue:      #2c5f9e;
+    --ink:       #0a0a0a;
+    --ink-2:     #5c5c5c;
+    --ink-3:     #767676;
+    --rule:      #e0e0e0;
+    --rule-2:    #b9bec5;
+    --accent:    #c0552f;
+    --accent-sf: #fbeee7;
+    --green:     #0d7048;
+    --blue:      #1547b8;
     --mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
-    --sans: ui-sans-serif, -apple-system, "Segoe UI", Inter, system-ui, sans-serif;
+    --sans: "Helvetica Neue", Helvetica, Inter, ui-sans-serif, -apple-system, system-ui, sans-serif;
   }
 
   * { box-sizing: border-box; }
 
   html { scroll-behavior: smooth; }
 
+  /* Sans is now the page voice and mono is the data voice: prose, headings and chrome
+     are Helvetica, and the monospace face is reserved for the things that are literally
+     code — payloads, selectors, commands, the ASCII drawings. */
   body {
     margin: 0;
     background: var(--paper);
     color: var(--ink);
-    font-family: var(--mono);
-    font-size: 14px;
-    line-height: 1.65;
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
     -webkit-font-smoothing: antialiased;
-    /* A faint grid, the way a schematic sits on graph paper. */
-    background-image:
-      linear-gradient(var(--rule) 1px, transparent 1px),
-      linear-gradient(90deg, var(--rule) 1px, transparent 1px);
-    background-size: 64px 64px;
-    background-position: -1px -1px;
+    counter-reset: sec;
   }
 
   .wrap {
-    max-width: 940px;
+    max-width: 1080px;
     margin: 0 auto;
-    padding: 0 24px;
+    padding: 0 40px;
   }
 
-  /* Content sits on solid paper so the grid reads as margin, not noise. */
+  /* One measure for the whole page. Sections keep their vertical padding and inherit
+     this gutter, so every rule on the page starts and stops on the same two lines. */
   main {
     background: var(--paper);
-    border-left: 1px solid var(--rule);
-    border-right: 1px solid var(--rule);
-    max-width: 940px;
+    max-width: 1080px;
     margin: 0 auto;
+    padding: 0 40px;
   }
 
-  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgb(194 90 52 / 0.3); }
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgb(192 85 47 / 0.32); }
   a:hover { border-bottom-color: var(--accent); }
 
-  h1, h2, h3 { font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+  h1, h2, h3 { font-weight: 700; letter-spacing: -0.02em; margin: 0; }
 
   code, pre { font-family: var(--mono); }
 
   /* ---------------------------------------------------------------- nav */
 
+  /* Baseline-aligned, and closed with a full-weight rule rather than a hairline: this is
+     the one line on the page that separates the site from the document. */
   nav {
     position: sticky;
     top: 0;
     z-index: 20;
     display: flex;
-    align-items: center;
-    gap: 22px;
-    padding: 12px 24px;
-    background: rgb(251 250 247 / 0.88);
+    align-items: baseline;
+    gap: 20px;
+    padding: 20px 0 14px;
+    background: rgb(255 255 255 / 0.92);
     backdrop-filter: blur(10px);
-    border-bottom: 1px solid var(--rule);
+    border-bottom: 1px solid var(--ink);
     font-size: 13px;
   }
   nav .mark { color: var(--accent); font-size: 15px; }
-  nav .name { font-weight: 600; letter-spacing: 0.04em; }
-  nav .links { display: flex; gap: 18px; margin-left: auto; }
+  nav .name { font-weight: 700; letter-spacing: 0.1em; }
+  nav .links { display: flex; gap: 22px; margin-left: auto; }
   nav a { color: var(--ink-2); border: none; }
-  nav a:hover { color: var(--accent); }
+  nav a:hover { color: var(--ink); }
 
   /* ---------------------------------------------------------------- hero */
 
+  /* Flush left, and the type leads. The panes are evidence for the claim in the
+     headline, so they follow it instead of introducing it — DOM order is unchanged and
+     the column order does the moving. */
   header.hero {
-    padding: 72px 24px 56px;
+    padding: 88px 0 72px;
     border-bottom: 1px solid var(--rule);
-    text-align: center;
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
   }
+  header.hero > .kicker   { order: 1; margin-bottom: 22px; }
+  header.hero > .tagline  { order: 2; }
+  header.hero > .lede     { order: 3; }
+  header.hero > .flow     { order: 4; }
+  header.hero > .whats-new{ order: 5; }
+  header.hero > .badges   { order: 6; }
+  header.hero > .hero-art { order: 7; }
 
   /* The wordmark and the flow diagram are pre elements but must not pick up the
      card treatment the code blocks get. */
@@ -120,8 +148,8 @@
     grid-template-columns: 1fr auto 1fr;
     align-items: stretch;
     gap: 0;
-    max-width: 760px;
-    margin: 0 auto 38px;
+    max-width: 100%;
+    margin: 56px 0 0;
     text-align: left;
   }
 
@@ -162,7 +190,7 @@
     font-weight: 600;
     line-height: 19px;
     text-align: center;
-    box-shadow: 0 1px 4px rgb(194 90 52 / 0.4);
+    box-shadow: none;
   }
   .mock-title { font-size: 12.5px; color: var(--ink); margin-bottom: 8px; }
   .mock-line {
@@ -254,63 +282,99 @@
   .flow b { color: var(--accent); font-weight: inherit; }
   .flow i { color: var(--ink-2); font-style: normal; }
 
+  /* 76px is the top of the scale the rest of the page steps down from by root-2:
+     76 / 54 / 38 / 27 / 19 / 13. */
   .tagline {
     font-family: var(--sans);
-    font-size: 25px;
-    line-height: 1.28;
-    letter-spacing: -0.022em;
-    max-width: 26ch;
-    margin: 0 auto;
-    font-weight: 600;
+    font-size: clamp(40px, 7.2vw, 76px);
+    line-height: 0.98;
+    letter-spacing: -0.035em;
+    max-width: 20ch;
+    margin: 0;
+    font-weight: 700;
   }
   .tagline em { font-style: normal; color: var(--accent); }
 
   .lede {
-    margin: 16px auto 0;
-    max-width: 60ch;
+    margin: 34px 0 0;
+    max-width: 46ch;
     color: var(--ink-2);
     font-family: var(--sans);
-    font-size: 15.5px;
-    line-height: 1.6;
+    font-size: 19px;
+    line-height: 1.5;
   }
 
+  /* Set as a caption line rather than as chips. Five outlined boxes in a row read as
+     five buttons; the same words in tracked-out mono read as a specification. */
   .badges {
     display: flex;
-    justify-content: center;
     flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 26px;
+    gap: 18px;
+    margin-top: 44px;
+    font-family: var(--mono);
     font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
     color: var(--ink-3);
   }
   .badge {
-    padding: 3px 10px;
-    border: 1px solid var(--rule-2);
-    border-radius: 3px;
-    background: var(--card);
+    padding: 0;
+    border: none;
+    background: none;
   }
 
   /* ---------------------------------------------------------------- sections */
 
-  section { padding: 56px 24px; border-bottom: 1px solid var(--rule); }
+  /* The rail. Every section is a two-column grid: a 120px column holding nothing but
+     the number and its label, and the measure holding everything else. The markup did
+     not have to change for this — the kicker is already the first child of every
+     section, so it is pinned to the rail and its siblings are pushed to column two. */
+  section {
+    /* Cleared past the sticky bar, so an anchor jump does not land under it. */
+    scroll-margin-top: 76px;
+    padding: 80px 0;
+    border-bottom: 1px solid var(--rule);
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 0 40px;
+    align-items: start;
+    counter-increment: sec;
+  }
+  section > *          { grid-column: 2; min-width: 0; }
+  section > .kicker    { grid-column: 1; grid-row: 1; }
 
   .kicker {
-    font-size: 11px;
-    letter-spacing: 0.16em;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.45;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--ink-3);
-    margin-bottom: 10px;
+    margin: 0;
   }
-  .kicker::before { content: "// "; color: var(--rule-2); }
+  section > .kicker::before {
+    content: counter(sec, decimal-leading-zero);
+    display: block;
+    margin-bottom: 7px;
+    color: var(--accent);
+  }
+  /* The hero's kicker is a standing label, not a section number. */
+  header .kicker::before { content: none; }
 
-  h2 { font-size: 22px; margin-bottom: 10px; letter-spacing: -0.02em; }
+  h2 {
+    font-size: clamp(27px, 3.6vw, 38px);
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+    margin: 0 0 22px;
+    max-width: 24ch;
+  }
 
   .prose {
     font-family: var(--sans);
-    font-size: 15.5px;
-    line-height: 1.65;
+    font-size: 17px;
+    line-height: 1.6;
     color: var(--ink-2);
-    max-width: 68ch;
+    max-width: 62ch;
   }
   .prose strong { color: var(--ink); font-weight: 600; }
   .prose p { margin: 0 0 14px; }
@@ -391,7 +455,7 @@
     line-height: 24px;
     text-align: center;
   }
-  .step h3 { font-size: 15px; margin-bottom: 4px; }
+  .step h3 { font-size: 19px; margin-bottom: 6px; letter-spacing: -0.02em; }
   .step .note { font-family: var(--sans); font-size: 14px; color: var(--ink-2); }
 
   /* ---------------------------------------------------------------- diagram */
@@ -462,7 +526,7 @@
     border: 1px solid var(--rule-2);
     border-radius: 4px;
   }
-  .panel h3 { font-size: 14px; margin-bottom: 8px; }
+  .panel h3 { font-size: 16px; margin-bottom: 8px; letter-spacing: -0.015em; }
   .panel h3 .tag {
     font-size: 10px;
     letter-spacing: 0.08em;
@@ -549,26 +613,97 @@
   /* ---------------------------------------------------------------- footer */
 
   footer {
-    padding: 34px 24px 48px;
-    text-align: center;
+    padding: 40px 0 64px;
+    text-align: left;
     color: var(--ink-3);
-    font-size: 12.5px;
+    font-family: var(--mono);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
   }
-  footer .rule { color: var(--rule-2); white-space: pre; display: block; margin-bottom: 18px; overflow: hidden; }
+  /* The drawn rule was standing in for a border. Use the border. */
+  footer .rule { display: none; }
+  footer span + span { margin-left: 26px; }
   footer a { color: var(--ink-2); }
 
   @media (max-width: 720px) {
     .two { grid-template-columns: 1fr; }
-    .tagline { font-size: 21px; }
     nav .links { gap: 14px; }
-    section { padding: 42px 20px; }
-    header.hero { padding: 48px 20px 44px; }
+    main { padding: 0 20px; }
+    header.hero { padding: 52px 0 48px; }
+
+    /* The rail folds into a single line above the heading. */
+    section { padding: 48px 0; grid-template-columns: 1fr; gap: 0; }
+    section > *, section > .kicker { grid-column: 1; }
+    section > .kicker { margin-bottom: 18px; }
+    section > .kicker::before { display: inline; margin: 0 10px 0 0; }
 
     /* Stack the panes and turn the arrow to point down. */
     .hero-art { grid-template-columns: 1fr; }
     .arrow { flex-direction: row; min-width: 0; padding: 12px 0; }
     .arrow-line { width: 60px; }
     .flow { font-size: 10px; }
+  }
+
+  /* Eight links do not fit a phone. Scroll the row rather than wrapping it into a second
+     line that pushes the page content down behind a sticky bar. */
+  @media (max-width: 720px) {
+    nav { gap: 12px; }
+    nav .links {
+      overflow-x: auto;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+      white-space: nowrap;
+    }
+    nav .links::-webkit-scrollbar { display: none; }
+    nav a { flex: none; }
+  }
+
+  /* ---------------------------------------------------------------- low-fi pass */
+
+  /*
+   * Squared, flattened, hairlined. Rounded corners and blurred drop shadows are the
+   * default look of everything; a schematic has neither. Scoped to page chrome by name —
+   * the .u-* drawings keep their real radii and shadows, because those are measurements
+   * of the actual overlay rather than taste.
+   */
+  main, .pane, .badge, .payload, .panel, .index a, .ui, table, pre, blockquote { border-radius: 0 !important; }
+  .pane, .payload, .panel, .index a, .ui { box-shadow: none; }
+
+  /* Section numbers as square tags rather than circular badges. */
+  .step::before { border-radius: 0 !important; }
+
+  /* Headings in the sans face, heavy and tightly tracked. The body is proportional now,
+     so the mono face is free to mean "this is code" everywhere it still appears. */
+  h1, h2, h3 { font-family: var(--sans); font-weight: 700; }
+
+  /* Links: underlined by weight rather than tinted, so the accent stays rare enough to
+     mean something when it does appear. */
+  a { border-bottom-width: 1px; }
+
+  /* Cards sit on the stock with a single hairline and a hard corner tick, the way a
+     drawing frame does. */
+  .panel, .index a, .payload { border-color: var(--rule-2); }
+
+  /* Active nav item. The bar is identical on both pages, so this is the only thing that
+     says where you are. */
+  nav a[aria-current="page"],
+  nav a[aria-current="true"] {
+    color: var(--ink);
+    font-weight: 600;
+    box-shadow: inset 0 -2px 0 var(--accent);
+  }
+
+  /* ---------------------------------------------------------------- product accent */
+
+  /* The hero panes are a picture of the overlay, not page furniture. They keep the
+     product's own terracotta so that every depiction of Pinpoint on this site agrees
+     with every other one — and so the blue stays the page's voice alone. */
+  .hero-art { --accent: #d97757; --accent-sf: #fdf1ea; }
+
+  .whats-new {
+    margin: 22px 0 0;
+    font-size: 13px;
   }
 </style>
 </head>
@@ -580,6 +715,8 @@
   <span class="mark">◈</span>
   <span class="name">PINPOINT</span>
   <span class="links">
+    <a href="./index.html" aria-current="page">Overview</a>
+    <a href="./features.html">Features</a>
     <a href="#install">Install</a>
     <a href="#arrives">Payload</a>
     <a href="#how">How</a>
@@ -628,6 +765,10 @@
   </p>
 
   <pre class="ascii flow" aria-hidden="true">  <b>◈</b> <i>click the element</i>  ──▶  <i>type what's wrong</i>  ──▶  <b>dispatch</b>  ──▶  <i>it gets fixed</i>  ──▶  <b>✓</b></pre>
+
+  <p class="whats-new">
+    <a href="./features.html">See everything 0.2 added&nbsp;→</a>
+  </p>
 
   <div class="badges">
     <span class="badge">Claude Code plugin</span>

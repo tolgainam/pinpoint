@@ -1,0 +1,1581 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pinpoint — features</title>
+<meta name="description" content="Picked values in your project's own token vocabulary, questions and backlog, freeze frame, page errors, and a loop that reports progress and verifies its own fixes.">
+<meta property="og:title" content="Pinpoint — features">
+<meta property="og:description" content="Stop describing the fix. Hand it over.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>◈</text></svg>">
+<style>
+  /*
+   * Swiss stock: white paper, near-black ink, one accent, nothing else.
+   *
+   * The drawing-office pass before this one leaned on a graph-paper ground and a
+   * schematic blue to say "engineering document". Both were doing the job that white
+   * space and a hard grid do better, and the grid competed with every hairline on the
+   * page. What is left is the International Style skeleton — flush-left type on a
+   * 120px rail, one rule weight for structure and one for division — carrying the
+   * drawing-office content unchanged.
+   *
+   * The accent is Claude's orange darkened to #c0552f: same hue and saturation as the
+   * brand #d97757, lightness dropped 59% -> 46% so it clears 4.5:1 on white and can be
+   * used at 12px. The brand value itself is only 3.12:1 and stays where it belongs —
+   * inside the drawings of the overlay, on their own dark panels.
+   */
+  :root {
+    --paper:     #ffffff;
+    --paper-2:   #f4f5f7;
+    --card:      #ffffff;
+    --ink:       #0a0a0a;
+    --ink-2:     #5c5c5c;
+    --ink-3:     #767676;
+    --rule:      #e0e0e0;
+    --rule-2:    #b9bec5;
+    --accent:    #c0552f;
+    --accent-sf: #fbeee7;
+    --green:     #0d7048;
+    --blue:      #1547b8;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: "Helvetica Neue", Helvetica, Inter, ui-sans-serif, -apple-system, system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  /* Sans is now the page voice and mono is the data voice: prose, headings and chrome
+     are Helvetica, and the monospace face is reserved for the things that are literally
+     code — payloads, selectors, commands, the ASCII drawings. */
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    counter-reset: sec -1;
+  }
+
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 40px;
+  }
+
+  /* One measure for the whole page. Sections keep their vertical padding and inherit
+     this gutter, so every rule on the page starts and stops on the same two lines. */
+  main {
+    background: var(--paper);
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 40px;
+  }
+
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgb(192 85 47 / 0.32); }
+  a:hover { border-bottom-color: var(--accent); }
+
+  h1, h2, h3 { font-weight: 700; letter-spacing: -0.02em; margin: 0; }
+
+  code, pre { font-family: var(--mono); }
+
+  /* ---------------------------------------------------------------- nav */
+
+  /* Baseline-aligned, and closed with a full-weight rule rather than a hairline: this is
+     the one line on the page that separates the site from the document. */
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: baseline;
+    gap: 20px;
+    padding: 20px 0 14px;
+    background: rgb(255 255 255 / 0.92);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--ink);
+    font-size: 13px;
+  }
+  nav .mark { color: var(--accent); font-size: 15px; }
+  nav .name { font-weight: 700; letter-spacing: 0.1em; }
+  nav .links { display: flex; gap: 22px; margin-left: auto; }
+  nav a { color: var(--ink-2); border: none; }
+  nav a:hover { color: var(--ink); }
+
+  /* ---------------------------------------------------------------- hero */
+
+  /* Flush left, and the type leads. The panes are evidence for the claim in the
+     headline, so they follow it instead of introducing it — DOM order is unchanged and
+     the column order does the moving. */
+  header.hero {
+    padding: 88px 0 72px;
+    border-bottom: 1px solid var(--rule);
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  header.hero > .kicker   { order: 1; margin-bottom: 22px; }
+  header.hero > .tagline  { order: 2; }
+  header.hero > .lede     { order: 3; }
+  header.hero > .flow     { order: 4; }
+  header.hero > .whats-new{ order: 5; }
+  header.hero > .badges   { order: 6; }
+  header.hero > .hero-art { order: 7; }
+
+  /* The wordmark and the flow diagram are pre elements but must not pick up the
+     card treatment the code blocks get. */
+  .ascii {
+    display: block;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    border-radius: 0;
+    white-space: pre;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  /* The two panes are drawn with borders rather than box-drawing characters. Literal
+     ASCII boxes depend on the reader's monospace font keeping │ glyphs flush across
+     lines, and a box that renders as dashes is worse than no box at all. */
+  .hero-art {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: stretch;
+    gap: 0;
+    max-width: 760px;
+    margin: 0 auto 38px;
+    text-align: left;
+  }
+
+  .pane {
+    border: 1px solid var(--rule-2);
+    border-radius: 5px;
+    background: var(--card);
+    overflow: hidden;
+  }
+  .pane-bar {
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--rule);
+    background: var(--paper-2);
+    font-size: 11.5px;
+    color: var(--ink-3);
+  }
+  .pane-body { padding: 16px 14px; min-height: 132px; }
+
+  /* left pane — the element you clicked */
+
+  .mock {
+    position: relative;
+    padding: 12px 14px;
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    background: var(--paper-2);
+  }
+  .pin {
+    position: absolute;
+    top: -9px;
+    left: -9px;
+    width: 19px;
+    height: 19px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 10.5px;
+    font-weight: 600;
+    line-height: 19px;
+    text-align: center;
+    box-shadow: none;
+  }
+  .mock-title { font-size: 12.5px; color: var(--ink); margin-bottom: 8px; }
+  .mock-line {
+    height: 5px;
+    border-radius: 3px;
+    background: var(--rule);
+    margin-bottom: 5px;
+  }
+  .mock-line.short { width: 62%; margin-bottom: 0; }
+
+  .bubble {
+    position: relative;
+    margin: 16px 0 0 18px;
+    padding: 7px 11px;
+    border: 1px solid var(--accent);
+    border-radius: 5px;
+    background: var(--accent-sf);
+    color: var(--accent);
+    font-size: 11.5px;
+  }
+  .bubble::before {
+    content: "";
+    position: absolute;
+    top: -5px;
+    left: 13px;
+    width: 8px;
+    height: 8px;
+    background: var(--accent-sf);
+    border-left: 1px solid var(--accent);
+    border-top: 1px solid var(--accent);
+    transform: rotate(45deg);
+  }
+
+  /* the arrow between them */
+
+  .arrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 0 14px;
+    min-width: 118px;
+  }
+  .arrow-label { font-size: 11px; color: var(--accent); }
+  .arrow-line {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: 1px;
+    background: var(--accent);
+  }
+  .arrow-line::after {
+    content: "";
+    position: absolute;
+    right: -1px;
+    top: -3px;
+    border-left: 6px solid var(--accent);
+    border-top: 3.5px solid transparent;
+    border-bottom: 3.5px solid transparent;
+  }
+
+  /* right pane — what landed in the session */
+
+  .term .row {
+    font-size: 11.5px;
+    line-height: 1.75;
+    color: var(--ink-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .term .key { color: var(--ink-3); }
+  .term .val { color: var(--blue); }
+  .term .done {
+    margin-top: 10px;
+    padding-top: 9px;
+    border-top: 1px dashed var(--rule);
+    color: var(--green);
+  }
+  .term .tick { font-weight: 600; }
+
+  .flow {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--ink-3);
+    margin-top: 30px;
+  }
+  .flow b { color: var(--accent); font-weight: inherit; }
+  .flow i { color: var(--ink-2); font-style: normal; }
+
+  /* 76px is the top of the scale the rest of the page steps down from by root-2:
+     76 / 54 / 38 / 27 / 19 / 13. */
+  .tagline {
+    font-family: var(--sans);
+    font-size: clamp(40px, 7.2vw, 76px);
+    line-height: 0.98;
+    letter-spacing: -0.035em;
+    max-width: 20ch;
+    margin: 0;
+    font-weight: 700;
+  }
+  .tagline em { font-style: normal; color: var(--accent); }
+
+  .lede {
+    margin: 34px 0 0;
+    max-width: 46ch;
+    color: var(--ink-2);
+    font-family: var(--sans);
+    font-size: 19px;
+    line-height: 1.5;
+  }
+
+  /* Set as a caption line rather than as chips. Five outlined boxes in a row read as
+     five buttons; the same words in tracked-out mono read as a specification. */
+  .badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+    margin-top: 44px;
+    font-family: var(--mono);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-3);
+  }
+  .badge {
+    padding: 0;
+    border: none;
+    background: none;
+  }
+
+  /* ---------------------------------------------------------------- sections */
+
+  /* The rail. Every section is a two-column grid: a 120px column holding nothing but
+     the number and its label, and the measure holding everything else. The markup did
+     not have to change for this — the kicker is already the first child of every
+     section, so it is pinned to the rail and its siblings are pushed to column two. */
+  section {
+    /* Cleared past both sticky bars, so an anchor jump does not land under them. */
+    scroll-margin-top: 116px;
+    padding: 80px 0;
+    border-bottom: 1px solid var(--rule);
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 0 40px;
+    align-items: start;
+    counter-increment: sec;
+  }
+  section > *          { grid-column: 2; min-width: 0; }
+  section > .kicker    { grid-column: 1; grid-row: 1; }
+
+  .kicker {
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.45;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0;
+  }
+  section > .kicker::before {
+    content: counter(sec, decimal-leading-zero);
+    display: block;
+    margin-bottom: 7px;
+    color: var(--accent);
+  }
+  /* The hero's kicker is a standing label, not a section number. */
+  header .kicker::before { content: none; }
+
+  h2 {
+    font-size: clamp(27px, 3.6vw, 38px);
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+    margin: 0 0 22px;
+    max-width: 24ch;
+  }
+
+  .prose {
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.6;
+    color: var(--ink-2);
+    max-width: 62ch;
+  }
+  .prose strong { color: var(--ink); font-weight: 600; }
+  .prose p { margin: 0 0 14px; }
+  .prose p:last-child { margin-bottom: 0; }
+
+  /* ---------------------------------------------------------------- code */
+
+  pre {
+    margin: 18px 0 0;
+    padding: 14px 16px;
+    background: var(--card);
+    border: 1px solid var(--rule-2);
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--ink);
+  }
+  pre .c { color: var(--ink-3); }
+  pre .k { color: var(--accent); }
+  pre .s { color: var(--green); }
+  pre .b { color: var(--blue); }
+
+  .cmd {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 10px;
+    padding: 12px 14px;
+    background: var(--card);
+    border: 1px solid var(--rule-2);
+    border-radius: 4px;
+    font-size: 13.5px;
+  }
+  .cmd .prompt { color: var(--accent); user-select: none; }
+  .cmd code { flex: 1; overflow-x: auto; white-space: nowrap; }
+  .cmd button {
+    font: inherit;
+    font-size: 11px;
+    padding: 3px 9px;
+    border: 1px solid var(--rule-2);
+    border-radius: 3px;
+    background: var(--paper-2);
+    color: var(--ink-3);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 120ms ease;
+  }
+  .cmd button:hover { color: var(--accent); border-color: var(--accent); }
+  .cmd button.done { color: var(--green); border-color: var(--green); }
+
+  /* ---------------------------------------------------------------- steps */
+
+  .steps { counter-reset: step; margin-top: 28px; }
+  .step {
+    position: relative;
+    padding-left: 42px;
+    padding-bottom: 30px;
+    border-left: 1px solid var(--rule-2);
+    margin-left: 13px;
+  }
+  .step:last-child { border-left-color: transparent; padding-bottom: 0; }
+  .step::before {
+    counter-increment: step;
+    content: counter(step);
+    position: absolute;
+    left: -13px;
+    top: -2px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--card);
+    border: 1px solid var(--rule-2);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 24px;
+    text-align: center;
+  }
+  .step h3 { font-size: 19px; margin-bottom: 6px; letter-spacing: -0.02em; }
+  .step .note { font-family: var(--sans); font-size: 14px; color: var(--ink-2); }
+
+  /* ---------------------------------------------------------------- diagram */
+
+  figure {
+    margin: 24px 0 0;
+    padding: 22px 18px;
+    background: var(--card);
+    border: 1px solid var(--rule-2);
+    border-radius: 4px;
+    overflow-x: auto;
+  }
+  figure pre {
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    font-size: 12.5px;
+    /* Same reason as .hero-art: box sides need the lines to touch. */
+    line-height: 1.2;
+    color: var(--ink-2);
+  }
+  figure pre .k { color: var(--accent); font-weight: 600; }
+  figure pre .b { color: var(--blue); }
+  figure figcaption {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--rule);
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--ink-3);
+  }
+
+  /* ---------------------------------------------------------------- payload */
+
+  .payload {
+    margin-top: 22px;
+    border: 1px solid var(--rule-2);
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--card);
+  }
+  .payload .bar {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 14px;
+    background: var(--paper-2);
+    border-bottom: 1px solid var(--rule);
+    font-size: 12px;
+    color: var(--ink-3);
+  }
+  .payload .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--rule-2); }
+  .payload .dot.live { background: var(--accent); }
+  .payload pre { margin: 0; border: none; border-radius: 0; background: none; }
+
+  /* ---------------------------------------------------------------- grid */
+
+  .two {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin-top: 24px;
+  }
+  .panel {
+    padding: 18px;
+    background: var(--card);
+    border: 1px solid var(--rule-2);
+    border-radius: 4px;
+  }
+  .panel h3 { font-size: 16px; margin-bottom: 8px; letter-spacing: -0.015em; }
+  .panel h3 .tag {
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-left: 7px;
+    font-weight: 400;
+  }
+  .panel p { margin: 0; font-family: var(--sans); font-size: 14px; color: var(--ink-2); line-height: 1.55; }
+  .panel pre { margin-top: 12px; font-size: 12px; }
+
+  /* ---------------------------------------------------------------- table */
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 22px;
+    font-size: 13px;
+  }
+  th, td {
+    text-align: left;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  th {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 500;
+    border-bottom-color: var(--rule-2);
+  }
+  td:first-child { color: var(--accent); white-space: nowrap; }
+  td:nth-child(2) { color: var(--ink-3); white-space: nowrap; }
+  td:last-child { font-family: var(--sans); color: var(--ink-2); width: 100%; }
+  .table-scroll { overflow-x: auto; }
+
+  ul.ticks { list-style: none; margin: 18px 0 0; padding: 0; max-width: 68ch; }
+  ul.ticks li {
+    position: relative;
+    padding: 0 0 10px 24px;
+    font-family: var(--sans);
+    font-size: 15px;
+    color: var(--ink-2);
+    line-height: 1.55;
+  }
+  ul.ticks li::before {
+    content: "▸";
+    position: absolute;
+    left: 4px;
+    color: var(--accent);
+    font-family: var(--mono);
+  }
+  ul.ticks strong { color: var(--ink); font-weight: 600; }
+
+  /* ---------------------------------------------------------------- about */
+
+  .about .panel { display: flex; flex-direction: column; }
+  .about .panel p + p { margin-top: 10px; }
+  .panel .fine {
+    margin-top: auto;
+    padding-top: 12px;
+    font-size: 12.5px;
+    color: var(--ink-3);
+  }
+  .panel .fine a { border-bottom-color: transparent; }
+  .panel .fine a:hover { border-bottom-color: var(--accent); }
+
+  .disclaimer {
+    margin-top: 18px;
+    padding: 16px 18px;
+    border: 1px solid var(--rule-2);
+    border-left: 3px solid var(--ink-3);
+    border-radius: 4px;
+    background: var(--paper-2);
+    font-family: var(--sans);
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--ink-2);
+  }
+  .disclaimer strong { color: var(--ink); font-weight: 600; }
+
+  /* ---------------------------------------------------------------- footer */
+
+  footer {
+    padding: 40px 0 64px;
+    text-align: left;
+    color: var(--ink-3);
+    font-family: var(--mono);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  /* The drawn rule was standing in for a border. Use the border. */
+  footer .rule { display: none; }
+  footer span + span { margin-left: 26px; }
+  footer a { color: var(--ink-2); }
+
+  @media (max-width: 720px) {
+    .two { grid-template-columns: 1fr; }
+    nav .links { gap: 14px; }
+    main { padding: 0 20px; }
+    header.hero { padding: 52px 0 48px; }
+
+    /* The rail folds into a single line above the heading. */
+    section { padding: 48px 0; grid-template-columns: 1fr; gap: 0; }
+    section > *, section > .kicker { grid-column: 1; }
+    section > .kicker { margin-bottom: 18px; }
+    section > .kicker::before { display: inline; margin: 0 10px 0 0; }
+
+    /* Stack the panes and turn the arrow to point down. */
+    .hero-art { grid-template-columns: 1fr; }
+    .arrow { flex-direction: row; min-width: 0; padding: 12px 0; }
+    .arrow-line { width: 60px; }
+    .flow { font-size: 10px; }
+  }
+
+
+  /* ---------------------------------------------------------------- ui drawings */
+
+  /*
+   * The overlay, redrawn rather than photographed.
+   *
+   * Every value below is lifted from extension/overlay.css — the same palette, radii,
+   * type sizes, and borders the real shadow root uses. A screenshot of a 320px dark
+   * panel either sits at natural size and reads as a stamp, or gets scaled and turns to
+   * mush; this stays crisp at any zoom, prints, and cannot go stale in a way nobody
+   * notices. Class names are prefixed `u-` so nothing here collides with the page.
+   */
+  .ui {
+    --pp-accent: #d97757;
+    --pp-bg:     #1b1b1d;
+    --pp-fg:     #f4f4f5;
+    --pp-dim:    #9ca3af;
+    --pp-line:   #3f3f46;
+    --pp-input:  #131315;
+
+    margin: 28px 0 0;
+    padding: 30px 20px;
+    background: var(--paper-2);
+    border: 1px solid var(--rule-2);
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .ui figcaption {
+    max-width: 620px;
+    font-family: var(--sans);
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--ink-2);
+    text-align: center;
+  }
+  .ui figcaption code { font-family: var(--mono); font-size: 12px; }
+
+  /* The card and the bar are the two shells everything else sits in. */
+  .u-card {
+    width: 320px;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid var(--pp-line);
+    background: var(--pp-bg);
+    color: var(--pp-fg);
+    box-shadow: 0 10px 32px rgb(23 24 27 / 0.28);
+    font-size: 13px;
+    font-family: var(--sans);
+    text-align: left;
+  }
+
+  .u-bar {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px 6px 6px;
+    border-radius: 999px;
+    border: 1px solid var(--pp-line);
+    background: var(--pp-bg);
+    color: var(--pp-fg);
+    box-shadow: 0 6px 24px rgb(23 24 27 / 0.28);
+    font-size: 12px;
+    font-family: var(--sans);
+  }
+
+  .u-grip { padding: 2px 6px; font-size: 13px; font-weight: 700; color: var(--pp-accent); }
+  .u-dot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; }
+  .u-count { min-width: 18px; text-align: center; color: var(--pp-dim); }
+
+  .u-btn {
+    padding: 5px 10px;
+    border-radius: 7px;
+    border: 1px solid var(--pp-line);
+    background: transparent;
+    color: var(--pp-fg);
+    font: inherit;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .u-btn.on { background: var(--pp-accent); border-color: var(--pp-accent); color: #fff; }
+  .u-btn.primary { background: var(--pp-accent); border-color: var(--pp-accent); color: #fff; font-weight: 600; }
+  .u-btn.dim { opacity: 0.45; }
+  .u-btn.bug {
+    padding: 4px 7px;
+    border-color: rgb(208 90 74 / 0.5);
+    color: #f0a08c;
+    font-size: 11px;
+  }
+
+  /* ---- composer parts */
+
+  .u-crumbs { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; padding-bottom: 4px; font-size: 11px; }
+  .u-crumb { padding: 2px 5px; border-radius: 5px; color: var(--pp-dim); white-space: nowrap; }
+  .u-crumb.on { background: var(--pp-accent); color: #fff; font-weight: 600; }
+  .u-sep { color: var(--pp-line); }
+
+  .u-meta {
+    font-size: 11px;
+    color: var(--pp-dim);
+    margin-bottom: 6px;
+    font-family: var(--mono);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .u-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+  .u-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 7px;
+    border-radius: 999px;
+    border: 1px solid var(--pp-line);
+    background: var(--pp-input);
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .u-chip .k { color: var(--pp-dim); }
+  .u-chip .v { color: var(--pp-fg); font-variant-numeric: tabular-nums; }
+  .u-chip.warn { border-color: #a16207; background: rgb(161 98 7 / 0.14); }
+  .u-chip .warn { color: #fbbf24; }
+  .u-chip .swatch { width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgb(255 255 255 / 0.35); }
+
+  .u-delta {
+    padding: 4px 7px;
+    margin-bottom: 8px;
+    border-radius: 6px;
+    border-left: 2px solid var(--pp-accent);
+    background: rgb(217 119 87 / 0.1);
+    font-size: 11px;
+    font-family: var(--mono);
+  }
+
+  .u-box {
+    padding: 7px 8px;
+    border-radius: 7px;
+    border: 1px solid var(--pp-line);
+    background: var(--pp-input);
+    color: var(--pp-fg);
+    font-size: 13px;
+    line-height: 1.45;
+    min-height: 46px;
+  }
+  .u-box.focus { border-color: var(--pp-accent); }
+  .u-box .ph { color: var(--pp-dim); }
+
+  .u-hint { margin-top: 5px; font-size: 11px; line-height: 1.3; color: var(--pp-dim); }
+
+  .u-row { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
+  .u-row .sp { flex: 1; }
+
+  .u-toggle { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--pp-dim); }
+  .u-tick {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    border: 1px solid var(--pp-line);
+    background: var(--pp-input);
+    flex: none;
+  }
+  .u-tick.on {
+    background: var(--pp-accent);
+    border-color: var(--pp-accent);
+    position: relative;
+  }
+  .u-tick.on::after {
+    content: "✓";
+    position: absolute;
+    inset: 0;
+    color: #fff;
+    font-size: 9px;
+    line-height: 12px;
+    text-align: center;
+  }
+
+  /* ---- page-error panel */
+
+  .u-panel {
+    width: 320px;
+    border: 1px solid var(--pp-line);
+    border-left: 2px solid #d05a4a;
+    border-radius: 9px;
+    background: var(--pp-bg);
+    color: var(--pp-fg);
+    box-shadow: 0 10px 30px rgb(23 24 27 / 0.28);
+    font-family: var(--sans);
+    text-align: left;
+  }
+  .u-panel-head { display: flex; align-items: center; gap: 6px; padding: 5px 7px; }
+  .u-panel-head .sp { flex: 1; }
+  .u-more { padding: 0 4px; border: none; background: none; color: var(--pp-dim); font: inherit; font-size: 11px; }
+  .u-list { padding: 0 7px 5px; }
+
+  .u-entry {
+    display: flex;
+    gap: 5px;
+    padding: 3px 0;
+    border-top: 1px solid rgb(255 255 255 / 0.07);
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .u-kind { flex: none; color: #f0a08c; }
+  .u-kind.net { color: var(--pp-dim); }
+  .u-text { flex: 1; min-width: 0; color: var(--pp-fg); word-break: break-word; }
+  .u-stack {
+    padding: 1px 0 5px 10px;
+    color: var(--pp-dim);
+    font-family: var(--mono);
+    font-size: 10px;
+    line-height: 1.5;
+    word-break: break-all;
+  }
+
+  /* ---- pin + pin-card parts */
+
+  .u-pin {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    background: var(--pp-accent);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+    box-shadow: 0 1px 6px rgb(23 24 27 / 0.35);
+    flex: none;
+  }
+  .u-pin.done { background: #2ea36c; border-color: #d7f5e6; }
+
+  .u-sect {
+    padding: 8px;
+    border-radius: 8px;
+    border-left: 3px solid var(--pp-accent);
+    background: rgb(217 119 87 / 0.07);
+  }
+  .u-sect.done { border-left-color: #2ea36c; background: rgb(46 163 108 / 0.07); }
+
+  .u-note { line-height: 1.45; margin-bottom: 8px; }
+
+  .u-progress {
+    margin-bottom: 8px;
+    padding: 6px 8px;
+    border-radius: 7px;
+    border-left: 2px solid #2ea36c;
+    background: rgb(255 255 255 / 0.05);
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .u-progress .file { color: var(--pp-dim); font-family: var(--mono); }
+
+  .u-resolution {
+    padding: 6px 8px;
+    border-radius: 7px;
+    background: rgb(63 111 82 / 0.22);
+    color: #a7d7bb;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  /* Two shells side by side where the story needs both; stacked when there is no room. */
+  .u-pair { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; justify-content: center; }
+  .u-third { width: 238px; max-width: 100%; }
+
+
+  /* ---- token picker */
+
+  .u-picker { margin-bottom: 8px; }
+  .u-ramp { display: flex; flex-direction: column; gap: 1px; }
+  .u-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 7px;
+    border-radius: 6px;
+    font-size: 11px;
+  }
+  .u-step .b { height: 8px; border-radius: 2px; background: var(--pp-accent); opacity: 0.55; flex: none; }
+  .u-step .n { color: var(--pp-fg); }
+  .u-step .v { margin-left: auto; color: var(--pp-dim); font-variant-numeric: tabular-nums; }
+  .u-step.on { background: #2a2a2e; }
+  .u-step.on .b { opacity: 1; }
+
+  .u-swatches { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+  .u-sw { height: 26px; border-radius: 6px; border: 1px solid rgb(255 255 255 / 0.18); }
+  .u-sw.on { outline: 2px solid var(--pp-fg); outline-offset: 1px; }
+
+  /* ---- feature index */
+
+  /* The page is long by nature — nine features — so it opens with the set laid out at a
+     glance rather than making you scroll to find out what is in it. */
+  .index {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-top: 26px;
+  }
+  .index a {
+    display: block;
+    padding: 14px 16px;
+    background: var(--card);
+    border: 1px solid var(--rule-2);
+    border-radius: 4px;
+    border-bottom: 1px solid var(--rule-2);
+    text-decoration: none;
+    color: var(--ink);
+  }
+  .index a:hover { border-color: var(--accent); }
+  .index .n { font-size: 11px; color: var(--ink-3); letter-spacing: 0.14em; }
+  .index h3 { font-size: 14px; margin: 5px 0 5px; }
+  .index p { margin: 0; font-family: var(--sans); font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+
+  @media (max-width: 860px) { .index { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px) { .index { grid-template-columns: 1fr; } }
+
+  @media (max-width: 700px) {
+    .ui { padding: 20px 12px; }
+    .u-card, .u-panel, .u-third { width: 100%; max-width: 320px; }
+    /* The bar is a single pill of fixed-size controls; let it scroll rather than wrap
+       into something that is no longer recognisably a toolbar. */
+    .u-bar { max-width: 100%; overflow-x: auto; }
+  }
+
+  /* Eight links do not fit a phone. Scroll the row rather than wrapping it into a second
+     line that pushes the page content down behind a sticky bar. */
+  @media (max-width: 720px) {
+    nav { gap: 12px; }
+    nav .links {
+      overflow-x: auto;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+      white-space: nowrap;
+    }
+    nav .links::-webkit-scrollbar { display: none; }
+    nav a { flex: none; }
+  }
+
+  /* ---------------------------------------------------------------- low-fi pass */
+
+  /*
+   * Squared, flattened, hairlined. Rounded corners and blurred drop shadows are the
+   * default look of everything; a schematic has neither. Scoped to page chrome by name —
+   * the .u-* drawings keep their real radii and shadows, because those are measurements
+   * of the actual overlay rather than taste.
+   */
+  main, .pane, .badge, .payload, .panel, .index a, .ui, table, pre, blockquote { border-radius: 0 !important; }
+  .pane, .payload, .panel, .index a, .ui { box-shadow: none; }
+
+  /* Section numbers as square tags rather than circular badges. */
+  .step::before { border-radius: 0 !important; }
+
+  /* Headings in the sans face, heavy and tightly tracked. The body is proportional now,
+     so the mono face is free to mean "this is code" everywhere it still appears. */
+  h1, h2, h3 { font-family: var(--sans); font-weight: 700; }
+
+  /* Links: underlined by weight rather than tinted, so the accent stays rare enough to
+     mean something when it does appear. */
+  a { border-bottom-width: 1px; }
+
+  /* Cards sit on the stock with a single hairline and a hard corner tick, the way a
+     drawing frame does. */
+  .panel, .index a, .payload { border-color: var(--rule-2); }
+
+  /* Active nav item. The bar is identical on both pages, so this is the only thing that
+     says where you are. */
+  nav a[aria-current="page"],
+  nav a[aria-current="true"] {
+    color: var(--ink);
+    font-weight: 600;
+    box-shadow: inset 0 -2px 0 var(--accent);
+  }
+
+  /* ---------------------------------------------------------------- sub nav */
+
+  /* The section index for this page only. It sits under the main bar rather than inside
+     it, because the main bar is the site and this is one page's contents — mixing the two
+     is what made the bar change shape between pages in the first place. */
+  .subnav {
+    position: sticky;
+    top: 59px;
+    z-index: 19;
+    display: flex;
+    gap: 0;
+    padding: 0;
+    background: rgb(255 255 255 / 0.94);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: 12px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    white-space: nowrap;
+  }
+  .subnav::-webkit-scrollbar { display: none; }
+
+  .subnav a {
+    flex: none;
+    padding: 9px 13px;
+    color: var(--ink-3);
+    border: none;
+    border-bottom: 2px solid transparent;
+    text-decoration: none;
+  }
+  .subnav a:hover { color: var(--ink); }
+  .subnav a.on { color: var(--ink); border-bottom-color: var(--accent); font-weight: 700; }
+  .subnav .n { color: var(--ink-3); margin-right: 6px; }
+  .subnav a.on .n { color: var(--accent); }
+
+  @media (max-width: 720px) { .subnav { top: 59px; padding: 0; } }
+</style>
+</head>
+<body>
+
+<main>
+
+<nav>
+  <span class="mark">◈</span>
+  <span class="name">PINPOINT</span>
+  <span class="links">
+    <a href="./index.html">Overview</a>
+    <a href="./features.html" aria-current="page">Features</a>
+    <a href="./index.html#install">Install</a>
+    <a href="./index.html#arrives">Payload</a>
+    <a href="./index.html#how">How</a>
+    <a href="./index.html#about">About</a>
+    <a href="https://github.com/tolgainam/pinpoint">GitHub&nbsp;↗</a>
+  </span>
+</nav>
+
+<div class="subnav" id="subnav">
+  <a href="#index"><span class="n">00</span>Contents</a>
+  <a href="#say"><span class="n">01</span>Picked values</a>
+  <a href="#intent"><span class="n">02</span>Markers</a>
+  <a href="#context"><span class="n">03</span>Freeze</a>
+  <a href="#errors"><span class="n">04</span>Page errors</a>
+  <a href="#loop"><span class="n">05</span>The loop</a>
+  <a href="#tools"><span class="n">06</span>Tools</a>
+</div>
+
+<header class="hero">
+  <div class="kicker">version 0.2</div>
+  <h1 class="tagline">Stop describing the fix.<br><em>Hand it over.</em></h1>
+
+  <p class="lede">
+    0.1 carried the element. 0.2 carries the intent: the value you actually want in the
+    project's own vocabulary, whether the comment is a request or a question, the state
+    that only existed while a menu was open — and what the page logged while you were
+    looking at it.
+  </p>
+
+  <pre class="ascii flow" aria-hidden="true">  <b>◈</b> <i>pick a value</i>  ──▶  <b>dispatch</b>  ──▶  <i>watch it work</i>  ──▶  <b>✓</b> <i>verified against a fresh crop</i></pre>
+
+  <div class="badges">
+    <span class="badge">token picker</span>
+    <span class="badge">design-system aware</span>
+    <span class="badge">freeze frame</span>
+    <span class="badge">questions</span>
+    <span class="badge">backlog</span>
+    <span class="badge">follow-ups</span>
+    <span class="badge">verified fixes</span>
+  </div>
+</header>
+
+<section id="index">
+  <div class="kicker">contents</div>
+  <h2>Nine features, new in 0.2</h2>
+  <div class="index">
+    <a href="#say"><span class="n">01</span><h3>Picked values</h3><p>Choose from the project's own scale instead of describing a number.</p></a>
+    <a href="#say"><span class="n">02</span><h3>Token vocabulary</h3><p>Tailwind, shadcn, Chakra, MUI, or plain CSS variables — read from your config.</p></a>
+    <a href="#say"><span class="n">03</span><h3>Off-scale flags</h3><p>A value that belongs to no scale is marked before you write the note.</p></a>
+    <a href="#intent"><span class="n">04</span><h3>Questions</h3><p><code>?</code> gets an answer on the pin and changes no files.</p></a>
+    <a href="#intent"><span class="n">05</span><h3>Backlog</h3><p><code>!</code> parks it in your repo instead of dispatching it.</p></a>
+    <a href="#context"><span class="n">06</span><h3>Freeze frame</h3><p>Pin a hover menu or a toast that removes itself.</p></a>
+    <a href="#context"><span class="n">07</span><h3>Selection depth</h3><p>Walk from the span you clicked to the card you meant.</p></a>
+    <a href="#errors"><span class="n">08</span><h3>Page errors</h3><p>What the page logged, with the stack, sent once per batch.</p></a>
+    <a href="#loop"><span class="n">09</span><h3>A closed loop</h3><p>Progress, follow-up rounds, and fixes verified against a fresh crop.</p></a>
+  </div>
+</section>
+
+<!-- ---------------------------------------------------------------- values -->
+
+<section id="say">
+  <div class="kicker">picked values</div>
+  <h2>Pick the value instead of describing it</h2>
+  <div class="prose">
+    <p>
+      <em>"a bit more padding"</em> is a negotiation. Click the element and Pinpoint reads
+      what it actually computes — padding, size, radius, colours — then offers the scale
+      your project already defines. Pick one and it previews on the real element, in place,
+      before you have written a word.
+    </p>
+    <p>
+      What travels is the decision, not the adjective: <strong>padding → p-8</strong>.
+      The note becomes optional, because a picked value is already a complete request.
+    </p>
+    <p>
+      Clicking a chip opens the selection bar underneath it — the scale for that property,
+      and nothing else. There is no free-text field and no colour wheel, which is the point:
+      the only values on offer are ones the project already has a name for.
+    </p>
+  </div>
+
+  <figure class="ui">
+    <div class="u-card">
+      <div class="u-crumbs">
+        <span class="u-crumb on">aside.mt-10</span>
+        <span class="u-sep">·</span><span class="u-crumb">main.mx-auto</span>
+        <span class="u-sep">·</span><span class="u-crumb">body</span>
+      </div>
+      <div class="u-meta">[data-testid="tw-off-scale"]</div>
+      <div class="u-chips">
+        <span class="u-chip warn"><span class="k">padding</span> <span class="v">13px</span> <span class="warn">⚠</span></span>
+        <span class="u-chip"><span class="k">size</span> <span class="v">14px</span></span>
+        <span class="u-chip"><span class="k">radius</span> <span class="v">8px</span></span>
+        <span class="u-chip"><span class="k">bg</span> <span class="swatch" style="background:#ff7a45"></span> <span class="v">warm</span></span>
+      </div>
+      <div class="u-delta">padding → <b>p-4</b> · width → <b>w-1/2</b></div>
+      <div class="u-box focus">the strip is too wide, and that padding came from nowhere</div>
+      <div class="u-hint">2 picked values ride with this comment</div>
+      <div class="u-row">
+        <span class="u-toggle"><span class="u-tick on"></span> screenshot</span>
+        <span class="sp"></span>
+        <button class="u-btn">Cancel</button>
+        <button class="u-btn primary">Add</button>
+      </div>
+    </div>
+    <figcaption>
+      The composer. <code>padding 13px</code> is ringed in amber because 13 is on no scale
+      this project defines; <code>bg warm</code> is not a hex code, because the project
+      names that colour. The line above the note is what will actually be requested.
+    </figcaption>
+  </figure>
+
+  <figure class="ui">
+    <div class="u-pair">
+      <div class="u-card" style="padding-bottom:10px">
+        <div class="u-meta">padding · pick from the spacing scale</div>
+        <div class="u-picker">
+          <div class="u-ramp">
+            <div class="u-step"><span class="b" style="width:8px"></span><span class="n">2</span><span class="v">8px</span></div>
+            <div class="u-step"><span class="b" style="width:12px"></span><span class="n">3</span><span class="v">12px</span></div>
+            <div class="u-step on"><span class="b" style="width:16px"></span><span class="n">4</span><span class="v">16px</span></div>
+            <div class="u-step"><span class="b" style="width:20px"></span><span class="n">5</span><span class="v">20px</span></div>
+            <div class="u-step"><span class="b" style="width:24px"></span><span class="n">6</span><span class="v">24px</span></div>
+            <div class="u-step"><span class="b" style="width:32px"></span><span class="n">8</span><span class="v">32px</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="u-card" style="padding-bottom:10px">
+        <div class="u-meta">background · pick from the palette</div>
+        <div class="u-picker">
+          <div class="u-swatches">
+            <span class="u-sw" style="background:#eef2ff"></span>
+            <span class="u-sw" style="background:#e0e7ff"></span>
+            <span class="u-sw" style="background:#a5b4fc"></span>
+            <span class="u-sw" style="background:#6366f1"></span>
+            <span class="u-sw on" style="background:#4f46e5"></span>
+            <span class="u-sw" style="background:#4338ca"></span>
+            <span class="u-sw" style="background:#ff7a45"></span>
+            <span class="u-sw" style="background:#0f172a"></span>
+            <span class="u-sw" style="background:#64748b"></span>
+            <span class="u-sw" style="background:#e2e8f0"></span>
+            <span class="u-sw" style="background:#ffffff"></span>
+            <span class="u-sw" style="background:#f8fafc"></span>
+            <span class="u-sw" style="background:#1b1b1d"></span>
+            <span class="u-sw" style="background:#2e7d55"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <figcaption>
+      The selection bar, both halves. Spacing is drawn as a size rather than listed as
+      numbers — a ramp you can see beats a list you have to read — and only the rungs
+      around the current value are offered. Colour is <em>your palette</em>, not a colour
+      wheel, because the point is to stay inside the system rather than to leave it.
+    </figcaption>
+  </figure>
+
+  <div class="two">
+    <div class="panel">
+      <h3>It speaks your vocabulary</h3>
+      <p>
+        The bridge reads the project's own config — Tailwind, shadcn, Chakra, MUI, or plain
+        CSS custom properties — and the page reports what it actually resolved at runtime.
+        A fix comes back as a class or a token, not as raw px and hex.
+      </p>
+    </div>
+    <div class="panel">
+      <h3>And flags what is off it <span class="tag">⚠</span></h3>
+      <p>
+        A value that belongs to no scale is marked on the chip. On a 4px grid, a 13px
+        padding is a fact rather than an opinion — and it arrives already named as the bug
+        rather than as something to preserve.
+      </p>
+    </div>
+  </div>
+
+  <div class="payload">
+    <div class="bar"><span class="dot live"></span> what the batch carries</div>
+<pre><span class="k">### [20260822-142925-zujg#1]</span> the strip is too wide
+  - <b>requested change</b> — width: 848px → <span class="s">w-1/2</span> · background: #f43f5e → <span class="s">bg-warm</span>
+  - selector: <span class="s">`[data-testid="tw-off-scale"]`</span>
+  - box — size: 848×87; padding: <span class="s">13px</span> ⚠ off the 4px scale, nearest 3 (12px), 4 (16px)</pre>
+  </div>
+</section>
+
+<!-- ---------------------------------------------------------------- intent -->
+
+<section id="intent">
+  <div class="kicker">intent</div>
+  <h2>Three things a comment can be</h2>
+  <div class="prose">
+    <p>
+      A comment box that only ever means "change this" forces everything else through the
+      wrong door. One character at the front of the note picks the door, and the button
+      relabels itself so you can see which one you took.
+    </p>
+  </div>
+
+  <table>
+    <thead><tr><th>You type</th><th>Button</th><th>What happens</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>the gap here is too tight</code></td>
+        <td><b>Add</b></td>
+        <td>Dispatched as a change request. Files get edited.</td>
+      </tr>
+      <tr>
+        <td><code>? why is this a button</code></td>
+        <td><b>Ask</b></td>
+        <td>Claude answers on the pin and <strong>changes no files</strong>.</td>
+      </tr>
+      <tr>
+        <td><code>! revisit the empty state</code></td>
+        <td><b>Backlog</b></td>
+        <td>Appended to <code>.pinpoint/backlog.md</code>. Never dispatched, never expires.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <figure class="ui">
+    <div class="u-pair">
+      <div class="u-card u-third">
+        <div class="u-box"><span class="ph">the gap here is too tight</span></div>
+        <div class="u-hint">&nbsp;</div>
+        <div class="u-row"><span class="sp"></span><button class="u-btn">Cancel</button><button class="u-btn primary">Add</button></div>
+      </div>
+      <div class="u-card u-third">
+        <div class="u-box"><b>?</b> why is this a button</div>
+        <div class="u-hint">answers on the pin, changes no files</div>
+        <div class="u-row"><span class="sp"></span><button class="u-btn">Cancel</button><button class="u-btn primary" style="background:#7c6bd6;border-color:#7c6bd6">Ask</button></div>
+      </div>
+      <div class="u-card u-third">
+        <div class="u-box"><b>!</b> revisit the empty state</div>
+        <div class="u-hint">parked — never dispatched</div>
+        <div class="u-row"><span class="sp"></span><button class="u-btn">Cancel</button><button class="u-btn primary" style="background:#71717a;border-color:#71717a">Backlog</button></div>
+      </div>
+    </div>
+    <figcaption>
+      The same box, three doors. The button and the hint both change on the keystroke that
+      types the marker, so you can see which one you took before you commit to it.
+    </figcaption>
+  </figure>
+
+  <div class="prose" style="margin-top:22px">
+    <p>
+      The backlog is a real file in your repo, reachable from the session with
+      <code>list_backlog</code>, <code>start_backlog_item</code>, and
+      <code>finish_backlog_item</code> — so parking something is not the same as losing it.
+    </p>
+  </div>
+</section>
+
+<!-- ---------------------------------------------------------------- context -->
+
+<section id="context">
+  <div class="kicker">context</div>
+  <h2>Pin the thing that is no longer there</h2>
+
+  <div class="two">
+    <div class="panel">
+      <h3>Freeze the frame <span class="tag">⌥⇧F</span></h3>
+      <p>
+        Hover menus, dropdowns, toasts that remove themselves after three seconds. Freeze
+        paints the page as it was and lets you pin into the still, so the state survives the
+        trip to the toolbar. The comment arrives marked as captured from a frozen frame —
+        the selector may be stale and the screenshot is the evidence.
+      </p>
+    </div>
+    <div class="panel">
+      <h3>Walk to the right node <span class="tag">↑ ↓</span></h3>
+      <p>
+        You clicked a span; you meant the card. The breadcrumb walks the ancestor chain, and
+        everything downstream — selector, component name, highlight, and the crop the
+        screenshot is taken from — follows the level you land on.
+      </p>
+    </div>
+  </div>
+
+  <div class="prose" style="margin-top:26px">
+    <p>
+      Every comment now also carries the element's computed styles, its parent chain, and
+      the component that rendered it — read out of the React or Vue internals in the page's
+      own world, because a content script cannot see them.
+    </p>
+  </div>
+</section>
+
+<!-- ---------------------------------------------------------------- errors -->
+
+<section id="errors">
+  <div class="kicker">page errors</div>
+  <h2>What the page logged, not what the console shows</h2>
+  <div class="prose">
+    <p>
+      A probe runs in the page's own world from the first byte and keeps a small ring buffer
+      of console errors, uncaught exceptions, failed rejections, and failed requests. When it
+      has something, a <strong>⚠</strong> appears on the toolbar next to Dispatch. Open it and
+      the entries are printed — click one to unfold the stack that names the file and line.
+    </p>
+    <p>
+      It sits on the toolbar rather than in the comment card on purpose. These belong to the
+      <strong>page</strong>, not to any element on it: a fetch that 404s on one button is not
+      evidence about a different button you happened to pin afterwards. So it is stated once,
+      for the batch.
+    </p>
+  </div>
+
+  <figure class="ui">
+    <div class="u-panel">
+      <div class="u-panel-head">
+        <span class="u-toggle"><span class="u-tick on"></span> send with the batch</span>
+        <span class="sp"></span>
+        <button class="u-more">close</button>
+      </div>
+      <div class="u-list">
+        <div class="u-entry">
+          <span class="u-kind">error</span>
+          <span class="u-text">[nimbus] newsletter signup failed Error: subscribe failed: 404 Not Found ⌄</span>
+        </div>
+        <div class="u-stack">at HTMLButtonElement.&lt;anonymous&gt; (http://localhost:3000/:135:26)</div>
+        <div class="u-entry">
+          <span class="u-kind net">network</span>
+          <span class="u-text">404 POST /api/subscribe</span>
+        </div>
+        <div class="u-entry">
+          <span class="u-kind">exception</span>
+          <span class="u-text">Uncaught TypeError: Cannot redefine property: ethereum</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="u-bar">
+      <span class="u-grip">⌖</span>
+      <span class="u-dot"></span>
+      <button class="u-btn on">Commenting</button>
+      <span class="u-count">2</span>
+      <button class="u-btn bug">⚠ 3</button>
+      <button class="u-btn primary">Dispatch</button>
+      <button class="u-btn">✕</button>
+    </div>
+
+    <figcaption>
+      The <code>⚠ 3</code> sits next to Dispatch because that is what it changes. One entry
+      is unfolded to show the stack that names the file and line. The third is a wallet
+      extension misbehaving in the page's own world — visible precisely because it got
+      there, unlike the console noise extensions keep to themselves.
+    </figcaption>
+  </figure>
+</section>
+
+<!-- ---------------------------------------------------------------- loop -->
+
+<section id="loop">
+  <div class="kicker">the loop</div>
+  <h2>Dispatch is the middle of the story, not the end</h2>
+
+  <div class="steps">
+    <div class="step">
+      <h3>It tells you it started</h3>
+      <p class="note">
+        <code>report_progress</code> puts a line on the pin while the work happens — "working",
+        then "edited" with the files that changed. Outcomes only; the transcript stays in the
+        terminal where there is room for it.
+      </p>
+    </div>
+    <div class="step">
+      <h3>The fix is checked against a fresh crop</h3>
+      <p class="note">
+        Resolving asks the page for a new picture of the same element and reads it back. The
+        question is whether the change <em>landed</em>, not whether the diff looked right —
+        and a fix that did not land is reported as such instead of being quietly closed.
+      </p>
+    </div>
+    <div class="step">
+      <h3>Not right? Same pin, next round</h3>
+      <p class="note">
+        A follow-up reopens the comment rather than duplicating it, and carries what was asked
+        and what was done into the next attempt. A second pin on the same element would claim
+        the first request was abandoned — it was answered, just not well enough. Capped at
+        three rounds, because a long argument belongs in the session.
+      </p>
+    </div>
+    <div class="step">
+      <h3>And it is written down</h3>
+      <p class="note">
+        Every batch and every outcome is appended to <code>.pinpoint/history.md</code> in your
+        repo. The queue is pruned after a day; the log is not. Nothing reads it back — it is
+        there for you.
+      </p>
+    </div>
+  </div>
+
+  <figure class="ui">
+    <div class="u-card">
+      <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px">
+        <span class="u-pin done">✓</span>
+        <span class="u-meta" style="flex:1;margin:0;padding-top:3px">aside · [data-testid="tw-off-scale"]</span>
+      </div>
+      <div class="u-sect done">
+        <div class="u-note">Make this half width of its current state.</div>
+        <div class="u-progress">
+          <span class="u-progress-head">edited</span> —
+          <span class="file">demo/fixtures/tailwind/index.html</span>,
+          <span class="file">tailwind.config.js</span>
+        </div>
+        <div class="u-resolution">
+          ✓ Strip is now w-1/2 (848px → 424px) and painted bg-warm / text-pp-bg, both added
+          to the config as named tokens.
+        </div>
+      </div>
+    </div>
+    <figcaption>
+      The same pin, after the round trip. Progress landed while the work happened; the tick
+      only went green once a fresh crop of that element came back and was read.
+    </figcaption>
+  </figure>
+
+  <div class="payload">
+    <div class="bar"><span class="dot live"></span> .pinpoint/history.md</div>
+<pre><span class="k">## 2026-08-22</span>
+- 14:29 · <b>20260822-142925-zujg</b> · 1 on http://localhost:3000/fixtures/tailwind/
+  - · #1 Make this half width of its current state. — <span class="s">`[data-testid="tw-off-scale"]`</span>
+- 14:30 · <span class="s">✓</span> 20260822-142925-zujg#1 — Strip is now w-1/2 (848px → 424px) and painted
+  bg-warm / text-pp-bg, both added to tailwind.config.js as named tokens.</pre>
+  </div>
+</section>
+
+<!-- ---------------------------------------------------------------- tools -->
+
+<section id="tools">
+  <div class="kicker">session tools</div>
+  <h2>What Claude can call</h2>
+
+  <table>
+    <thead><tr><th>Tool</th><th>Does</th></tr></thead>
+    <tbody>
+      <tr><td><code>list_comments</code></td><td>The pending batch, rendered as a brief.</td></tr>
+      <tr><td><code>report_progress</code></td><td>Puts a status line on the pin. Never closes anything.</td></tr>
+      <tr><td><code>resolve_comment</code></td><td>Closes a pin and returns a fresh crop of the element to check against.</td></tr>
+      <tr><td><code>reply</code></td><td>Answers a question on its pin, or sends a status line to the toolbar.</td></tr>
+      <tr><td><code>list_backlog</code></td><td>What was parked instead of dispatched.</td></tr>
+      <tr><td><code>start_backlog_item</code> · <code>finish_backlog_item</code></td><td>Work a parked item without hand-editing the file.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <div class="kicker">still true</div>
+  <h2>What it still will not do</h2>
+  <div class="prose">
+    <p>
+      Localhost only — <code>http://localhost</code> and <code>http://127.0.0.1</code>, by
+      manifest, not by preference. No build step, no bundler, no account. The bridge binds to
+      <code>127.0.0.1</code> and nothing leaves the machine. Screenshots land as real files in
+      the queue directory and are pruned with the batch.
+    </p>
+    <p>
+      It cannot read CSS syntax errors — no browser exposes those to a page script — and it
+      cannot see what other extensions log, because those run in isolated worlds of their own.
+    </p>
+  </div>
+  <p style="margin-top:26px"><a href="./index.html">← Back to the overview and install steps</a></p>
+</section>
+
+<footer>
+  <span>◈ Pinpoint 0.2 · MIT</span>
+  <span><a href="https://github.com/tolgainam/pinpoint">github.com/tolgainam/pinpoint</a></span>
+</footer>
+
+</main>
+
+<script>
+  // Highlight the section you are actually looking at. No dependency, no build step —
+  // the same rule the rest of this project follows.
+  (() => {
+    const links = [...document.querySelectorAll('.subnav a')]
+    const byId = new Map(links.map(a => [a.getAttribute('href').slice(1), a]))
+    const sections = [...byId.keys()].map(id => document.getElementById(id)).filter(Boolean)
+    if (!sections.length) return
+
+    // Measured live on every scroll rather than cached from an observer callback: a
+    // remembered rect is a rect from wherever the page was when it last fired, which is
+    // exactly the wrong answer while scrolling.
+    //
+    // Called straight from the handler, with no requestAnimationFrame in front of it.
+    // rAF does not run in a tab that is not being painted, so a page scrolled in the
+    // background and then brought forward would show the wrong section. Seven rect reads
+    // is cheap, and the browser already coalesces scroll events to one a frame.
+    const paint = () => {
+      // The line sits just below both sticky bars; the last section to cross it is the
+      // one you are reading.
+      const line = 104
+      let current = sections[0]
+      for (const el of sections) if (el.getBoundingClientRect().top <= line) current = el
+      for (const a of links) a.classList.toggle('on', a === byId.get(current.id))
+    }
+
+    addEventListener('scroll', paint, { passive: true })
+    addEventListener('resize', paint, { passive: true })
+    paint()
+  })()
+</script>
+
+
+</body>
+</html>

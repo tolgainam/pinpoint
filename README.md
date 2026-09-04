@@ -55,21 +55,102 @@ This prints the extension's path, copies it to your clipboard, and opens
 
 Requires Node 20+. Nothing else — dependencies install themselves with the plugin.
 
-<details>
-<summary>Running from a clone instead</summary>
+### Installing from a clone instead
+
+If you'd rather not use the plugin marketplace — testing, hacking on it, or you just want
+everything in one place — the whole thing runs from a clone. Nothing here needs the plugin
+installed.
+
+**1. Get it and install the one dependency**
 
 ```bash
 git clone https://github.com/tolgainam/pinpoint
 cd pinpoint && npm install
 ```
 
-The repo ships a `.mcp.json`, so a session started in this directory spawns the bridge
-automatically. Load `extension/` unpacked as above.
+**2. Load the extension**
+
+Open `chrome://extensions`, turn on **Developer mode** (top right), click **Load
+unpacked**, and select the `extension/` folder inside the clone. It'll appear in the
+toolbar — pin it so you can reach it.
+
+You won't have `/pinpoint:setup` here, since that's a plugin command. These are the steps
+it would have run for you.
+
+**3. Point your own project at the bridge**
+
+Pinpoint edits files in whichever project your Claude Code session is running in, so the
+bridge has to be registered *there* rather than in the clone. In the project you actually
+want to work on, create `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "pinpoint": {
+      "command": "node",
+      "args": ["/absolute/path/to/pinpoint/server/pinpoint.js"],
+      "env": {
+        "PINPOINT_PROJECT_DIR": "/absolute/path/to/your/project",
+        "PINPOINT_PORT": "8788"
+      }
+    }
+  }
+}
+```
+
+Use real absolute paths for both. `PINPOINT_PROJECT_DIR` defaults to the working
+directory, so it usually resolves on its own — set it explicitly anyway and you'll never
+have to wonder where the backlog and screenshots went.
+
+**4. Start a session in your project**
+
+```bash
+cd /path/to/your/project && claude
+```
+
+Open your dev app on `localhost`, click the Pinpoint icon, and the dot in the toolbar
+should be green.
+
+<details>
+<summary>Just want to try it without wiring up a project?</summary>
+
+Run the session from the clone instead. It ships its own `.mcp.json`, so the bridge starts
+automatically:
+
+```bash
+cd pinpoint && claude
+npm run demo    # serves the demo page on localhost:3000
+```
+
+Comments will edit files in the clone rather than in your own code, which is exactly what
+you want for a look around. See [Try it without a project](#try-it-without-a-project).
 </details>
+
+### If something isn't working
+
+Three things go wrong, and each has one cause.
+
+**The dot in the toolbar never turns green.** The bridge isn't running. It starts with your
+Claude Code session, so check the session is open and that `.mcp.json` points at a real
+path. `node server/pinpoint.js` from the clone will tell you if the server itself is
+broken.
+
+**Hovering doesn't highlight anything.** Pinpoint only attaches to `http://localhost/*`
+and `http://127.0.0.1/*` — by design, and not configurable. `0.0.0.0`, a LAN IP, a
+`.local` hostname, or any https:// site will do nothing at all. Check the address bar
+first.
+
+**Comments arrive without screenshots.** Chrome grants screenshot access when you click the
+extension icon and revokes it on the next navigation. Click the icon again after navigating.
+A batch without a screenshot still dispatches — it just says so.
 
 ## Use
 
 Open your dev app on `http://localhost:…`, then click the Pinpoint icon in the toolbar.
+
+> **It only attaches to `http://localhost/*` and `http://127.0.0.1/*`.** That is deliberate
+> and not configurable. On `0.0.0.0`, a LAN IP, a `.local` hostname, or any https:// site,
+> nothing will happen at all — check the address bar before assuming it is broken.
 
 | Control | What it does |
 |---|---|
@@ -342,7 +423,7 @@ change on their side can break this tool without warning.
 
 ## Support
 
-Pinpoint is free and MIT licensed, and it stays that way. If it saves you time and you
+Pinpoint is free to use and it stays that way. If it saves you time and you
 want to say thanks, a sponsorship link will live here.
 
 <!-- TODO: replace with a real link before announcing — GitHub Sponsors, Ko-fi,
@@ -354,4 +435,8 @@ something breaks, or tell someone who reviews a lot of UI.
 
 ## License
 
-[MIT](./LICENSE) © 2026 Tolga Inam
+Source-available, non-commercial. See [LICENSE](./LICENSE). © 2026 Tolga Inam
+
+Not open source: you may read it and run it for your own non-commercial use. Copying,
+modifying, or redistributing it needs written permission — which is usually given for the
+asking, so ask.

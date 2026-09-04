@@ -9,7 +9,7 @@
   },
   "homepage": "https://tolgainam.github.io/pinpoint/",
   "repository": "https://github.com/tolgainam/pinpoint",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "keywords": ["browser", "comments", "screenshots", "frontend", "devtools", "channel"],
   "mcpServers": "./plugin-mcp.json"
 }

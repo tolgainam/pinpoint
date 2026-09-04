@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "type": "module",
   "description": "Pin comments to elements on a localhost page and dispatch them into a running Claude Code session",
-  "license": "MIT",
+  "license": "SEE LICENSE IN LICENSE",
   "repository": "github:tolgainam/pinpoint",
   "keywords": ["claude-code", "claude-code-plugin", "mcp", "chrome-extension", "devtools"],
   "engines": {

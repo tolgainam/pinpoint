@@ -1,15 +1,11 @@
 <div align="center">
 
-```
-       ┌─┐
-       │ │  P I N P O I N T
-       └─┼─┐
-         │ │   comment on the page.
-         └─┘   fix it in the terminal.
-```
+# ◈ &nbsp;P I N P O I N T
 
-**Pin comments to elements on your localhost app. Hit Dispatch. Claude Code
-receives the element, the page state, and a screenshot of exactly what you saw.**
+### Comment on the page. Fix it in the terminal.
+
+Pin comments to elements on your localhost app. Hit Dispatch. Claude Code receives the
+element, the page state, and a screenshot of exactly what you saw.
 
 [Website](https://tolgainam.github.io/pinpoint/) · [Install](#install) · [How it works](#how-it-works)
 

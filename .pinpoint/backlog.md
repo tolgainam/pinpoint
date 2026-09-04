@@ -73,6 +73,13 @@ on its own. Add `.pinpoint/` to `.gitignore` if you'd rather keep yours private.
   - text: ""a bit more padding" is a negotiation. Click the element and Pinpoint reads what it actually computes, then offers the s"
   - parents: div.secbody ‹ section ‹ main
 
+- [ ] **Will remove this later**
+  - id: `bk-20260904-163944-z6ch`
+  - added: 2026-09-04 16:39
+  - url: http://localhost:3000/
+  - selector: `[data-testid="stats-band"]`
+  - text: "41 edge regions 99.98% uptime, trailing 90d 84ms p95 response 12B calls last month"
+
 ---
 
 ## Considered and dropped

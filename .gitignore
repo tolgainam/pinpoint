@@ -13,3 +13,6 @@ queue/
 
 # Pointing PINPOINT_PROJECT_DIR at a demo project puts its backlog and shots inside it.
 demo/fixtures/*/.pinpoint/
+
+# Personal idea scratchpad, not part of the tool.
+IDEAS.md

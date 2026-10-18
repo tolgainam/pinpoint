@@ -1360,7 +1360,9 @@ function onPeerMessage(data) {
   peerPost('/peer/ack', { batchId: b.id }, 2000).catch(err => {
     console.error('[pinpoint] could not acknowledge a deliver:', err?.message ?? err)
   })
-  notifyBatch(b)
+  // notifyBatch catches its own errors today; this keeps a future throw from becoming an
+  // unhandled rejection that ends the server.
+  notifyBatch(b).catch(err => console.error('[pinpoint] could not notify a delivered batch:', err?.message ?? err))
 }
 
 /** @type {Map<string, NodeJS.Timeout>} */

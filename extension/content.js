@@ -1436,6 +1436,8 @@
   // ---------------------------------------------------------------- pins
 
   const pins = el('div', 'layer')
+  // Starts hidden along with the bar; see setHidden.
+  pins.style.display = 'none'
   layer.append(pins)
 
   /** Pin elements, one per *element*, rebuilt only when the list itself changes. */
@@ -1553,6 +1555,9 @@
   // Dispatch because that is what it modifies: what the whole batch carries with it.
   const bugBtn = el('button', 'bug', '')
   bar.append(grip, dot, modeBtn, count, sendBtn, closeBtn)
+  // Hidden from the first frame rather than shown and then hidden, so a page load never
+  // flashes the toolbar. setHidden owns the state from here on.
+  bar.style.display = 'none'
   layer.append(bar)
 
   // ---------------------------------------------------------------- page errors
@@ -1679,13 +1684,19 @@
    * Hidden, not unloaded. The pins stay in storage and the probe keeps its ring buffer —
    * this is "get out of my way while I look at the page", not "forget everything". The
    * toolbar icon brings it back, which is also how it was summoned in the first place.
+   *
+   * Every page load starts hidden, and that is deliberate: the script mounts on every
+   * localhost page, and a toolbar sitting over an app you only meant to look at is in the
+   * way more often than not. Nothing is stored, so the next load is hidden again. Comments,
+   * the bridge and the badge keep running underneath, exactly as they do after ✕.
    */
-  let hidden = false
+  let hidden = true
   function setHidden(on) {
     hidden = on
     if (on) { setMode(false); closeBugPanel() }
     bar.style.display = on ? 'none' : ''
     pins.style.display = on ? 'none' : ''
+    if (!on) { placed ? clampBar() : placeBar() }
   }
 
   closeBtn.onclick = () => setHidden(true)
@@ -1718,8 +1729,24 @@
   }
 
   function clampBar() {
+    // A display:none bar measures as a 0x0 box at the origin, which would clamp it into
+    // the top-left corner. It is clamped again on the way back in instead.
+    if (hidden) return
     const r = bar.getBoundingClientRect()
     setBarPos(r.left, r.top)
+  }
+
+  /**
+   * First placement waits until the bar is actually on screen. Centring needs its width,
+   * and a hidden bar has none, so placing it at load would park it off-centre by half a
+   * toolbar. load() fills in the saved spot; the first show uses it.
+   */
+  let savedPos = null
+  let placed = false
+  function placeBar() {
+    if (savedPos) setBarPos(savedPos.x, savedPos.y)
+    else setBarPos((innerWidth - bar.getBoundingClientRect().width) / 2, innerHeight - 56)
+    placed = true
   }
 
   // ---------------------------------------------------------------- render
@@ -1978,9 +2005,9 @@
       comments = Array.isArray(saved.comments) ? saved.comments : []
       seq = Number(saved.seq) || comments.length
     }
-    const pos = got[BAR_KEY]
-    if (pos) setBarPos(pos.x, pos.y)
-    else setBarPos((innerWidth - bar.getBoundingClientRect().width) / 2, innerHeight - 56)
+    savedPos = got[BAR_KEY] || null
+    // Shown before storage answered: it was centred as a stand-in, so move it now.
+    if (!hidden) placeBar()
   }
 
   // ---------------------------------------------------------------- wiring
@@ -1989,15 +2016,22 @@
     // ping-content is how the worker checks whether this page already has us, before
     // it decides to inject. It must answer, or the worker injects a second copy.
     if (msg?.type === 'ping-content') { respond({ ok: true }); return false }
-    // Un-hide first: toggling comment mode on an overlay that is not on screen looks
-    // exactly like the icon doing nothing.
+    // The icon is a plain on/off switch for the overlay. It used to toggle comment mode,
+    // but with the overlay starting hidden that made the first click and every later one
+    // mean different things. Comment mode lives on the toolbar's own button.
     if (msg?.type === 'toggle') {
-      if (hidden) setHidden(false)
-      else setMode(!mode)
-      respond({ ok: true, mode })
+      setHidden(!hidden)
+      respond({ ok: true, mode, hidden })
       return false
     }
-    if (msg?.type === 'freeze') { freezeFrame(); respond({ ok: true }); return false }
+    // Freezing an overlay nobody can see would pin against an invisible toolbar, so the
+    // hotkey brings it up first.
+    if (msg?.type === 'freeze') {
+      if (hidden) setHidden(false)
+      freezeFrame()
+      respond({ ok: true })
+      return false
+    }
     if (msg?.type === 'bridge-event') { onBridgeEvent(msg.event); respond({ ok: true }); return false }
     return false
   })

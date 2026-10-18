@@ -6,7 +6,7 @@
   "permissions": ["storage", "tabs", "scripting", "activeTab"],
   "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"],
   "background": { "service_worker": "worker.js" },
-  "action": { "default_title": "Pinpoint — toggle comment mode" },
+  "action": { "default_title": "Pinpoint — show or hide toolbar" },
   "commands": {
     "freeze": {
       "suggested_key": { "default": "Alt+Shift+F" },

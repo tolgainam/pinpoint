@@ -57,3 +57,16 @@ test('check: JS is read for its string literals only', () => {
   assert.deepEqual(values('el.style.left = `${x}px` // was #fff', 'js'), [])
   assert.deepEqual(values("const A = '#d97757' /* design-ok: badge API needs a literal */", 'js'), [])
 })
+
+test('check: a template literal over several lines is checked, with its own line numbers', () => {
+  const src = 'const x = 1\nel.style.cssText = `\n  padding: 12px;\n  color: #fff;\n  left: ${x}px;\n`\n'
+  assert.deepEqual(scan(src, 'js'), [{ line: 3, value: 'padding: 12px' }, { line: 4, value: '#fff' }])
+})
+
+test('check: a "/*" or "//" inside a string does not hide what follows', () => {
+  const src = "const a = 'a/*b'\nconst b = 'color:#f00'\nconst c = '*/'\nconst d = 'http://x' + '#0f0'\n"
+  assert.deepEqual(scan(src, 'js'), [{ line: 2, value: '#f00' }, { line: 4, value: '#0f0' }])
+  // And a quote inside a regex literal or a comment is not the start of a string.
+  assert.deepEqual(values("const r = /['\"]/g\nconst s = 'gap: 6px' // it's\n", 'js'), ['gap: 6px'])
+  assert.deepEqual(values('.a { content: "/*"; color: #fff; }'), ['#fff'])
+})

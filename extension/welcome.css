@@ -102,7 +102,7 @@ p { margin: 0; }
   color: var(--pp-dim);
 }
 
-.bridge-version[hidden], .bridge-line[hidden], .bridge-foot[hidden] { display: none; }
+.bridge-version[hidden], .bridge-line[hidden] { display: none; }
 .bridge-version .mark { flex: none; font-weight: var(--pp-weight-bold); }
 
 .bridge-foot { display: flex; justify-content: flex-end; margin-top: var(--pp-space-10); }

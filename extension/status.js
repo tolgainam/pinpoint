@@ -129,7 +129,7 @@
 
     if (r.how === 'reconnecting') {
       return {
-        ...common, state: 'connecting', dot: false, pin: !!pickDir, label: 'Connecting',
+        ...common, state: 'connecting', dot: false, pin: !!pickDir, label: 'Reconnecting',
         canDispatch: false, project: parkTo,
         heading: 'Reconnecting to Claude Code',
         lines: ['A Claude Code session just closed. Try again in a few seconds.'],
@@ -301,8 +301,14 @@
     ? 'Run /pinpoint:setup in Claude Code to connect.'
     : 'The pill shows where comments go.')
 
+  /**
+   * The first-show tip's flag in chrome.storage.local, read by the toolbar and by the
+   * welcome page's step 3. One name in one place, so the two cannot drift apart.
+   */
+  const TIP_KEY = 'pp.tipSeen'
+
   globalThis.PinpointStatus = {
     view, portOf, tilde, displayNames, same, eventFor, dispatchPick,
-    compareVersions, versionNote, bridgeSummary, tipLine,
+    compareVersions, versionNote, bridgeSummary, tipLine, TIP_KEY,
   }
 })()

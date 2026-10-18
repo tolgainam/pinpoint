@@ -203,7 +203,22 @@ export async function shootAll(chromium) {
       await page.waitForTimeout(150)
     }
 
+    // The icon click, as the worker hears it: a toggle message to the active tab. The
+    // toolbar starts hidden on every page load, and this is what shows it.
+    const iconClick = () => worker.evaluate(async () => {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+      await chrome.tabs.sendMessage(tab.id, { type: 'toggle' })
+    })
+    const tipFlag = () => worker.evaluate(async key => (await chrome.storage.local.get(key))[key], 'pp.tipSeen')
+
     await page.goto(`http://localhost:${demo.port}/`)
+    await page.locator('#pinpoint-host .bar').waitFor({ state: 'attached', timeout: 15000 })
+    // Nothing of the tip before the first click: not on screen, and not flagged either,
+    // which is what the welcome page's step 3 reads.
+    await page.waitForTimeout(500)
+    if (await page.locator('#pinpoint-host .tip.show').count()) throw new Error('the tip showed before the toolbar did')
+    if ((await tipFlag()) !== undefined) throw new Error('pp.tipSeen was set before the toolbar was shown')
+    await iconClick()
     await page.locator('#pinpoint-host .bar').waitFor({ timeout: 15000 })
     await page.evaluate(css => {
       const s = document.createElement('style')
@@ -217,6 +232,7 @@ export async function shootAll(chromium) {
     // dismissed with its x, which is also what keeps it out of every shot after this one.
     await page.locator('#pinpoint-host .tip.show').waitFor({ timeout: 5000 })
     out.tip = await shot(page, ['#pinpoint-host .bar', '#pinpoint-host .tip'])
+    if ((await tipFlag()) !== 'shown') throw new Error('pp.tipSeen is not "shown" after the first show')
     await page.locator('#pinpoint-host .tip-x').click()
     await page.locator('#pinpoint-host .tip').waitFor({ state: 'hidden', timeout: 5000 })
     await page.mouse.move(VIEWPORT.width - 2, VIEWPORT.height - 2)
@@ -230,11 +246,8 @@ export async function shootAll(chromium) {
     out.popover = await shot(page, ['#pinpoint-host .bar', '#pinpoint-host .pop'])
     await page.keyboard.press('Escape')
 
-    // Comment mode comes from the toolbar icon, which is the worker's toggle message.
-    await worker.evaluate(async () => {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-      await chrome.tabs.sendMessage(tab.id, { type: 'toggle' })
-    })
+    // Comment mode comes from the Comment button; the icon only shows and hides the toolbar.
+    await page.locator('#pinpoint-host .mode').click()
     const target = await page.locator('[data-testid="cta-primary"]').boundingBox()
     await page.mouse.click(target.x + target.width / 2, target.y + target.height / 2)
     await page.locator('#pinpoint-host .card').waitFor()

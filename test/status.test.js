@@ -8,8 +8,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import '../extension/status.js'
+import { compareVersions as serverCompare } from '../server/version.js'
 
-const { view, portOf, displayNames, eventFor, dispatchPick, versionNote, bridgeSummary, tipLine } = globalThis.PinpointStatus
+const { view, portOf, displayNames, eventFor, dispatchPick, versionNote, bridgeSummary, tipLine, compareVersions } = globalThis.PinpointStatus
 
 const MYAPP = '/Users/k/Projects/myapp'
 const PINPOINT = '/Users/k/Projects/pinpoint'
@@ -109,7 +110,7 @@ test('nothing detected, several sessions: Choose, kept-for-port line', () => {
 
 test('reconnecting: neutral waiting state, Dispatch disabled', () => {
   const v = view(health([MYAPP], { how: 'reconnecting', projectDir: null, detected: null }), null, '5173')
-  assert.equal(v.label, 'Connecting')
+  assert.equal(v.label, 'Reconnecting')
   assert.equal(v.heading, 'Reconnecting to Claude Code')
   assert.deepEqual(v.lines, ['A Claude Code session just closed. Try again in a few seconds.'])
   assert.equal(v.dot, false)
@@ -256,4 +257,15 @@ test('welcome: connected names the running projects, and carries the version lin
 test('tip: second line is the setup line only while Offline', () => {
   assert.equal(tipLine(view({ connected: false }, null, '5173')), 'Run /pinpoint:setup in Claude Code to connect.')
   assert.equal(tipLine(view(on('0.3.0'), null, '5173')), 'The pill shows where comments go.')
+})
+
+test('version: the extension copy of compareVersions agrees with server/version.js', () => {
+  // Two copies because the extension cannot import server code; this keeps them one rule.
+  const fixtures = ['0.3.0', '0.3', '0.3.1', '0.3.10', '0.4.0', '1.0.0', 'v0.3.0', ' 0.3.0 ', '0.3.0-beta',
+    '0.3.0.7', '10', '', 'stub', undefined, null, 'v', '00.03.00']
+  for (const a of fixtures) {
+    for (const b of fixtures) {
+      assert.equal(Math.sign(compareVersions(a, b)), Math.sign(serverCompare(a, b)), `${a} vs ${b}`)
+    }
+  }
 })

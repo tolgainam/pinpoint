@@ -12,7 +12,7 @@
 ;(function () {
   const $ = id => document.getElementById(id)
   const EXT_VERSION = chrome.runtime.getManifest().version
-  const TIP_KEY = 'pp.tipSeen'
+  const TIP_KEY = PinpointStatus.TIP_KEY
 
   let checking = false
 
@@ -36,8 +36,6 @@
     $('bridge-line').textContent = sum.line ?? ''
     $('bridge-version').hidden = !sum.version
     $('bridge-version-text').textContent = sum.version?.line ?? ''
-    // "Check again" is for when something is wrong; a healthy answer needs no button.
-    $('bridge-foot').hidden = sum.connected && !sum.version
   }
 
   function tickToolbar(seen) {

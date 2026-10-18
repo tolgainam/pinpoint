@@ -28,7 +28,12 @@ import {
 } from './design-system.js'
 
 const PORT = Number(process.env.PINPOINT_PORT ?? 8788)
-const PROJECT_DIR = process.env.PINPOINT_PROJECT_DIR ?? process.cwd()
+/**
+ * Resolved once, here, so a trailing slash or a relative path in the env never reaches a
+ * comparison. Symlinks are kept: this is the spelling shown to the user. Comparisons go
+ * through canon() instead, which also resolves links.
+ */
+const PROJECT_DIR = resolve(process.env.PINPOINT_PROJECT_DIR ?? process.cwd())
 const QUEUE = process.env.PINPOINT_QUEUE ?? join(homedir(), '.claude', 'pinpoint', 'queue')
 /**
  * The backlog is not the queue and deliberately lives somewhere else. The queue is a
@@ -227,8 +232,8 @@ function ensureSection(lines, heading) {
 }
 
 /** Every open item, in file order. */
-function listOpen() {
-  const text = readBacklogText()
+function listOpen(file = BACKLOG_FILE) {
+  const text = readBacklogText(file)
   if (text == null) return []
   const lines = text.split('\n')
   const range = sectionRange(lines, '## Open')
@@ -660,9 +665,12 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
   const args = req.params.arguments ?? {}
 
   if (req.params.name === 'list_comments') {
-    // Only this session's project. A batch with no projectDir predates routing and shows
-    // everywhere, which is also the safety net if a deliver down a peer link was lost.
-    const batches = pendingBatches().filter(b => !b.projectDir || inside(b.projectDir, PROJECT_DIR))
+    // Only batches routed to this session's project, matched exactly: the router already
+    // picked the deepest live session, so a session in a parent folder must not also list
+    // what went to one nested inside it. A batch with no stamp predates routing and shows
+    // everywhere. This is also the safety net if a deliver down a peer link was lost.
+    const mine = canon(PROJECT_DIR)
+    const batches = pendingBatches().filter(b => forProject(b, mine))
     if (!batches.length) {
       return { content: [{ type: 'text', text: 'No pending comments.' }] }
     }
@@ -783,8 +791,12 @@ setInterval(() => {
     try { emit(': ping\n\n') } catch { listeners.delete(emit) }
   }
   // Peers too: a link whose session is gone should leave the list, not linger in it.
+  // res.write on a dead socket does not throw, it fails later or quietly, so the state of
+  // the response is what tells. The 'close' handler normally gets there first; this is
+  // the sweep for a close that never fired.
   for (const p of peers) {
-    try { p.write(': ping\n\n') } catch { peers.delete(p) }
+    if (p.res.destroyed || p.res.writableEnded) { peers.delete(p); continue }
+    p.write(': ping\n\n')
   }
 }, 20_000).unref()
 
@@ -878,7 +890,12 @@ const PEER_KEY_FILE = process.env.PINPOINT_PEER_KEY ?? join(homedir(), '.claude'
 /** How long a new owner waits for peers to reconnect before it answers "no session". */
 const GRACE_MS = Number(process.env.PINPOINT_ROUTE_GRACE_MS ?? 4000)
 const LSOF = process.env.PINPOINT_LSOF ?? 'lsof'
+/** How long a detected cwd is trusted while the same process still holds the port. */
 const DETECT_TTL = 30_000
+/** Within this window a hit is reused without even asking lsof who holds the port. */
+const DETECT_RECHECK_MS = Number(process.env.PINPOINT_DETECT_RECHECK_MS ?? 5000)
+/** How long the bridge waits for a peer to confirm a deliver before dropping its link. */
+const ACK_MS = Number(process.env.PINPOINT_ACK_MS ?? 3000)
 
 /**
  * Read fresh each time rather than cached, so a key file somebody deleted is simply
@@ -904,7 +921,8 @@ function keyOk(req) {
   return got.length === want.length && timingSafeEqual(got, want)
 }
 
-/** @type {Set<{pid: number, projectDir: string, at: number, write: (chunk: string) => void}>} */
+/** @type {Set<{pid: number, projectDir: string, key: string, at: number,
+ *   res: import('node:http').ServerResponse, write: (chunk: string) => void}>} */
 const peers = new Set()
 /** Connection order, so "most recently connected wins" needs no clock. */
 let joinSeq = 0
@@ -914,21 +932,43 @@ let graceUntil = 0
 /** This bridge plus every peer, as live sessions. Empty when this server is not the bridge. */
 function sessions() {
   if (!server.listening) return []
-  return [{ projectDir: PROJECT_DIR, at: ownerAt, self: true }, ...peers]
+  return [{ projectDir: PROJECT_DIR, key: canon(PROJECT_DIR), at: ownerAt, self: true }, ...peers]
 }
 
 /** One row per project, which is what the toolbar lists. */
 function sessionList() {
   const seen = new Set()
-  return sessions().filter(s => !seen.has(s.projectDir) && seen.add(s.projectDir))
+  return sessions().filter(s => !seen.has(s.key) && seen.add(s.key))
     .map(s => ({ name: basename(s.projectDir), projectDir: s.projectDir }))
 }
 
 /** Several sessions in one directory: the newest is the one the user is looking at. */
 function sessionFor(dir) {
+  const key = canon(dir)
   let best = null
-  for (const s of sessions()) if (s.projectDir === dir && (!best || s.at > best.at)) best = s
+  for (const s of sessions()) if (s.key === key && (!best || s.at > best.at)) best = s
   return best
+}
+
+/**
+ * The one spelling every comparison uses. Session dirs, picks and batch stamps arrive from
+ * different places (the env, a query string, the toolbar, lsof), and the same folder can be
+ * written as /var or /private/var, through a linked ~/Projects, or with a trailing slash.
+ * Each keeps its own spelling for display; only this form is ever compared.
+ */
+function canon(p) {
+  return real(resolve(String(p)))
+}
+
+/**
+ * Whether a batch belongs in the list for the project with this canon() key. A batch with
+ * no stamp predates routing and belongs everywhere. `projectDir` alone covers batches
+ * written before the stamp carried its own key.
+ */
+function forProject(b, key) {
+  const stamp = b.projectKey ?? b.projectDir
+  if (!stamp) return true
+  return key != null && canon(stamp) === key
 }
 
 function inside(child, parent) {
@@ -980,29 +1020,37 @@ function lsof(args) {
   })
 }
 
-/** @type {Map<number, {at: number, cwd: Promise<string | null>}>} */
+/** @type {Map<number, {at: number, pid: string, cwd: string}>} */
 const detected = new Map()
 
 /**
- * Which directory the page's dev server was started from. Cached per port, misses
- * included, because the toolbar asks every 5s and lsof costs 50 to 150ms. Docker, proxies
- * and tunnels give a cwd that matches nothing, or none, which is the same as not knowing.
+ * Which directory the page's dev server was started from. The toolbar asks every 5s and
+ * each lsof costs 50 to 150ms, so a hit is kept, but only a hit, and only for the process
+ * it was read from. A miss is never cached: the dev server that was not up yet a moment
+ * ago is the usual case, and a cached miss would hide it for the whole TTL. A different
+ * server on the same port (the old one stopped, another started) has a different pid, so
+ * the first lsof call, which is needed anyway, is what invalidates a stale hit.
+ * Docker, proxies and tunnels give a cwd that matches nothing, or none, which is the same
+ * as not knowing.
  */
-function detectCwd(page) {
-  if (process.platform !== 'darwin' && process.platform !== 'linux') return Promise.resolve(null)
+async function detectCwd(page) {
+  if (process.platform !== 'darwin' && process.platform !== 'linux') return null
   const port = pagePort(page)
-  if (!port) return Promise.resolve(null)
+  if (!port) return null
   const hit = detected.get(port)
-  if (hit && Date.now() - hit.at < DETECT_TTL) return hit.cwd
-  const cwd = (async () => {
+  if (hit && Date.now() - hit.at < DETECT_RECHECK_MS) return hit.cwd
+  try {
     const pid = (await lsof(['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-t'])).split('\n').map(l => l.trim()).find(l => /^\d+$/.test(l))
-    if (!pid) return null
+    if (!pid) { detected.delete(port); return null }
+    if (hit && hit.pid === pid && Date.now() - hit.at < DETECT_TTL) return hit.cwd
     const line = (await lsof(['-a', '-p', pid, '-d', 'cwd', '-Fn'])).split('\n').find(l => l.startsWith('n'))
     const dir = line?.slice(1).trim()
-    return dir && isAbsolute(dir) ? dir : null
-  })().catch(() => null)
-  detected.set(port, { at: Date.now(), cwd })
-  return cwd
+    if (!dir || !isAbsolute(dir)) { detected.delete(port); return null }
+    detected.set(port, { at: Date.now(), pid, cwd: dir })
+    return dir
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -1018,7 +1066,9 @@ function detectCwd(page) {
  *   detected: string | null, live: boolean, error?: string}>}
  */
 async function resolveRoute(page, pick) {
-  const dirs = [...new Set(sessions().map(s => s.projectDir))]
+  // One entry per project, in each session's own spelling; compared through canon().
+  const seen = new Set()
+  const dirs = sessions().filter(s => !seen.has(s.key) && seen.add(s.key)).map(s => s.projectDir)
   const cwd = page ? await detectCwd(page) : null
   const route = (projectDir, how, live, error) =>
     ({ projectDir, name: projectDir ? basename(projectDir) : null, how, detected: cwd, live, ...(error ? { error } : {}) })
@@ -1026,8 +1076,9 @@ async function resolveRoute(page, pick) {
   let r
   if (pick) {
     const dir = resolve(String(pick))
-    r = dirs.includes(dir)
-      ? route(dir, 'manual', true)
+    const live = sessionFor(dir)
+    r = live
+      ? route(live.projectDir, 'manual', true)
       : route(dir, 'manual', false, `No Claude Code session is running in ${dir}. Start one there, or pick another project.`)
   } else {
     const match = cwd ? matchProject(cwd, dirs) : null
@@ -1037,8 +1088,14 @@ async function resolveRoute(page, pick) {
     else r = route(null, 'none', false, dirs.length ? 'Several Claude Code sessions are running and Pinpoint cannot tell which one this page belongs to.' : 'No Claude Code session is running.')
   }
 
+  // `standby` keeps the one live session for Park and the chips, which need a project and
+  // not a delivery: while peers reconnect, "only one session" may be wrong for a dispatch,
+  // but the session that is live is still a real project to write a backlog item into.
   if (Date.now() < graceUntil && (!r.live || r.how === 'only')) {
-    return { ...r, how: 'reconnecting', live: false, error: 'Claude Code sessions are reconnecting after a handover. Try again in a few seconds.' }
+    return {
+      ...r, how: 'reconnecting', live: false, standby: r.how === 'only' ? r.projectDir : null,
+      error: 'Claude Code sessions are reconnecting after a handover. Try again in a few seconds.',
+    }
   }
   return r
 }
@@ -1053,7 +1110,10 @@ async function handlePeer(req, res, url) {
     if (!dir || !isAbsolute(dir)) return send(res, 400, {}, 'projectDir required')
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' })
     res.socket?.setNoDelay(true)
-    const peer = { pid: Number(url.searchParams.get('pid')) || 0, projectDir: resolve(dir), at: ++joinSeq, write: chunk => res.write(chunk) }
+    const peer = {
+      pid: Number(url.searchParams.get('pid')) || 0, projectDir: resolve(dir), key: canon(dir), at: ++joinSeq,
+      res, write: chunk => res.write(chunk),
+    }
     res.write(': connected\n\n')
     peers.add(peer)
     req.on('close', () => peers.delete(peer))
@@ -1067,6 +1127,13 @@ async function handlePeer(req, res, url) {
   if (url.pathname === '/peer/event') {
     if (!payload || typeof payload.type !== 'string') return send(res, 400, {}, 'no event')
     broadcast(payload)
+    return sendJson(res, 200, {}, { ok: true })
+  }
+
+  if (url.pathname === '/peer/ack') {
+    const id = String(payload?.batchId ?? '')
+    clearTimeout(awaitingAck.get(id))
+    awaitingAck.delete(id)
     return sendJson(res, 200, {}, { ok: true })
   }
 
@@ -1168,7 +1235,36 @@ function onPeerMessage(data) {
   try { msg = JSON.parse(data) } catch { return }
   if (msg?.type !== 'deliver') return
   const b = readBatch(String(msg.batchId ?? ''))
-  if (b) notifyBatch(b)
+  if (!b) return
+  notifyBatch(b).then(ok => ok && peerPost('/peer/ack', { batchId: b.id }, 2000)).catch(err => {
+    console.error('[pinpoint] could not acknowledge a deliver:', err?.message ?? err)
+  })
+}
+
+/** @type {Map<string, NodeJS.Timeout>} */
+const awaitingAck = new Map()
+
+/**
+ * Hand a batch to the peer whose stdio reaches its session. A write to an SSE stream
+ * succeeds whether or not anyone is reading, so the peer confirms with /peer/ack once its
+ * notification is out. No ack means the link is not what it looks like: it is dropped,
+ * which sends the peer back through its reconnect, and the batch is already on disk where
+ * that session's list_comments finds it. The dispatch never waits for any of this.
+ */
+function deliver(peer, batchId) {
+  const drop = why => {
+    awaitingAck.delete(batchId)
+    console.error(`[pinpoint] deliver of ${batchId} to ${peer.projectDir} ${why}, dropping that peer link`)
+    peers.delete(peer)
+    peer.res.destroy()
+  }
+  const timer = setTimeout(() => drop('was not acknowledged'), ACK_MS)
+  timer.unref()
+  awaitingAck.set(batchId, timer)
+  try { peer.write(`data: ${JSON.stringify({ type: 'deliver', batchId })}\n\n`) } catch (err) {
+    clearTimeout(timer)
+    drop(`failed (${err?.message ?? err})`)
+  }
 }
 
 // ---------------------------------------------------------------- http gate
@@ -1382,6 +1478,8 @@ async function handleDispatch(req, res) {
     debug: sanitiseDebug(payload.debug),
     pageShot,
     projectDir: route.projectDir,
+    // What list_comments matches on, exactly; projectDir is kept for display.
+    projectKey: canon(route.projectDir),
     comments,
   }
   writeBatch(batch)
@@ -1392,12 +1490,7 @@ async function handleDispatch(req, res) {
   // whose stdio reaches the right Claude. Everything above was the bridge's job.
   const target = sessionFor(route.projectDir)
   if (!target || target.self) await notifyBatch(batch)
-  else {
-    try { target.write(`data: ${JSON.stringify({ type: 'deliver', batchId: id })}\n\n`) } catch (err) {
-      // The batch is on disk and list_comments in that project still finds it.
-      console.error('[pinpoint] deliver to peer failed:', err)
-    }
-  }
+  else deliver(target, id)
 
   sendJson(res, 200, headers, { ok: true, batch: id, count: comments.length, projectDir: route.projectDir, name: route.name })
 }
@@ -1420,8 +1513,10 @@ async function notifyBatch(batch) {
         },
       },
     })
+    return true
   } catch (err) {
     console.error('[pinpoint] notification failed:', err)
+    return false
   }
 }
 
@@ -1433,7 +1528,36 @@ async function notifyBatch(batch) {
  */
 function projectFor(route) {
   if (route.live) return route.projectDir
-  return route.detected ?? null
+  if (route.standby) return route.standby
+  return route.detected ? projectAt(route.detected) : null
+}
+
+/**
+ * The project a bare dev-server cwd stands for, when no session claims it. The cwd itself
+ * is often a package inside the repo, so the nearest folder above it with a .git (a dir,
+ * or a file in a worktree) is the better answer. The walk stops before home and /, the
+ * same two places matchProject will not route to: everything is below them, and a
+ * backlog written there belongs to no project at all. With no repo found, the cwd stands
+ * for itself, unless it is one of those two.
+ */
+function projectAt(cwd) {
+  const home = real(homedir())
+  const unsafe = d => { const r = real(d); return r === sep || r === home }
+  const start = resolve(cwd)
+  if (unsafe(start)) return null
+  for (let d = start; !unsafe(d); d = dirname(d)) {
+    if (existsSync(join(d, '.git'))) return d
+    if (dirname(d) === d) break
+  }
+  return start
+}
+
+/** Why projectFor found nowhere, worded for the toolbar. */
+function noProjectError(route) {
+  if (route.detected && !route.standby && route.how !== 'reconnecting') {
+    return `This page's dev server runs from ${route.detected}, which is not a project folder. Pick a project.`
+  }
+  return route.error ?? 'Pinpoint cannot tell which project this page belongs to.'
 }
 
 async function handleDesignSystem(req, res) {
@@ -1465,7 +1589,7 @@ async function handleBacklog(req, res) {
 
   const route = await resolveRoute(pageOf(payload), payload.pick)
   const dir = projectFor(route)
-  if (!dir) return send(res, 409, headers, route.error)
+  if (!dir) return send(res, 409, headers, noProjectError(route))
   const file = backlogFile(dir)
 
   const id = `bk-${stamp()}`
@@ -1536,10 +1660,15 @@ const server = createServer((req, res) => {
     resolveRoute(url.searchParams.get('page'), url.searchParams.get('pick')).then(route => {
       // projectDir stays for the toolbar that predates routing: it now names where a
       // dispatch from this page would land, and the bridge's own dir when nowhere would.
-      const { live, error, ...shown } = route
+      // pending and backlog are for the project this page routes to, the same one a
+      // dispatch or a Park would use, not for every project or for the bridge's own.
+      const { live, error, standby, ...shown } = route
+      const dir = projectFor(route)
+      const key = dir ? canon(dir) : null
       sendJson(res, 200, cors(origin), {
         ok: true, version: VERSION, projectDir: live ? route.projectDir : PROJECT_DIR, queue: QUEUE,
-        pending: pendingBatches().length, backlog: listOpen().length,
+        pending: pendingBatches().filter(b => forProject(b, key)).length,
+        backlog: dir ? listOpen(backlogFile(dir)).length : 0,
         sessions: sessionList(), route: { ...shown, ...(error ? { error } : {}) },
       })
     }).catch(err => {

@@ -27,9 +27,25 @@ async function call(path, init = {}) {
   }
 }
 
-async function health() {
+/**
+ * The bridge routes each page to the session for its project, so it has to know which
+ * page is asking. A request from here carries the extension's origin, not the page's,
+ * so the tab's origin rides along as `page`, plus a manual `pick` once the toolbar has one.
+ */
+function pageOf(sender) {
+  try { return new URL(sender.tab?.url ?? '').origin } catch { return undefined }
+}
+
+function routed(payload, sender, pick) {
+  return { ...payload, page: pageOf(sender), ...(pick ? { pick } : {}) }
+}
+
+async function health(page, pick) {
   try {
-    const r = await call('/health')
+    const qs = new URLSearchParams()
+    if (page) qs.set('page', page)
+    if (pick) qs.set('pick', pick)
+    const r = await call(`/health${qs.size ? `?${qs}` : ''}`)
     return r.ok && r.json ? { connected: true, ...r.json } : { connected: false }
   } catch {
     return { connected: false }
@@ -213,10 +229,10 @@ async function ensureInjected(tabId) {
 // ---------------------------------------------------------------- events
 
 chrome.runtime.onMessage.addListener((msg, sender, respond) => {
-  if (msg?.type === 'ping') { ensureStream(); health().then(respond); return true }
-  if (msg?.type === 'dispatch') { post('/dispatch', msg.payload).then(respond); return true }
-  if (msg?.type === 'backlog') { post('/backlog', msg.payload).then(respond); return true }
-  if (msg?.type === 'design-system') { post('/design-system', msg.payload).then(respond); return true }
+  if (msg?.type === 'ping') { ensureStream(); health(pageOf(sender), msg.pick).then(respond); return true }
+  if (msg?.type === 'dispatch') { post('/dispatch', routed(msg.payload, sender, msg.pick)).then(respond); return true }
+  if (msg?.type === 'backlog') { post('/backlog', routed(msg.payload, sender, msg.pick)).then(respond); return true }
+  if (msg?.type === 'design-system') { post('/design-system', routed(msg.payload, sender, msg.pick)).then(respond); return true }
   if (msg?.type === 'recapture') { post('/recapture', msg.payload).then(respond); return true }
   if (msg?.type === 'capture') { capture().then(respond); return true }
   if (msg?.type === 'count') {

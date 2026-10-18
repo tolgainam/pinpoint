@@ -221,7 +221,7 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
   if (msg?.type === 'capture') { capture().then(respond); return true }
   if (msg?.type === 'count') {
     const tabId = sender.tab?.id
-    if (tabId) badge(tabId, msg.n ? String(msg.n) : '', msg.n ? `${msg.n} comment${msg.n === 1 ? '' : 's'} waiting to dispatch` : 'Pinpoint — toggle comment mode')
+    if (tabId) badge(tabId, msg.n ? String(msg.n) : '', msg.n ? `${msg.n} comment${msg.n === 1 ? '' : 's'} waiting to dispatch` : 'Pinpoint — show or hide toolbar')
     respond({ ok: true })
     return false
   }

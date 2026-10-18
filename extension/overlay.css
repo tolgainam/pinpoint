@@ -688,15 +688,109 @@ button.danger:hover { color: #f87171; }
 
 .grip:active { cursor: grabbing; }
 
+/* The status pill: dot plus where Dispatch would go. Same weight as the count, so a
+   healthy toolbar stays quiet; the label is what changes when something is off. */
+.bar button.pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border-color: var(--pp-line);
+  color: var(--pp-fg);
+  font-size: 11px;
+}
+
+/* Off is a hollow ring rather than red: "no session for this project" and "connecting"
+   are not errors, and only the label should say which one it is. */
 .dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #ef4444;
+  border: 1.5px solid var(--pp-dim);
+  background: transparent;
   flex: none;
 }
 
-.dot.on { background: #22c55e; }
+.dot.on { background: var(--pp-ok); border-color: var(--pp-ok); }
+
+.pill-mark { color: var(--pp-dim); font-size: 10px; }
+
+.pill-label {
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Looks disabled, still hears hover and click: both open the popover with the reason. */
+.bar button.primary.blocked {
+  opacity: 0.45;
+  cursor: default;
+  filter: none;
+}
+
+/* ---------------------------------------------------------------- status popover */
+
+.pop {
+  display: none;
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  width: 300px;
+  max-width: calc(100vw - 16px);
+  padding: 10px 0 6px;
+  border-radius: 10px;
+  border: 1px solid var(--pp-line);
+  background: var(--pp-bg);
+  color: var(--pp-fg);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.35);
+  font-size: 12px;
+  user-select: text;
+}
+
+.pop.show { display: block; }
+.pop.below { bottom: auto; top: calc(100% + 8px); }
+
+.pop-head { padding: 0 12px; font-weight: 600; }
+.pop-lines { padding: 2px 12px 8px; color: var(--pp-dim); line-height: 1.45; word-break: break-word; }
+
+/* Six rows, then it scrolls inside the popover rather than growing off screen. */
+.pop-list {
+  --pp-row: 28px;
+  max-height: calc(var(--pp-row) * 6);
+  overflow-y: auto;
+  border-top: 1px solid var(--pp-line);
+  padding-top: 4px;
+}
+
+.pop button.pop-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: var(--pp-row);
+  padding: 0 12px;
+  border: 0;
+  border-radius: 0;
+  text-align: left;
+  color: var(--pp-fg);
+}
+
+.pop button.pop-row:hover { background: var(--pp-hover); }
+.pop-mark { color: var(--pp-dim); flex: none; font-size: 10px; }
+.pop-row.on .pop-mark { color: var(--pp-accent); }
+.pop-name { flex: none; }
+.pop-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--pp-dim);
+  text-align: right;
+}
+
+.pop-foot { display: flex; justify-content: flex-end; padding: 0 12px 4px; }
 
 .count {
   min-width: 18px;
@@ -742,6 +836,7 @@ button.mode.on {
   --pp-line: #3f3f46;
   --pp-input: #131315;
   --pp-hover: #2a2a2e;
+  --pp-ok: #22c55e;
 }
 
 .toggle {

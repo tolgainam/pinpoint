@@ -158,7 +158,7 @@ again hides it. Pins and comments keep working while it is hidden.
 | `✕` | Hides the overlay (the icon brings it back) |
 | **Clear** | Removes every pin on this page; shown only when there are pins |
 | **Alt+Shift+F** | Freezes the page so vanishing states can be pinned, and shows the overlay if hidden |
-| dot | Green when the bridge is reachable |
+| status pill | Dot plus where Dispatch goes: the project name, Choose, or Offline. Click it to see the running sessions and pick one for this port; Auto lets Pinpoint match the page to its project. Dispatch stays disabled while nothing can receive it |
 
 `⌘↵` adds a note, `Esc` closes the composer or leaves comment mode. Drag the bar by its
 `⌖` grip. Pins survive a reload — they're keyed by origin + pathname in

@@ -1,7 +1,7 @@
 {
   "name": "pinpoint",
   "displayName": "Pinpoint",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Pin comments to elements on a localhost page and dispatch them — with screenshots — into this session",
   "author": {
     "name": "Tolga Inam",

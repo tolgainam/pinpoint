@@ -12,12 +12,13 @@
  * Chrome or a Claude Code session around. setup.js imports this and runs the same list.
  * Nothing here ever changes anything: it reads, and it prints commands for the user.
  */
-import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { dirname, join, resolve, sep } from 'node:path'
 import { homedir } from 'node:os'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { compareVersions } from '../server/version.js'
+import { canon, tilde } from '../server/paths.js'
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 export const PORT = Number(process.env.PINPOINT_PORT ?? 8788)
@@ -32,8 +33,6 @@ export const MCP_NAME = 'plugin:pinpoint:pinpoint'
 export const YIELD_SINCE = '0.3.0'
 
 const readJson = file => { try { return JSON.parse(readFileSync(file, 'utf8')) } catch { return null } }
-const tilde = p => { const h = homedir(); return p === h || p.startsWith(h + sep) ? '~' + p.slice(h.length) : p }
-const canon = p => { try { return realpathSync(p) } catch { return resolve(p) } }
 
 /** The version of the code running this script: the plugin manifest, else package.json. */
 export function pluginVersion(root = ROOT) {
@@ -109,17 +108,19 @@ export function stopCommand(owner) {
   return 'Stop the old bridge: quit the Claude Code sessions that were open before the update'
 }
 
-/** Is this session on the bridge's list? Matched by folder, which is all the list holds. */
+/**
+ * Is this session on the bridge's list? Matched by folder, exactly: the list holds each
+ * session's start folder, and a session in a parent folder is a different session, not
+ * this one. projectDir is this session's start folder (see sessionDir), not wherever the
+ * shell has wandered since.
+ */
 export function checkSessions({ health, projectDir }) {
   const name = 'Sessions'
   if (!health) return { name, ok: null, detail: 'no bridge, so no sessions to list' }
   if (!Array.isArray(health.sessions)) return { name, ok: null, detail: 'this bridge is too old to list sessions' }
   const here = canon(projectDir)
   const names = health.sessions.map(s => s.name).join(', ') || 'none'
-  const mine = health.sessions.some(s => {
-    const dir = canon(String(s.projectDir ?? ''))
-    return here === dir || here.startsWith(dir + sep)
-  })
+  const mine = health.sessions.some(s => canon(String(s.projectDir ?? '')) === here)
   const count = `${health.sessions.length} joined (${names})`
   if (mine) return { name, ok: true, detail: `${count}, this one included` }
   return {
@@ -250,8 +251,23 @@ function ancestors() {
   return out
 }
 
+/**
+ * The folder this Claude Code session started in, which is what its Pinpoint server is
+ * listed under. CLAUDE_PROJECT_DIR when Claude Code passes it; otherwise the cwd of the
+ * session's own process (CLAUDE_PID), since the shell running this may have cd'd away.
+ */
+function sessionDir() {
+  if (process.env.CLAUDE_PROJECT_DIR) return process.env.CLAUDE_PROJECT_DIR
+  const pid = Number(process.env.CLAUDE_PID)
+  if (pid > 0) {
+    const line = run(process.env.PINPOINT_LSOF ?? 'lsof', ['-a', '-p', String(pid), '-d', 'cwd', '-Fn']).split('\n').find(l => l.startsWith('n/'))
+    if (line) return line.slice(1)
+  }
+  return process.cwd()
+}
+
 /** Gather everything and judge it, in the order a user would fix things. */
-export async function runChecks({ projectDir = process.env.CLAUDE_PROJECT_DIR ?? process.cwd(), port = PORT } = {}) {
+export async function runChecks({ projectDir = sessionDir(), port = PORT } = {}) {
   const version = pluginVersion()
   const [health, owner] = [await getHealth(port), portOwner(port)]
   return {

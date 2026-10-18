@@ -20,13 +20,14 @@ import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprot
 import { createServer, request as httpRequest } from 'node:http'
 import { execFile } from 'node:child_process'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
-import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync, linkSync, realpathSync } from 'node:fs'
-import { join, dirname, basename, resolve, isAbsolute, sep } from 'node:path'
+import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync, linkSync, renameSync } from 'node:fs'
+import { join, dirname, basename, resolve, isAbsolute } from 'node:path'
 import { homedir } from 'node:os'
 import {
   probeProject, withRuntime, tokenIndex, annotate, summaryLine, guardrailLine, chipData, deltaLine,
 } from './design-system.js'
 import { compareVersions } from './version.js'
+import { real, canon, inside, nowhere } from './paths.js'
 
 const PORT = Number(process.env.PINPOINT_PORT ?? 8788)
 /**
@@ -898,7 +899,11 @@ const LSOF = process.env.PINPOINT_LSOF ?? 'lsof'
 /** How long a detected cwd is trusted while the same process still holds the port. */
 const DETECT_TTL = 30_000
 /** Within this window a hit is reused without even asking lsof who holds the port. */
-const DETECT_RECHECK_MS = Number(process.env.PINPOINT_DETECT_RECHECK_MS ?? 5000)
+/**
+ * Clearly longer than the toolbar's 5s ping, or nearly every ping would miss it. A hit
+ * past this is still re-validated by the listener's pid before it is reused.
+ */
+const DETECT_RECHECK_MS = Number(process.env.PINPOINT_DETECT_RECHECK_MS ?? 15000)
 /** How long the bridge waits for a peer to confirm a deliver before dropping its link. */
 const ACK_MS = Number(process.env.PINPOINT_ACK_MS ?? 3000)
 
@@ -907,15 +912,22 @@ const ACK_MS = Number(process.env.PINPOINT_ACK_MS ?? 3000)
  * recreated. Created through a hard link so two servers starting at once cannot both
  * write one: the loser's link fails and it reads the winner's.
  */
+/** Shorter than this is not a key we wrote (ours are 64 hex characters). */
+const MIN_KEY = 32
+
 function peerKey() {
-  try {
-    const k = readFileSync(PEER_KEY_FILE, 'utf8').trim()
-    if (k) return k
-  } catch { /* not there yet */ }
+  let existing = null
+  try { existing = readFileSync(PEER_KEY_FILE, 'utf8').trim() } catch { /* not there yet */ }
+  if (existing && existing.length >= MIN_KEY) return existing
   mkdirSync(dirname(PEER_KEY_FILE), { recursive: true })
   const tmp = `${PEER_KEY_FILE}.${process.pid}.tmp`
   writeFileSync(tmp, randomBytes(32).toString('hex'), { mode: 0o600 })
-  try { linkSync(tmp, PEER_KEY_FILE) } catch (err) { if (err?.code !== 'EEXIST') throw err } finally { rmSync(tmp, { force: true }) }
+  try {
+    // A file that is there but empty or truncated is replaced outright: an empty key
+    // would match an empty header, and that would let anything pose as a session.
+    if (existing === null) linkSync(tmp, PEER_KEY_FILE)
+    else renameSync(tmp, PEER_KEY_FILE)
+  } catch (err) { if (err?.code !== 'EEXIST') throw err } finally { rmSync(tmp, { force: true }) }
   return readFileSync(PEER_KEY_FILE, 'utf8').trim()
 }
 
@@ -923,6 +935,7 @@ function keyOk(req) {
   const got = Buffer.from(String(req.headers['x-pinpoint-peer'] ?? ''))
   let want
   try { want = Buffer.from(peerKey()) } catch { return false }
+  if (want.length < MIN_KEY) return false
   return got.length === want.length && timingSafeEqual(got, want)
 }
 
@@ -1012,28 +1025,16 @@ function sessionFor(dir) {
 }
 
 /**
- * The one spelling every comparison uses. Session dirs, picks and batch stamps arrive from
- * different places (the env, a query string, the toolbar, lsof), and the same folder can be
- * written as /var or /private/var, through a linked ~/Projects, or with a trailing slash.
- * Each keeps its own spelling for display; only this form is ever compared.
- */
-function canon(p) {
-  return real(resolve(String(p)))
-}
-
-/**
  * Whether a batch belongs in the list for the project with this canon() key. A batch with
  * no stamp predates routing and belongs everywhere. `projectDir` alone covers batches
  * written before the stamp carried its own key.
  */
 function forProject(b, key) {
-  const stamp = b.projectKey ?? b.projectDir
-  if (!stamp) return true
-  return key != null && canon(stamp) === key
-}
-
-function inside(child, parent) {
-  return child === parent || child.startsWith(parent.endsWith(sep) ? parent : parent + sep)
+  // projectKey was canon()ed when it was written, so it compares as is; only the older
+  // projectDir stamp needs the filesystem, and /health runs this for every pending batch.
+  if (b.projectKey) return key != null && b.projectKey === key
+  if (!b.projectDir) return true
+  return key != null && canon(b.projectDir) === key
 }
 
 /**
@@ -1050,13 +1051,9 @@ function matchProject(cwd, dirs) {
   const reals = dirs.map(d => [d, real(d)])
   const above = reals.filter(([, r]) => inside(at, r)).sort((a, b) => b[1].length - a[1].length)
   if (above.length) return above[0][0]
-  if (at === sep || at === real(homedir())) return null
+  if (nowhere(at)) return null
   const below = reals.filter(([, r]) => inside(r, at))
   return below.length === 1 ? below[0][0] : null
-}
-
-function real(p) {
-  try { return realpathSync(p) } catch { return p }
 }
 
 /** The page's origin, from wherever this request carried it. */
@@ -1243,12 +1240,20 @@ function yieldBridge(res, to) {
   toolsOnly = true
   yielded = true
   console.error(`[pinpoint] handing the bridge to a newer version (${to}), this session is now tools-only`)
-  res.on('finish', () => {
+  // On 'close' as well as 'finish': if the asker gave up before the reply went out, the
+  // reply never finishes, and without this the port would sit closed with this server
+  // never coming back to it. The retry takes it straight back if nobody else did.
+  let done = false
+  const after = () => {
+    if (done) return
+    done = true
     server.closeAllConnections()
     if (retry) clearTimeout(retry)
     retry = setTimeout(listen, RETRY_MS)
     retry.unref()
-  })
+  }
+  res.on('finish', after)
+  res.on('close', after)
   sendJson(res, 200, {}, { ok: true, version: VERSION })
 }
 
@@ -1314,9 +1319,16 @@ function connectPeer() {
   const qs = new URLSearchParams({ pid: String(process.pid), projectDir: PROJECT_DIR })
   const req = httpRequest({ host: '127.0.0.1', port: PORT, path: `/peer?${qs}`, headers: { 'X-Pinpoint-Peer': key } })
   peerLink = req
-  const drop = () => { if (peerLink === req) peerLink = null }
+  let up = false
+  const drop = () => {
+    if (peerLink !== req) return
+    peerLink = null
+    // A link that was up and dropped: the owner may be someone new. Look at once.
+    if (up) { askAfter = 0; askBackoff = 0 }
+  }
   req.on('response', res => {
     if (res.statusCode !== 200) { res.resume(); req.destroy(); drop(); return }
+    up = true
     res.setEncoding('utf8')
     let buf = ''
     res.on('data', chunk => {
@@ -1341,9 +1353,14 @@ function onPeerMessage(data) {
   if (msg?.type !== 'deliver') return
   const b = readBatch(String(msg.batchId ?? ''))
   if (!b) return
-  notifyBatch(b).then(ok => ok && peerPost('/peer/ack', { batchId: b.id }, 2000)).catch(err => {
+  // Acked on receipt, before the render: the ack proves this link is read, which is all
+  // the bridge is checking, and rendering the first batch for a project probes its design
+  // system, which in a big repo can outlast the ack deadline on a perfectly healthy peer.
+  // A notification that then fails costs nothing, the batch is on disk for list_comments.
+  peerPost('/peer/ack', { batchId: b.id }, 2000).catch(err => {
     console.error('[pinpoint] could not acknowledge a deliver:', err?.message ?? err)
   })
+  notifyBatch(b)
 }
 
 /** @type {Map<string, NodeJS.Timeout>} */
@@ -1533,6 +1550,12 @@ async function handleDispatch(req, res) {
   // gone since the toolbar last looked. Nothing is written for a route with no session.
   const route = await resolveRoute(pageOf(payload), payload.pick)
   if (!route.live) return send(res, 409, headers, route.error)
+  // The route was resolved against this bridge's session list, and the bridge may have
+  // handed the port over while lsof ran. Its list is empty now, so the lookup below would
+  // land the batch in this session whatever the route said. Nothing is written yet; the
+  // toolbar retries and reaches the new owner. Everything from here on is synchronous up
+  // to the notify, so this is the last point a yield can slip in.
+  if (!server.listening) return send(res, 409, headers, 'Pinpoint is switching to a newer version. Try again in a few seconds.')
 
   const id = stamp()
   mkdirSync(batchDir(id), { recursive: true })
@@ -1639,12 +1662,6 @@ function projectFor(route) {
   return route.detected ? projectAt(route.detected) : null
 }
 
-/** The root or home: below everything, so a project nowhere in particular. */
-function nowhere(dir) {
-  const r = real(resolve(dir))
-  return r === sep || r === real(homedir())
-}
-
 /**
  * The project a bare dev-server cwd stands for, when no session claims it. The cwd itself
  * is often a package inside the repo, so the nearest folder above it with a .git (a dir,
@@ -1654,11 +1671,9 @@ function nowhere(dir) {
  * for itself, unless it is one of those two.
  */
 function projectAt(cwd) {
-  const home = real(homedir())
-  const unsafe = d => { const r = real(d); return r === sep || r === home }
   const start = resolve(cwd)
-  if (unsafe(start)) return null
-  for (let d = start; !unsafe(d); d = dirname(d)) {
+  if (nowhere(start)) return null
+  for (let d = start; !nowhere(d); d = dirname(d)) {
     if (existsSync(join(d, '.git'))) return d
     if (dirname(d) === d) break
   }
@@ -1680,7 +1695,11 @@ async function handleDesignSystem(req, res) {
   const { headers, payload } = got
   const runtime = sanitiseRuntimeDesign(payload?.designSystem)
   const route = await resolveRoute(pageOf(payload), payload?.pick)
-  const merged = withRuntime(projectDesignSystem(projectFor(route) ?? PROJECT_DIR), runtime)
+  const dir = projectFor(route)
+  // No project, no scales. Falling back to the bridge's own project would hand this page
+  // another project's tokens to name its fixes in.
+  if (!dir) return sendJson(res, 200, headers, { ok: true, ...chipData(null), summary: null })
+  const merged = withRuntime(projectDesignSystem(dir), runtime)
   sendJson(res, 200, headers, { ok: true, ...chipData(merged), summary: summaryLine(merged) })
 }
 
@@ -1888,6 +1907,16 @@ let toolsOnly = false
 let yielded = false
 /** One question at a time; the retry tick is faster than a slow owner can answer. */
 let asking = false
+/**
+ * When to ask the owner again. A failed handover is retried on a doubling backoff for as
+ * long as the owner reports an older version, link or no link; an owner that is not older
+ * is looked at again now and then. A dropped link resets it, since that is when the owner
+ * is most likely to have changed.
+ */
+let askAfter = 0
+let askBackoff = 0
+const ASK_MAX_MS = 60_000
+const ASK_IDLE_MS = 30_000
 /** Logged once per owner: an old bridge that cannot hand over is not news every 3s. */
 let toldCannotYield = null
 
@@ -1902,9 +1931,8 @@ server.on('error', err => {
       console.error(`[pinpoint] port ${PORT} already held by another session, running tools-only until it frees up`)
       toolsOnly = true
     }
-    // A dropped link is the moment the owner may have changed, so that is when it is
-    // worth asking who holds the port now. While the link is up the answer is the same.
-    if (!peerLink) askToYield()
+    // Throttled inside; see askAfter.
+    askToYield()
     // Whoever holds the port, this session wants to be on its list. A no-op while the
     // link is up; after a drop, this tick is the reconnect.
     connectPeer()
@@ -1938,19 +1966,26 @@ function ownerGet(path, ms = 1500) {
  * Pinpoint at all answers no JSON and is left alone.
  */
 async function askToYield() {
-  if (asking || yielded) return
+  if (asking || yielded || Date.now() < askAfter) return
   asking = true
   try {
     const h = await ownerGet('/health')
-    if (!h || typeof h.version !== 'string' || compareVersions(h.version, VERSION) >= 0) return
+    if (!h || typeof h.version !== 'string' || compareVersions(h.version, VERSION) >= 0) {
+      askBackoff = 0
+      askAfter = Date.now() + ASK_IDLE_MS
+      return
+    }
     let reply = null
     try { reply = await peerPost('/peer/yield', { version: VERSION, pid: process.pid }, 2000) } catch (err) {
+      askBackoff = Math.min(askBackoff ? askBackoff * 2 : RETRY_MS, ASK_MAX_MS)
+      askAfter = Date.now() + askBackoff
       if (toldCannotYield !== h.version) {
         toldCannotYield = h.version
         console.error(`[pinpoint] the bridge is an older version (${h.version}) that cannot hand over (${err?.message ?? err}); run /pinpoint:doctor`)
       }
       return
     }
+    askBackoff = 0
     if (reply?.ok && !server.listening) {
       if (retry) clearTimeout(retry)
       retry = null

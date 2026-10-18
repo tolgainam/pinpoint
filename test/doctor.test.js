@@ -82,13 +82,15 @@ test('stop command: pkill on an absolute script path, kill on anything vaguer', 
   assert.doesNotMatch(stopCommand(null), /kill/)
 })
 
-test('sessions: this folder, or one inside it, counts as joined', () => {
+test('sessions: only this exact folder counts as joined, in any spelling', () => {
   const dir = temp()
   try {
     mkdirSync(join(dir, 'web'))
     const health = { sessions: [{ name: 'app', projectDir: dir }] }
     assert.equal(checkSessions({ health, projectDir: dir }).ok, true)
-    assert.equal(checkSessions({ health, projectDir: join(dir, 'web') }).ok, true)
+    assert.equal(checkSessions({ health, projectDir: `${dir}/` }).ok, true)
+    // A session in the parent folder is somebody else, not this one.
+    assert.equal(checkSessions({ health, projectDir: join(dir, 'web') }).ok, false)
     const missing = checkSessions({ health, projectDir: tmpdir() })
     assert.equal(missing.ok, false)
     assert.match(missing.fix, /Reconnect/)

@@ -9,7 +9,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
+import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -125,6 +127,96 @@ test('/peer/yield needs the peer key and a newer version', async () => {
     const key = readFileSync(join(base, 'peer.key'), 'utf8').trim()
     assert.equal((await post({ 'X-Pinpoint-Peer': key }, { version: '0.3.0' })).status, 409)
     assert.equal((await health()).version, '0.3.0', 'a refused yield leaves the bridge where it was')
+  } finally {
+    done()
+  }
+})
+
+test('a yield nobody follows up on: the old bridge takes the port back, even if the asker hung up', async () => {
+  const { start, done, base } = setup()
+  try {
+    const owner = start('owner', '0.2.9')
+    await until(async () => (await health())?.version === '0.2.9', 'the bridge')
+    // The key is made on first use; a request without one is enough to make it.
+    await fetch(`http://127.0.0.1:${PORT}/peer/yield`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+    const key = readFileSync(join(base, 'peer.key'), 'utf8').trim()
+    const body = JSON.stringify({ version: '9.0.0' })
+
+    // Asks, then hangs up without reading the reply. Whichever way the race goes (the
+    // reply finished or the socket closed first), the bridge must not stay closed.
+    await new Promise(r => {
+      const sock = connect(PORT, '127.0.0.1', () => {
+        sock.write(`POST /peer/yield HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\nX-Pinpoint-Peer: ${key}\r\nContent-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`)
+        setImmediate(() => { sock.destroy(); r() })
+      })
+      sock.on('error', r)
+    })
+    await until(() => owner.log.includes('handing the bridge'), 'the handover to start')
+    const back = await until(async () => { const x = await health(); return x?.version === '0.2.9' && x }, 'the old bridge to take the port back')
+    assert.equal(back.projectDir, owner.projectDir)
+
+    // And the same when the reply did go out but nobody took the port.
+    const r = await fetch(`http://127.0.0.1:${PORT}/peer/yield`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Pinpoint-Peer': key }, body,
+    })
+    assert.equal(r.status, 200)
+    await until(async () => (await health())?.version === '0.2.9', 'the port back again')
+  } finally {
+    done()
+  }
+})
+
+test('a failed handover is asked again on a backoff, with the peer link up', async () => {
+  const { start, done } = setup()
+  // Stands in for an older bridge that refuses once (busy, say) and then agrees.
+  let asked = 0
+  let linkOpenAtSecondAsk = false
+  const links = new Set()
+  const fake = createServer(async (req, res) => {
+    if (req.url === '/health') return res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ ok: true, version: '0.2.9' }))
+    if (req.url.startsWith('/peer?')) {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' }).write(': connected\n\n')
+      links.add(res)
+      req.on('close', () => links.delete(res))
+      return
+    }
+    if (req.url === '/peer/yield') {
+      for await (const _ of req) { /* drain */ }
+      asked++
+      if (asked === 1) return res.writeHead(500).end('busy')
+      linkOpenAtSecondAsk = links.size > 0
+      fake.close()
+      res.on('finish', () => fake.closeAllConnections())
+      return res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ ok: true }))
+    }
+    res.writeHead(404).end()
+  })
+  await new Promise(r => fake.listen(PORT, '127.0.0.1', r))
+  try {
+    const fresh = start('new', '0.3.0')
+    const h = await until(async () => { const x = await health(); return x?.version === '0.3.0' && x }, 'the second ask to succeed')
+    assert.equal(h.projectDir, fresh.projectDir)
+    assert.equal(asked, 2)
+    assert.equal(linkOpenAtSecondAsk, true, 'the retry should not wait for the peer link to drop')
+  } finally {
+    fake.close()
+    fake.closeAllConnections()
+    done()
+  }
+})
+
+test('an empty peer key file is replaced, and an empty header is never a key', async () => {
+  const { start, done, base } = setup()
+  try {
+    writeFileSync(join(base, 'peer.key'), '')
+    start('owner', '0.3.0')
+    await until(async () => (await health())?.version === '0.3.0', 'the bridge')
+    const r = await fetch(`http://127.0.0.1:${PORT}/peer/yield`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Pinpoint-Peer': '' }, body: JSON.stringify({ version: '9.0.0' }),
+    })
+    assert.equal(r.status, 401)
+    assert.ok(readFileSync(join(base, 'peer.key'), 'utf8').trim().length >= 32, 'the empty key file should have been regenerated')
+    assert.equal((await health()).version, '0.3.0')
   } finally {
     done()
   }

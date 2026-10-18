@@ -53,6 +53,8 @@ test('a server that lost the port takes it over once it frees up, and exits with
       PINPOINT_QUEUE: queueDir,
       PINPOINT_PROJECT_DIR: projectDir,
       PINPOINT_RETRY_MS: '100',
+      // A tools-only server opens a peer link, which needs a key; keep it out of ~.
+      PINPOINT_PEER_KEY: join(queueDir, 'peer.key'),
     },
     stdio: ['pipe', 'pipe', 'pipe'],
   })

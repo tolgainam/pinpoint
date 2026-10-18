@@ -10,6 +10,15 @@
 ;(function () {
   const base = p => String(p ?? '').replace(/\/+$/, '').split('/').pop() || ''
   const parentOf = p => base(String(p ?? '').replace(/\/+$/, '').replace(/\/[^/]*$/, ''))
+  /**
+   * A git worktree reads as its repo: "rigboard worktree", not "agent-a9c963b0e4f734fe4".
+   * The bridge names folders itself (it can also read a worktree's .git file); this is the
+   * fallback for a bridge that sends no name, and it can only go by the path.
+   */
+  const nameOf = p => {
+    const m = String(p ?? '').replace(/\/+$/, '').match(/^(.*)\/\.claude\/worktrees\/[^/]+$/)
+    return m && m[1] ? `${base(m[1])} worktree` : base(p)
+  }
   const isHome = p => /^\/(Users|home)\/[^/]+\/?$/.test(String(p ?? ''))
 
   /** Home folders read as ~, the way the specs and every terminal show them. */
@@ -22,15 +31,20 @@
    */
   const meaningful = dir => (dir && dir !== '/' && !isHome(dir) ? dir : null)
 
-  /** One name per projectDir; two projects called `app` show their parent: "work/app". */
+  /**
+   * One name per projectDir, the bridge's when it sent one; two projects called `app`
+   * show their parent: "work/app". Two worktrees of one repo keep the same name, since
+   * their parent is only `worktrees`; the path under each row tells them apart.
+   */
   function displayNames(sessions) {
+    const nameFor = s => (s.name ? String(s.name) : nameOf(s.projectDir))
     const seen = {}
-    for (const s of sessions) seen[base(s.projectDir)] = (seen[base(s.projectDir)] || 0) + 1
+    for (const s of sessions) seen[nameFor(s)] = (seen[nameFor(s)] || 0) + 1
     const out = new Map()
     for (const s of sessions) {
-      const n = base(s.projectDir)
+      const n = nameFor(s)
       const p = parentOf(s.projectDir)
-      out.set(s.projectDir, seen[n] > 1 && p ? `${p}/${n}` : n)
+      out.set(s.projectDir, seen[n] > 1 && p && n === base(s.projectDir) ? `${p}/${n}` : n)
     }
     return out
   }
@@ -73,7 +87,7 @@
     if (!health.route) {
       const dir = health.projectDir || null
       return {
-        state: 'legacy', dot: true, pin: false, label: dir ? base(dir) : 'Connected',
+        state: 'legacy', dot: true, pin: false, label: dir ? nameOf(dir) : 'Connected',
         canDispatch: true, canPark: true, projectPick: null, project: dir,
         heading: 'Sending to Claude Code in', lines: dir ? [tilde(dir)] : [],
         retry: false, rows: null, sendsTo: null,
@@ -85,17 +99,18 @@
     const names = displayNames(sessions)
     const r = health.route
     const detected = meaningful(r.detected)
+    const detectedName = detected ? r.detectedName || nameOf(detected) : null
     const pickDir = pick?.projectDir || null
     const running = pickDir ? dirs.find(d => same(d, pickDir)) ?? null : null
 
     // What Auto means for this page, whether or not it is the one in use.
     let auto
     if (!pickDir && r.how === 'auto' && r.projectDir) auto = { dir: r.projectDir }
-    else if (detected) auto = autoMatch(detected, dirs) ? { dir: autoMatch(detected, dirs) } : { none: base(detected) }
+    else if (detected) auto = autoMatch(detected, dirs) ? { dir: autoMatch(detected, dirs) } : { none: detectedName }
     else if (dirs.length === 1) auto = { dir: dirs[0] }
     else auto = {}
 
-    const autoLabel = auto.dir ? `Auto: ${names.get(auto.dir) ?? base(auto.dir)}`
+    const autoLabel = auto.dir ? `Auto: ${names.get(auto.dir) ?? nameOf(auto.dir)}`
       : auto.none ? `Auto: none for ${auto.none}` : 'Auto'
     const rows = [
       { dir: null, name: autoLabel, path: '', selected: !pickDir },
@@ -116,14 +131,14 @@
       return {
         ...common, state: 'connecting', dot: false, pin: !!pickDir, label: 'Connecting',
         canDispatch: false, project: parkTo,
-        heading: 'Connecting to Claude Code',
-        lines: ['Sessions are reconnecting after a handover. Try again in a few seconds.'],
+        heading: 'Reconnecting to Claude Code',
+        lines: ['A Claude Code session just closed. Try again in a few seconds.'],
         sendsTo: null,
       }
     }
 
     if (pickDir) {
-      const name = names.get(running) ?? pick.name ?? base(pickDir)
+      const name = names.get(running) ?? (pick.name || nameOf(pickDir))
       // The session list is the truth: a ping answered for the previous pick can still land.
       if (running) {
         return {
@@ -153,7 +168,7 @@
     const matched = (r.how === 'auto' && r.projectDir) || (r.how === 'only' && !detected && r.projectDir)
     if (matched) {
       return {
-        ...common, state: 'auto', dot: true, pin: false, label: names.get(matched) ?? base(matched),
+        ...common, state: 'auto', dot: true, pin: false, label: names.get(matched) ?? nameOf(matched),
         canDispatch: true, canPark: true, project: matched,
         heading: 'Sending to Claude Code in', lines: [tilde(matched)],
         sendsTo: matched,
@@ -161,7 +176,7 @@
     }
 
     if (detected) {
-      const name = base(detected)
+      const name = detectedName
       return {
         ...common, state: 'none', dot: false, pin: false, label: name,
         canDispatch: false, project: detected,

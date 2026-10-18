@@ -204,6 +204,29 @@ test('no session for the page, or a pick that is not live, is refused and nothin
   assert.equal((await health(`?pick=${encodeURIComponent(otherDir)}`)).route.how, 'manual')
 })
 
+test('a dev server in a git worktree is named after its repo, with the full path kept', async () => {
+  // Made by `git worktree add`: the folder's .git is a file pointing into the main repo.
+  const main = join(base, 'rigboard')
+  const wt = join(base, 'trees', 'agent-a9c963b0e4f734fe4')
+  mkdirSync(join(main, '.git', 'worktrees', 'agent-a9c963b0e4f734fe4'), { recursive: true })
+  mkdirSync(wt, { recursive: true })
+  writeFileSync(join(wt, '.git'), `gitdir: ${join(main, '.git', 'worktrees', 'agent-a9c963b0e4f734fe4')}\n`)
+  // Made by Claude Code: the path alone says it.
+  const claudeWt = join(base, 'rigboard', '.claude', 'worktrees', 'agent-b1')
+  mkdirSync(claudeWt, { recursive: true })
+  setLsof({ ...lsofMap, 5181: wt, 5182: claudeWt })
+
+  for (const [port, dir] of [[5181, wt], [5182, claudeWt]]) {
+    const page = `http://localhost:${port}`
+    const h = await health(`?page=${encodeURIComponent(page)}`)
+    assert.equal(h.route.detected, dir)
+    assert.equal(h.route.detectedName, 'rigboard worktree')
+    const res = await dispatch({ page })
+    assert.equal(res.status, 409)
+    assert.equal(await res.text(), `No Claude Code session is running for rigboard worktree (${dir}). Start one there.`)
+  }
+})
+
 test('Park writes the target project\'s backlog', async () => {
   const res = await fetch(`${BRIDGE}/backlog`, {
     method: 'POST',
@@ -355,6 +378,6 @@ test('Park with a dead pick goes to the pick if a session once ran there, never 
   const before = existsSync(join(otherDir, '.pinpoint', 'backlog.md'))
   const unknown = await parkAt(join(base, 'nowhere'), 'http://localhost:5174')
   assert.equal(unknown.status, 409)
-  assert.match(await unknown.text(), /has not seen a Claude Code session/)
+  assert.match(await unknown.text(), /Pinpoint hasn't seen Claude Code in .*\. Pick another project\./)
   assert.equal(existsSync(join(otherDir, '.pinpoint', 'backlog.md')), before)
 })

@@ -110,8 +110,24 @@ test('nothing detected, several sessions: Choose, kept-for-port line', () => {
 test('reconnecting: neutral waiting state, Dispatch disabled', () => {
   const v = view(health([MYAPP], { how: 'reconnecting', projectDir: null, detected: null }), null, '5173')
   assert.equal(v.label, 'Connecting')
+  assert.equal(v.heading, 'Reconnecting to Claude Code')
+  assert.deepEqual(v.lines, ['A Claude Code session just closed. Try again in a few seconds.'])
   assert.equal(v.dot, false)
   assert.equal(v.canDispatch, false)
+})
+
+test('a worktree reads as its repo in the pill and the list, with its full path kept', () => {
+  const WT = '/Users/k/Projects/rigboard/.claude/worktrees/agent-a9c963b0e4f734fe4'
+  // Bridge-sent names win; the path rule is the fallback for a bridge that sends none.
+  const none = view(health([PINPOINT], { how: 'none', projectDir: null, detected: WT }), null, '5173')
+  assert.equal(none.label, 'rigboard worktree')
+  assert.equal(none.heading, 'No Claude Code in rigboard worktree')
+  assert.deepEqual(none.lines, ['Start one in ~/Projects/rigboard/.claude/worktrees/agent-a9c963b0e4f734fe4, or send to another project:'])
+
+  const sent = view({ connected: true, sessions: [{ name: 'rigboard worktree', projectDir: WT }], route: { how: 'auto', projectDir: WT, detected: WT } }, null, '5173')
+  assert.equal(sent.label, 'rigboard worktree')
+  assert.deepEqual(sent.lines, ['~/Projects/rigboard/.claude/worktrees/agent-a9c963b0e4f734fe4'])
+  assert.equal(sent.rows[1].name, 'rigboard worktree')
 })
 
 test('name clashes show the parent folder', () => {

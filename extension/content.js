@@ -1094,7 +1094,7 @@
       add.disabled = kind === 'backlog' && !status.canPark
       hint.textContent =
         kind === 'question' ? 'question — Claude answers on the pin and changes no files'
-        : kind === 'backlog' && !status.canPark ? 'no project known for this page yet: pick one from the toolbar status'
+        : kind === 'backlog' && !status.canPark ? 'Pick a project from the status pill first.'
         : kind === 'backlog' ? 'parked — appended to .pinpoint/backlog.md, never dispatched'
         : deltas.size ? `${deltas.size} picked value${deltas.size === 1 ? '' : 's'} ride with this comment`
         : ''

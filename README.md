@@ -104,8 +104,8 @@ have to wonder where the backlog and screenshots went.
 cd /path/to/your/project && claude
 ```
 
-Open your dev app on `localhost`, click the Pinpoint icon, and the dot in the toolbar
-should be green.
+Open your dev app on `localhost` and click the Pinpoint icon to bring up the toolbar. The
+dot on it should be green.
 
 <details>
 <summary>Just want to try it without wiring up a project?</summary>
@@ -142,7 +142,9 @@ A batch without a screenshot still dispatches — it just says so.
 
 ## Use
 
-Open your dev app on `http://localhost:…`, then click the Pinpoint icon in the toolbar.
+Open your dev app on `http://localhost:…`, then click the Pinpoint icon in Chrome's
+toolbar. The overlay starts hidden on every page load; the icon shows it and clicking it
+again hides it. Pins and comments keep working while it is hidden.
 
 > **It only attaches to `http://localhost/*` and `http://127.0.0.1/*`.** That is deliberate
 > and not configurable. On `0.0.0.0`, a LAN IP, a `.local` hostname, or any https:// site,
@@ -153,8 +155,9 @@ Open your dev app on `http://localhost:…`, then click the Pinpoint icon in the
 | **Comment** | Comment mode: hover highlights elements, click opens a note composer |
 | count | Pending comments not yet dispatched |
 | **Dispatch** | Sends the batch to the running session |
-| `✕` | Clears every pin on this page |
-| **Alt+Shift+F** | Freezes the page so vanishing states can be pinned |
+| `✕` | Hides the overlay (the icon brings it back) |
+| **Clear** | Removes every pin on this page; shown only when there are pins |
+| **Alt+Shift+F** | Freezes the page so vanishing states can be pinned, and shows the overlay if hidden |
 | dot | Green when the bridge is reachable |
 
 `⌘↵` adds a note, `Esc` closes the composer or leaves comment mode. Drag the bar by its

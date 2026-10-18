@@ -196,32 +196,41 @@ async function ensureStream() {
 
 /**
  * The badge stays the pending count and nothing else; a second meaning would blur it. A
- * bridge that is down goes in the tooltip instead, appended to whatever the tooltip says,
- * so the last title is kept per tab and the health ping can repaint it when that flips.
+ * bridge that is down goes in the tooltip instead, as a suffix on whatever it says.
+ *
+ * The tooltip itself is the only state. This worker is torn down whenever Chrome likes,
+ * and a Set of offline tabs kept here would come back empty and never clear the suffix.
+ * Chrome keeps each tab's title across that, so it is read back, its suffix taken off,
+ * and put on again only if the bridge is down right now.
  */
 const OFFLINE = ' · Claude Code offline'
-const titles = new Map()
-const offline = new Set()
+
+const bare = title => (title.endsWith(OFFLINE) ? title.slice(0, -OFFLINE.length) : title)
+
+async function setTitle(tabId, title, down) {
+  const want = bare(title) + (down ? OFFLINE : '')
+  if (want !== title) await chrome.action.setTitle({ tabId, title: want })
+}
 
 async function badge(tabId, text, title) {
   try {
     await chrome.action.setBadgeText({ tabId, text })
     await chrome.action.setBadgeBackgroundColor({ tabId, color: ACCENT })
-    if (title) titles.set(tabId, title)
-    if (title) await chrome.action.setTitle({ tabId, title: title + (offline.has(tabId) ? OFFLINE : '') })
+    if (title) {
+      // A new title keeps whatever the last health ping said about the bridge.
+      const was = await chrome.action.getTitle({ tabId })
+      await chrome.action.setTitle({ tabId, title: bare(title) + (was.endsWith(OFFLINE) ? OFFLINE : '') })
+    }
   } catch { /* tab closed */ }
 }
 
-function noteHealth(tabId, res) {
-  if (!tabId || offline.has(tabId) === !res.connected) return res
-  if (res.connected) offline.delete(tabId)
-  else offline.add(tabId)
-  const title = titles.get(tabId) ?? chrome.runtime.getManifest().action?.default_title ?? 'Pinpoint'
-  chrome.action.setTitle({ tabId, title: title + (offline.has(tabId) ? OFFLINE : '') }).catch(() => {})
+async function noteHealth(tabId, res) {
+  if (!tabId) return res
+  try {
+    await setTitle(tabId, await chrome.action.getTitle({ tabId }), !res.connected)
+  } catch { /* tab closed */ }
   return res
 }
-
-chrome.tabs.onRemoved?.addListener(tabId => { titles.delete(tabId); offline.delete(tabId) })
 
 // ---------------------------------------------------------------- injection
 
@@ -249,7 +258,7 @@ async function ensureInjected(tabId) {
 // ---------------------------------------------------------------- events
 
 chrome.runtime.onMessage.addListener((msg, sender, respond) => {
-  if (msg?.type === 'ping') { ensureStream(); health(pageOf(sender), msg.pick).then(r => respond(noteHealth(sender.tab?.id, r))); return true }
+  if (msg?.type === 'ping') { ensureStream(); health(pageOf(sender), msg.pick).then(r => noteHealth(sender.tab?.id, r)).then(respond); return true }
   if (msg?.type === 'dispatch') { post('/dispatch', routed(msg.payload, sender, msg.pick)).then(respond); return true }
   if (msg?.type === 'backlog') { post('/backlog', routed(msg.payload, sender, msg.pick)).then(respond); return true }
   if (msg?.type === 'design-system') { post('/design-system', routed(msg.payload, sender, msg.pick)).then(respond); return true }

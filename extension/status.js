@@ -60,7 +60,7 @@
     if (!health?.connected) {
       return {
         state: 'offline', dot: false, pin: false, label: 'Offline',
-        canDispatch: false, canPark: false, projectPick: null,
+        canDispatch: false, canPark: false, projectPick: null, project: null,
         heading: 'Claude Code is not running',
         lines: ['Start Claude Code in your project folder, then retry.',
           ...(lastDir ? [`Last used: ${tilde(lastDir)}`] : [])],
@@ -68,12 +68,25 @@
       }
     }
 
+    // A bridge from before routing answers without `route`. It still delivers, to its
+    // own project, exactly as it always did, so it must not end up as "Choose" forever.
+    if (!health.route) {
+      const dir = health.projectDir || null
+      return {
+        state: 'legacy', dot: true, pin: false, label: dir ? base(dir) : 'Connected',
+        canDispatch: true, canPark: true, projectPick: null, project: dir,
+        heading: 'Sending to Claude Code in', lines: dir ? [tilde(dir)] : [],
+        retry: false, rows: null, sendsTo: null,
+      }
+    }
+
     const sessions = Array.isArray(health.sessions) ? health.sessions : []
     const dirs = sessions.map(s => s.projectDir)
     const names = displayNames(sessions)
-    const r = health.route ?? {}
+    const r = health.route
     const detected = meaningful(r.detected)
     const pickDir = pick?.projectDir || null
+    const running = pickDir ? dirs.find(d => same(d, pickDir)) ?? null : null
 
     // What Auto means for this page, whether or not it is the one in use.
     let auto
@@ -86,19 +99,23 @@
       : auto.none ? `Auto: none for ${auto.none}` : 'Auto'
     const rows = [
       { dir: null, name: autoLabel, path: '', selected: !pickDir },
-      ...sessions.map(s => ({ dir: s.projectDir, name: names.get(s.projectDir), path: tilde(s.projectDir), selected: s.projectDir === pickDir })),
+      ...sessions.map(s => ({ dir: s.projectDir, name: names.get(s.projectDir), path: tilde(s.projectDir), selected: same(s.projectDir, pickDir) })),
     ]
 
-    // Park and the design-system chips need a project, not a live session. The bridge
-    // falls back to the detected cwd when the route is not live, so a pick of the
-    // detected dir steers it there in the one case where it would otherwise follow the
-    // single running session into the wrong project's backlog (see "strict" below).
-    const common = { rows, retry: false }
+    /**
+     * Park and the design-system chips need a project, not a live session. With a pick
+     * that is the pick, running or not: it is where the user said this page belongs, and
+     * the bridge only accepts it if a session has run there. Without one it is the
+     * detected project. A pick is never swapped for the detected project, because the
+     * user chose against it. `project` is the same answer, for keying caches on.
+     */
+    const parkTo = pickDir ?? detected
+    const common = { rows, retry: false, canPark: !!parkTo, projectPick: pickDir }
 
     if (r.how === 'reconnecting') {
       return {
         ...common, state: 'connecting', dot: false, pin: !!pickDir, label: 'Connecting',
-        canDispatch: false, canPark: !!detected, projectPick: pickDir,
+        canDispatch: false, project: parkTo,
         heading: 'Connecting to Claude Code',
         lines: ['Sessions are reconnecting after a handover. Try again in a few seconds.'],
         sendsTo: null,
@@ -106,22 +123,21 @@
     }
 
     if (pickDir) {
-      const name = names.get(pickDir) ?? pick.name ?? base(pickDir)
+      const name = names.get(running) ?? pick.name ?? base(pickDir)
       // The session list is the truth: a ping answered for the previous pick can still land.
-      const live = dirs.includes(pickDir)
-      if (live) {
+      if (running) {
         return {
           ...common, state: 'manual', dot: true, pin: true, label: name,
-          canDispatch: true, canPark: true, projectPick: pickDir,
-          heading: 'Sending to Claude Code in', lines: [`${tilde(pickDir)} (your pick)`],
-          sendsTo: pickDir,
+          canDispatch: true, project: running,
+          heading: 'Sending to Claude Code in', lines: [`${tilde(running)} (your pick)`],
+          sendsTo: running,
         }
       }
       // A pick whose session is gone never falls back to Auto: that would send to a
       // project you deliberately chose against.
       return {
         ...common, state: 'manual-gone', dot: false, pin: true, label: name,
-        canDispatch: false, canPark: !!detected, projectPick: pickDir,
+        canDispatch: false, project: pickDir,
         heading: `No Claude Code in ${name}`,
         lines: [`Start one in ${tilde(pickDir)}, or send to another project:`],
         sendsTo: null,
@@ -129,16 +145,16 @@
     }
 
     /**
-     * Strict routing. With one session running and a page detected in another project,
-     * the bridge still answers "only" (the behaviour from before routing). The picker
-     * makes the safe answer cheap, so here that case counts as "no session for this
-     * project": one click on a row sends it there on purpose instead.
+     * Strict routing. The bridge refuses a page detected in a project with no session
+     * even when one other session runs, but a bridge from before that rule still answers
+     * "only" there, so the same case is caught here too: one click on a row sends it
+     * there on purpose instead.
      */
     const matched = (r.how === 'auto' && r.projectDir) || (r.how === 'only' && !detected && r.projectDir)
     if (matched) {
       return {
         ...common, state: 'auto', dot: true, pin: false, label: names.get(matched) ?? base(matched),
-        canDispatch: true, canPark: true, projectPick: null,
+        canDispatch: true, canPark: true, project: matched,
         heading: 'Sending to Claude Code in', lines: [tilde(matched)],
         sendsTo: matched,
       }
@@ -148,7 +164,7 @@
       const name = base(detected)
       return {
         ...common, state: 'none', dot: false, pin: false, label: name,
-        canDispatch: false, canPark: true, projectPick: detected,
+        canDispatch: false, project: detected,
         heading: `No Claude Code in ${name}`,
         lines: [`Start one in ${tilde(detected)}, or send to another project:`],
         sendsTo: null,
@@ -157,16 +173,41 @@
 
     return {
       ...common, state: 'choose', dot: false, pin: false, label: 'Choose',
-      canDispatch: false, canPark: false, projectPick: null,
+      canDispatch: false, project: null,
       heading: 'Which project is this page?', lines: [`Pick one; it is kept for :${port}.`],
       sendsTo: null,
     }
   }
+
+  /** One folder however it is written: the toolbar compares paths the bridge spelled. */
+  function same(a, b) {
+    if (!a || !b) return false
+    const trim = p => String(p).replace(/\/+$/, '') || '/'
+    return trim(a) === trim(b)
+  }
+
+  /**
+   * Whether a bridge event stamped with a project belongs on this page. Only one from the
+   * project this page sends to does; in a state with no target (no session here, a pick
+   * that is gone, nothing chosen) every stamped event is some other project's. Unstamped
+   * events come from a bridge before routing and pass as before.
+   */
+  function eventFor(v, projectDir) {
+    if (!projectDir) return true
+    return same(projectDir, v.sendsTo)
+  }
+
+  /**
+   * What a dispatch names as its target. In Auto it is the project the toolbar is showing,
+   * so if that session quit inside the 5s between pings the bridge refuses, rather than
+   * re-resolving and quietly falling back to whichever single session is left.
+   */
+  const dispatchPick = v => v.sendsTo ?? undefined
 
   /** localhost:5173 and 127.0.0.1:5173 are the same dev server, so they share a key. */
   function portOf(loc) {
     return String(loc.port || (loc.protocol === 'https:' ? '443' : '80'))
   }
 
-  globalThis.PinpointStatus = { view, portOf, tilde, displayNames }
+  globalThis.PinpointStatus = { view, portOf, tilde, displayNames, same, eventFor, dispatchPick }
 })()

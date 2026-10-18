@@ -270,7 +270,11 @@
    * then disagree with the brief about what a token is.
    */
   let scalesPromise = null
+  let scalesFor = null
   function scales() {
+    // Keyed on the project the bridge reads the scales from, which moves with the pick
+    // and with what the page's dev server turns out to be.
+    if (scalesFor !== status.project) { scalesPromise = null; scalesFor = status.project }
     scalesPromise ??= chrome.runtime
       .sendMessage({ type: 'design-system', pick: status.projectPick ?? undefined, payload: { designSystem: designSystem() } })
       .then(r => (r?.ok && r.detected ? r : NO_SCALES))
@@ -781,6 +785,8 @@
     layer.append(card)
     openCard = card
     card.cleanup = restorePreviews
+    // Whether Park is possible changes with the 5s ping, so the toolbar repaints this.
+    card.repaintIntent = () => paintIntent()
     placeCard(card, x + 12, y + 12)
     box.focus()
 
@@ -1104,6 +1110,8 @@
       const note = box.value.trim()
         || picks.map(d => `${d.prop} → ${d.toToken ?? d.to}`).join(', ')
       if (!note) { box.focus(); return }
+      // Checked here and not only on the button, because ⌘↵ calls this directly.
+      if (intentOf(note).kind === 'backlog' && !status.canPark) { paintIntent(); box.focus(); return }
 
       // Put the page back before the picture is taken. The screenshot is evidence of the
       // problem; the deltas are the proposal. A shot of the proposal would document a
@@ -1841,7 +1849,7 @@
 
     let res
     try {
-      res = await chrome.runtime.sendMessage({ type: 'dispatch', payload, pick: chosen?.projectDir })
+      res = await chrome.runtime.sendMessage({ type: 'dispatch', payload, pick: PinpointStatus.dispatchPick(status) })
     } catch (err) {
       res = { ok: false, error: String(err) }
     }
@@ -1926,9 +1934,13 @@
 
   const popOpen = () => pop.classList.contains('show')
 
+  /** What the popover last showed, so a ping that changed nothing touches nothing. */
+  let popShown = ''
+
   function openPop() {
     if (popOpen()) return
     pop.classList.add('show')
+    popShown = ''
     paintPop()
   }
 
@@ -1936,14 +1948,25 @@
     pop.classList.remove('show')
   }
 
-  /** Above the bar, unless the bar was dragged near the top and there is no room. */
+  /**
+   * Above the bar, unless the bar was dragged near the top and there is no room. Left
+   * edge on the pill's, slid back in when the bar sits near the right edge. The width is
+   * capped by the viewport in CSS, so on a narrow window it fits once slid.
+   */
   function placePop() {
     const r = bar.getBoundingClientRect()
     pop.classList.toggle('below', r.top < (pop.offsetHeight || 200) + 16)
+    const w = pop.offsetWidth
+    const left = Math.max(8, Math.min(r.left, innerWidth - w - 8))
+    pop.style.left = `${left - r.left}px`
   }
 
   function paintPop() {
     if (!popOpen()) return
+    // Rebuilding on every ping would drop a click that lands mid-rebuild and lose focus.
+    const shown = JSON.stringify([status.heading, status.lines, status.retry, status.rows])
+    if (shown === popShown) { placePop(); return }
+    popShown = shown
     popHead.textContent = status.heading
     popLines.textContent = ''
     for (const line of status.lines) popLines.append(el('div', 'pop-line', line))
@@ -1974,16 +1997,14 @@
   }
 
   function applyStatus() {
-    const before = status.projectPick
     status = PinpointStatus.view(lastHealth, chosen, PORT, lastDir)
     dot.classList.toggle('on', status.dot)
     pillMark.style.display = status.pin ? '' : 'none'
     pillLabel.textContent = status.label
     pill.title = status.sendsTo ? `Sending to ${PinpointStatus.tilde(status.sendsTo)}` : status.heading
-    // The chips' scales come from whichever project this page points at.
-    if (before !== status.projectPick) scalesPromise = null
     paintDispatch()
     paintPop()
+    openCard?.repaintIntent?.()
   }
 
   /**
@@ -2010,14 +2031,22 @@
   }
   addEventListener('pointerdown', onOutside, true)
 
+  /**
+   * Pings overlap: the 5s beat, Retry, and a pick each send one. Only the newest answer
+   * counts, or one asked for the previous pick could land last and undo the new one.
+   */
+  let pingSeq = 0
+
   async function ping() {
     await routeLoaded
+    const mine = ++pingSeq
     let res
     try {
       res = await chrome.runtime.sendMessage({ type: 'ping', pick: chosen?.projectDir })
     } catch {
       res = null
     }
+    if (mine !== pingSeq) return
     lastHealth = res
     applyStatus()
     rememberLast(status.sendsTo)
@@ -2043,13 +2072,12 @@
    * Every Pinpoint tab hears every event, and events now say which project's session sent
    * them. One about a pin on this page is always ours: batch and backlog ids are unique,
    * and a pin keeps hearing from the session it went to even after the pick has moved on.
-   * Anything else from another project is somebody else's status line, so it is dropped.
-   * Events without a projectDir come from a bridge that predates routing and pass as before.
+   * Anything else stamped with a project is kept only if it is the project this page
+   * sends to; status.js has the rule.
    */
   function belongsHere(ev) {
     if (ev.id && (byServerId(ev.id) || comments.some(c => c.backlogId === ev.id))) return true
-    if (!ev.projectDir) return true
-    return ev.projectDir === lastHealth?.route?.projectDir
+    return PinpointStatus.eventFor(status, ev.projectDir)
   }
 
   function onBridgeEvent(ev) {

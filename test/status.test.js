@@ -9,7 +9,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import '../extension/status.js'
 
-const { view, portOf, displayNames } = globalThis.PinpointStatus
+const { view, portOf, displayNames, eventFor, dispatchPick } = globalThis.PinpointStatus
 
 const MYAPP = '/Users/k/Projects/myapp'
 const PINPOINT = '/Users/k/Projects/pinpoint'
@@ -68,7 +68,8 @@ test('no session for the detected project: its name, dot off, Park still allowed
   assert.equal(v.dot, false)
   assert.equal(v.canDispatch, false)
   assert.equal(v.canPark, true)
-  assert.equal(v.projectPick, WEBSHOP)
+  assert.equal(v.project, WEBSHOP)
+  assert.equal(v.projectPick, null, 'no pick is invented for it')
   assert.equal(v.heading, 'No Claude Code in webshop')
   assert.equal(v.rows[0].name, 'Auto: none for webshop')
 })
@@ -78,8 +79,8 @@ test('strict: one other session running is still "no session for this project"',
   assert.equal(v.state, 'none')
   assert.equal(v.label, 'webshop')
   assert.equal(v.canDispatch, false)
-  // Park is steered to the detected project rather than following the one session.
-  assert.equal(v.projectPick, WEBSHOP)
+  // Park and the chips use the detected project, not the one session.
+  assert.equal(v.project, WEBSHOP)
 })
 
 test('nothing detected, one session: treated as Auto matched', () => {
@@ -131,4 +132,57 @@ test('the pill and popover styles use --pp-* tokens, never raw colours', async (
   const rules = css.match(/[^}]*\{[^}]*\}/g).filter(r => /\.(dot|pill|pop)\b|\.blocked/.test(r.split('{')[0]))
   assert.ok(rules.length >= 5, 'expected the status rules to be found')
   for (const r of rules) assert.doesNotMatch(r.split('{')[1], /#[0-9a-f]{3,8}\b|rgb\((?!0 0 0)/i, r)
+})
+
+test('Park follows the pick, running or not, and never swaps it for the detected project', () => {
+  const pick = { projectDir: PINPOINT, name: 'pinpoint' }
+  const gone = view(health([MYAPP], { how: 'manual', projectDir: PINPOINT, detected: MYAPP, error: 'gone' }), pick, '5173')
+  assert.equal(gone.canPark, true)
+  assert.equal(gone.projectPick, PINPOINT)
+  assert.equal(gone.project, PINPOINT)
+
+  // A pick with nothing detected still parks: the pick is the project.
+  const blind = view(health([MYAPP], { how: 'manual', projectDir: PINPOINT, detected: null, error: 'gone' }), pick, '5173')
+  assert.equal(blind.canPark, true)
+
+  const live = view(health([MYAPP, PINPOINT], { how: 'manual', projectDir: PINPOINT, detected: null }), pick, '5173')
+  assert.equal(live.canPark, true)
+  assert.equal(live.project, PINPOINT)
+})
+
+test('a pick matches its session with or without a trailing slash', () => {
+  const v = view(health([PINPOINT], { how: 'manual', projectDir: PINPOINT, detected: null }), { projectDir: `${PINPOINT}/`, name: 'pinpoint' }, '5173')
+  assert.equal(v.state, 'manual')
+  assert.equal(v.rows.find(r => r.selected).dir, PINPOINT)
+})
+
+test('dispatch names its target, so a session that just left is refused rather than replaced', () => {
+  const auto = view(health([MYAPP, PINPOINT], { how: 'auto', projectDir: MYAPP, detected: MYAPP }), null, '5173')
+  assert.equal(dispatchPick(auto), MYAPP)
+  const only = view(health([MYAPP], { how: 'only', projectDir: MYAPP, detected: null }), null, '5173')
+  assert.equal(dispatchPick(only), MYAPP)
+  const manual = view(health([MYAPP, PINPOINT], { how: 'manual', projectDir: PINPOINT, detected: null }), { projectDir: PINPOINT }, '5173')
+  assert.equal(dispatchPick(manual), PINPOINT)
+})
+
+test('a bridge from before routing still reads as connected and can dispatch', () => {
+  const v = view({ connected: true, ok: true, projectDir: MYAPP }, null, '5173')
+  assert.equal(v.state, 'legacy')
+  assert.equal(v.label, 'myapp')
+  assert.equal(v.dot, true)
+  assert.equal(v.canDispatch, true)
+  assert.equal(v.rows, null)
+  assert.equal(dispatchPick(v), undefined)
+})
+
+test('bridge events: only the project this page sends to, none in a no-target state', () => {
+  const auto = view(health([MYAPP, PINPOINT], { how: 'auto', projectDir: MYAPP, detected: MYAPP }), null, '5173')
+  assert.equal(eventFor(auto, MYAPP), true)
+  assert.equal(eventFor(auto, `${MYAPP}/`), true, 'trailing slash is the same folder')
+  assert.equal(eventFor(auto, PINPOINT), false)
+  assert.equal(eventFor(auto, undefined), true, 'unstamped events pass as before')
+
+  const none = view(health([MYAPP], { how: 'only', projectDir: MYAPP, detected: WEBSHOP }), null, '5173')
+  assert.equal(eventFor(none, MYAPP), false)
+  assert.equal(eventFor(none, undefined), true)
 })

@@ -8,7 +8,7 @@
  */
 const BRIDGE = 'http://127.0.0.1:8788'
 const TIMEOUT = 4000
-const ACCENT = '#d97757'
+const ACCENT = '#d97757' /* design-ok: the badge API takes a literal; mirrors --pp-accent in tokens.css */
 const LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/
 
 // ---------------------------------------------------------------- bridge

@@ -66,7 +66,9 @@
   host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483647;pointer-events:none'
 
   const root = host.attachShadow({ mode: 'open' })
-  const css = await fetch(chrome.runtime.getURL('overlay.css')).then(r => r.text()).catch(() => '')
+  // Tokens first: overlay.css only ever says var(--pp-*), and tokens.css defines them.
+  const sheet = name => fetch(chrome.runtime.getURL(name)).then(r => r.text()).catch(() => '')
+  const css = (await Promise.all([sheet('tokens.css'), sheet('overlay.css')])).join('\n')
   const style = document.createElement('style')
   style.textContent = css
   root.append(style)

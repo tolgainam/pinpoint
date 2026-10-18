@@ -30,7 +30,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["overlay.css"],
+      "resources": ["tokens.css", "overlay.css"],
       "matches": ["http://localhost/*", "http://127.0.0.1/*"]
     }
   ]

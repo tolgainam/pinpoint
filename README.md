@@ -400,6 +400,20 @@ PINPOINT_PROJECT_DIR=demo/fixtures/shadcn npm run server
 
 See [demo/fixtures/README.md](demo/fixtures/README.md) for what each one is meant to prove.
 
+## Working on the toolbar
+
+```bash
+npm test                    # unit tests, the design check and the reference screenshots
+npm run check:design        # raw colours or px outside extension/tokens.css
+npx playwright install chromium   # once, so the screenshot test runs instead of skipping
+```
+
+Every colour, type size, spacing step, radius and shadow lives in
+`extension/tokens.css`. The PNGs in `test/screens` are the reference look, one set per
+platform; the test fails when a key screen changes. Baselines change only with the
+owner's sign-off, via `npm run screens:update`, which also writes
+`test/screens/PENDING.md` listing what moved.
+
 ## Known limits
 
 Turning a clicked element into `Header.tsx:42` would be the most valuable thing here, but

@@ -1244,16 +1244,63 @@ const server = createServer((req, res) => {
 server.timeout = 0
 server.keepAliveTimeout = 0
 
+/**
+ * Every Claude Code session with the plugin starts one of these, and only one of them
+ * can hold the port. The rest used to give up on the first EADDRINUSE, so when the
+ * owning session exited the port sat free with nobody on it and the extension went
+ * dark while half a dozen servers were still alive. Instead, a server that lost the
+ * race keeps knocking on a slow timer and takes the port over the moment it frees up.
+ *
+ * The timer is unref'd so it never keeps a process alive on its own, and it stops for
+ * good once listening. Nothing else needs redoing on a late takeover: SSE listeners,
+ * the replay buffer and the queue are all module state, set up before the first
+ * listen, and the request handler is the same one either way.
+ */
+const RETRY_MS = Number(process.env.PINPOINT_RETRY_MS ?? 3000)
+/** @type {NodeJS.Timeout | null} */
+let retry = null
+let toolsOnly = false
+
+const listen = () => server.listen(PORT, '127.0.0.1')
+
 server.on('error', err => {
   // Another session already owns the port. The queue is shared on disk, so this
-  // session still serves list_comments — it just isn't the one receiving dispatches.
+  // session still serves list_comments; it just isn't the one receiving dispatches.
   if (err?.code === 'EADDRINUSE') {
-    console.error(`[pinpoint] port ${PORT} already held by another session — running tools-only`)
+    // Logged once. A retry every few seconds for the life of a session is not news.
+    if (!toolsOnly) {
+      console.error(`[pinpoint] port ${PORT} already held by another session, running tools-only until it frees up`)
+      toolsOnly = true
+    }
+    retry = setTimeout(listen, RETRY_MS)
+    retry.unref()
   } else {
     console.error('[pinpoint] http server error:', err)
   }
 })
 
-server.listen(PORT, '127.0.0.1', () => {
+server.on('listening', () => {
+  if (retry) clearTimeout(retry)
+  retry = null
+  if (toolsOnly) {
+    toolsOnly = false
+    console.error(`[pinpoint] port ${PORT} freed up, this session took over the bridge`)
+  }
   console.error(`[pinpoint] bridge on http://127.0.0.1:${PORT} · queue ${QUEUE} · project ${PROJECT_DIR}`)
 })
+
+/**
+ * The session is gone when stdin closes, and so is any reason to run. This matters
+ * more now than it did: a server that took the port over must not outlive its session
+ * still holding it, or it becomes the very thing that locks the next session out. Open
+ * SSE streams would keep server.close() waiting forever, so this exits outright; every
+ * write to the queue and the project files is synchronous, so nothing is left half done.
+ */
+const shutdown = () => {
+  if (retry) clearTimeout(retry)
+  process.exit(0)
+}
+process.stdin.on('end', shutdown)
+process.stdin.on('close', shutdown)
+
+listen()

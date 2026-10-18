@@ -194,14 +194,34 @@ async function ensureStream() {
 
 // ---------------------------------------------------------------- badge
 
-/** The icon is the only surface the user sees when something goes wrong. Never stay silent. */
+/**
+ * The badge stays the pending count and nothing else; a second meaning would blur it. A
+ * bridge that is down goes in the tooltip instead, appended to whatever the tooltip says,
+ * so the last title is kept per tab and the health ping can repaint it when that flips.
+ */
+const OFFLINE = ' · Claude Code offline'
+const titles = new Map()
+const offline = new Set()
+
 async function badge(tabId, text, title) {
   try {
     await chrome.action.setBadgeText({ tabId, text })
     await chrome.action.setBadgeBackgroundColor({ tabId, color: ACCENT })
-    if (title) await chrome.action.setTitle({ tabId, title })
+    if (title) titles.set(tabId, title)
+    if (title) await chrome.action.setTitle({ tabId, title: title + (offline.has(tabId) ? OFFLINE : '') })
   } catch { /* tab closed */ }
 }
+
+function noteHealth(tabId, res) {
+  if (!tabId || offline.has(tabId) === !res.connected) return res
+  if (res.connected) offline.delete(tabId)
+  else offline.add(tabId)
+  const title = titles.get(tabId) ?? chrome.runtime.getManifest().action?.default_title ?? 'Pinpoint'
+  chrome.action.setTitle({ tabId, title: title + (offline.has(tabId) ? OFFLINE : '') }).catch(() => {})
+  return res
+}
+
+chrome.tabs.onRemoved?.addListener(tabId => { titles.delete(tabId); offline.delete(tabId) })
 
 // ---------------------------------------------------------------- injection
 
@@ -218,7 +238,7 @@ async function ensureInjected(tabId) {
 
   try {
     await chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', files: ['probe.js'] })
-    await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] })
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['status.js', 'content.js'] })
     return true
   } catch (err) {
     console.warn('[pinpoint] could not inject into tab', tabId, err)
@@ -229,7 +249,7 @@ async function ensureInjected(tabId) {
 // ---------------------------------------------------------------- events
 
 chrome.runtime.onMessage.addListener((msg, sender, respond) => {
-  if (msg?.type === 'ping') { ensureStream(); health(pageOf(sender), msg.pick).then(respond); return true }
+  if (msg?.type === 'ping') { ensureStream(); health(pageOf(sender), msg.pick).then(r => respond(noteHealth(sender.tab?.id, r))); return true }
   if (msg?.type === 'dispatch') { post('/dispatch', routed(msg.payload, sender, msg.pick)).then(respond); return true }
   if (msg?.type === 'backlog') { post('/backlog', routed(msg.payload, sender, msg.pick)).then(respond); return true }
   if (msg?.type === 'design-system') { post('/design-system', routed(msg.payload, sender, msg.pick)).then(respond); return true }

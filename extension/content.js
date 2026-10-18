@@ -47,7 +47,6 @@
   let comments = []
   let seq = 0
   let mode = false
-  let connected = false
   let frozen = null          // element awaiting a note
   let openCard = null        // the composer or pin card currently on screen
   /** Sticky: whatever you chose last time is the default next time, so turning
@@ -273,7 +272,7 @@
   let scalesPromise = null
   function scales() {
     scalesPromise ??= chrome.runtime
-      .sendMessage({ type: 'design-system', payload: { designSystem: designSystem() } })
+      .sendMessage({ type: 'design-system', pick: status.projectPick ?? undefined, payload: { designSystem: designSystem() } })
       .then(r => (r?.ok && r.detected ? r : NO_SCALES))
       .catch(() => NO_SCALES)
     return scalesPromise
@@ -1085,8 +1084,11 @@
       const { kind } = intentOf(box.value)
       add.textContent = kind === 'question' ? 'Ask' : kind === 'backlog' ? 'Backlog' : 'Add'
       add.classList.toggle('ask', kind === 'question')
+      // Park needs a project to write into, though not a running session.
+      add.disabled = kind === 'backlog' && !status.canPark
       hint.textContent =
         kind === 'question' ? 'question — Claude answers on the pin and changes no files'
+        : kind === 'backlog' && !status.canPark ? 'no project known for this page yet: pick one from the toolbar status'
         : kind === 'backlog' ? 'parked — appended to .pinpoint/backlog.md, never dispatched'
         : deltas.size ? `${deltas.size} picked value${deltas.size === 1 ? '' : 's'} ride with this comment`
         : ''
@@ -1185,6 +1187,7 @@
     try {
       res = await chrome.runtime.sendMessage({
         type: 'backlog',
+        pick: status.projectPick ?? undefined,
         payload: {
           origin: location.origin,
           url: location.href,
@@ -1760,6 +1763,7 @@
     count.textContent = String(pending)
     sendBtn.disabled = pending === 0
     sendBtn.textContent = pending ? `Dispatch ${pending}` : 'Dispatch'
+    paintDispatch()
     renderPins()
     // Clear only exists while there is something to clear.
     if (comments.length && !clearBtn.isConnected) bar.insertBefore(clearBtn, closeBtn)
@@ -1777,6 +1781,13 @@
    */
   async function dispatchComments(outgoing, onStatus = () => {}) {
     if (!outgoing.length) return false
+    // A follow-up dispatches from a pin card, not the toolbar, so the toolbar's block has
+    // to hold here too, or a dead pick would be sidestepped by replying on a pin.
+    if (!status.canDispatch) {
+      say(status.heading, true)
+      openPop()
+      return false
+    }
 
     // One uncropped shot for layout context — but only when this batch has crops at all.
     // If you turned screenshots off, you meant off.
@@ -1830,7 +1841,7 @@
 
     let res
     try {
-      res = await chrome.runtime.sendMessage({ type: 'dispatch', payload })
+      res = await chrome.runtime.sendMessage({ type: 'dispatch', payload, pick: chosen?.projectDir })
     } catch (err) {
       res = { ok: false, error: String(err) }
     }
@@ -1844,6 +1855,7 @@
         c.serverN = i + 1
       })
       say(`Dispatched ${outgoing.length} to Claude Code`)
+      rememberLast(res.projectDir)
       save()
     } else {
       say(res?.error || 'dispatch failed', true)
@@ -1853,6 +1865,7 @@
   }
 
   sendBtn.onclick = async () => {
+    if (sendBtn.classList.contains('blocked')) { openPop(); return }
     const outgoing = comments.filter(c => c.status === 'pending')
     if (!outgoing.length) return
     sendBtn.disabled = true
@@ -1863,16 +1876,158 @@
 
   // ---------------------------------------------------------------- health
 
+  /**
+   * The dot became a pill: dot plus a short label saying where Dispatch would go, and a
+   * popover with the running sessions to choose from. What it says is worked out in
+   * status.js, which is pure so it can be tested; this half only paints it.
+   *
+   * The popover lives inside the bar rather than in the layer. It is anchored to the pill
+   * anyway, it follows a drag for free, and hiding the bar (✕, or the icon) takes it away
+   * with it without the hide path having to know it exists.
+   */
+  const PORT = PinpointStatus.portOf(location)
+  // Per port, not per origin: localhost:5173 and 127.0.0.1:5173 are one dev server.
+  const PICK_KEY = `pinpoint:pick:${PORT}`
+  const LAST_KEY = `pinpoint:last:${PORT}`
+
+  /** @type {{projectDir: string, name: string} | null} */
+  let chosen = null
+  let lastDir = null
+  let lastHealth = null
+  // Until the first ping answers nothing is known, and Offline would be a claim. Waiting
+  // is the honest state, and it keeps Dispatch blocked for the half second it lasts.
+  let status = PinpointStatus.view({ connected: true, route: { how: 'reconnecting' } }, null, PORT, null)
+
+  const routeLoaded = chrome.storage.local.get([PICK_KEY, LAST_KEY]).then(got => {
+    const p = got[PICK_KEY]
+    if (p && typeof p.projectDir === 'string') chosen = { projectDir: p.projectDir, name: String(p.name ?? '') }
+    if (typeof got[LAST_KEY] === 'string') lastDir = got[LAST_KEY]
+  }).catch(() => {})
+
+  const pill = el('button', 'pill')
+  const pillMark = el('span', 'pill-mark', '⚑')
+  const pillLabel = el('span', 'pill-label')
+  // The old status dot moves inside the pill rather than being rebuilt, so the toolbar's
+  // own layout code stays as it was.
+  bar.insertBefore(pill, dot)
+  pill.append(dot, pillMark, pillLabel)
+  pillMark.style.display = 'none'
+  pillLabel.textContent = status.label
+
+  const pop = el('div', 'pop')
+  const popHead = el('div', 'pop-head')
+  const popLines = el('div', 'pop-lines')
+  const popList = el('div', 'pop-list')
+  const popFoot = el('div', 'pop-foot')
+  const popRetry = el('button', '', 'Retry')
+  popFoot.append(popRetry)
+  pop.append(popHead, popLines, popList, popFoot)
+  bar.append(pop)
+
+  const popOpen = () => pop.classList.contains('show')
+
+  function openPop() {
+    if (popOpen()) return
+    pop.classList.add('show')
+    paintPop()
+  }
+
+  function closePop() {
+    pop.classList.remove('show')
+  }
+
+  /** Above the bar, unless the bar was dragged near the top and there is no room. */
+  function placePop() {
+    const r = bar.getBoundingClientRect()
+    pop.classList.toggle('below', r.top < (pop.offsetHeight || 200) + 16)
+  }
+
+  function paintPop() {
+    if (!popOpen()) return
+    popHead.textContent = status.heading
+    popLines.textContent = ''
+    for (const line of status.lines) popLines.append(el('div', 'pop-line', line))
+    popFoot.style.display = status.retry ? '' : 'none'
+
+    // Rebuilt on every ping, so keep the scroll where the reader left it.
+    const scroll = popList.scrollTop
+    popList.textContent = ''
+    popList.style.display = status.rows ? '' : 'none'
+    for (const row of status.rows ?? []) {
+      const item = el('button', `pop-row${row.selected ? ' on' : ''}`)
+      item.append(el('span', 'pop-mark', row.selected ? '●' : '○'), el('span', 'pop-name', row.name))
+      if (row.path) item.append(el('span', 'pop-path', row.path))
+      item.onclick = () => choose(row)
+      popList.append(item)
+    }
+    popList.scrollTop = scroll
+    placePop()
+  }
+
+  /** A pick applies at once and the popover stays open, so the new heading confirms it. */
+  async function choose(row) {
+    chosen = row.dir ? { projectDir: row.dir, name: row.name } : null
+    if (chosen) chrome.storage.local.set({ [PICK_KEY]: chosen }).catch(() => {})
+    else chrome.storage.local.remove(PICK_KEY).catch(() => {})
+    applyStatus()
+    await ping()
+  }
+
+  function applyStatus() {
+    const before = status.projectPick
+    status = PinpointStatus.view(lastHealth, chosen, PORT, lastDir)
+    dot.classList.toggle('on', status.dot)
+    pillMark.style.display = status.pin ? '' : 'none'
+    pillLabel.textContent = status.label
+    pill.title = status.sendsTo ? `Sending to ${PinpointStatus.tilde(status.sendsTo)}` : status.heading
+    // The chips' scales come from whichever project this page points at.
+    if (before !== status.projectPick) scalesPromise = null
+    paintDispatch()
+    paintPop()
+  }
+
+  /**
+   * Blocked, not disabled: a disabled button gets no hover and no click, and both have
+   * to open the popover so the reason is one gesture away. Nothing is queued while it
+   * is blocked; the comments stay pending on the page.
+   */
+  function paintDispatch() {
+    const blocked = !status.canDispatch
+    sendBtn.classList.toggle('blocked', blocked)
+    sendBtn.setAttribute('aria-disabled', String(blocked))
+  }
+
+  pill.onclick = () => (popOpen() ? closePop() : openPop())
+  popRetry.onclick = () => ping()
+  sendBtn.addEventListener('mouseenter', () => { if (sendBtn.classList.contains('blocked')) openPop() })
+
+  /** Outside means outside both the popover and the controls that open it. */
+  function onOutside(ev) {
+    if (!popOpen()) return
+    const path = ev.composedPath()
+    if (path.includes(pop) || path.includes(pill) || path.includes(sendBtn)) return
+    closePop()
+  }
+  addEventListener('pointerdown', onOutside, true)
+
   async function ping() {
+    await routeLoaded
     let res
     try {
-      res = await chrome.runtime.sendMessage({ type: 'ping' })
+      res = await chrome.runtime.sendMessage({ type: 'ping', pick: chosen?.projectDir })
     } catch {
       res = null
     }
-    connected = !!res?.connected
-    dot.classList.toggle('on', connected)
-    dot.title = connected ? `bridge up · ${res.projectDir ?? ''}` : 'bridge down — is a Claude Code session running?'
+    lastHealth = res
+    applyStatus()
+    rememberLast(status.sendsTo)
+  }
+
+  /** The project this port last sent to, so the Offline popover can say where to start one. */
+  function rememberLast(dir) {
+    if (!dir || dir === lastDir) return
+    lastDir = dir
+    chrome.storage.local.set({ [LAST_KEY]: dir }).catch(() => {})
   }
 
   // ---------------------------------------------------------------- bridge events
@@ -1884,8 +2039,22 @@
    */
   const byServerId = id => comments.find(c => c.batch && `${c.batch}#${c.serverN}` === id)
 
+  /**
+   * Every Pinpoint tab hears every event, and events now say which project's session sent
+   * them. One about a pin on this page is always ours: batch and backlog ids are unique,
+   * and a pin keeps hearing from the session it went to even after the pick has moved on.
+   * Anything else from another project is somebody else's status line, so it is dropped.
+   * Events without a projectDir come from a bridge that predates routing and pass as before.
+   */
+  function belongsHere(ev) {
+    if (ev.id && (byServerId(ev.id) || comments.some(c => c.backlogId === ev.id))) return true
+    if (!ev.projectDir) return true
+    return ev.projectDir === lastHealth?.route?.projectDir
+  }
+
   function onBridgeEvent(ev) {
     if (!ev) return
+    if (!belongsHere(ev)) return
 
     // An addressed reply is the answer to a question pin, so it lands on the card and
     // stays there. An unaddressed one is a status line, and a toast is all it deserves.
@@ -2038,6 +2207,9 @@
 
   function onKeydown(ev) {
     if (ev.key !== 'Escape') return
+    // The popover is the topmost thing, so it goes first. Stopped here, in the window's
+    // capture phase, so the composer's own Escape handler never sees this press.
+    if (popOpen()) { ev.preventDefault(); ev.stopImmediatePropagation(); closePop(); return }
     if (openCard) { closeCard(); return }
     if (frame) { releaseFrame(); setMode(false); return }
     if (mode) setMode(false)
@@ -2053,6 +2225,7 @@
     removeEventListener('scroll', onScroll, { capture: true })
     removeEventListener('resize', onResize)
     removeEventListener('keydown', onKeydown, true)
+    removeEventListener('pointerdown', onOutside, true)
     host.remove()
   }
 

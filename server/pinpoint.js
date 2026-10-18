@@ -932,14 +932,70 @@ let graceUntil = 0
 /** This bridge plus every peer, as live sessions. Empty when this server is not the bridge. */
 function sessions() {
   if (!server.listening) return []
-  return [{ projectDir: PROJECT_DIR, key: canon(PROJECT_DIR), at: ownerAt, self: true }, ...peers]
+  const list = [{ projectDir: PROJECT_DIR, key: canon(PROJECT_DIR), at: ownerAt, self: true }, ...peers]
+  for (const s of list) rememberProject(s.key)
+  return list
 }
+
+/**
+ * Every project a Claude Code session has run in, by canon() key. A manual pick whose
+ * session has since quit is still where the user said this page belongs, so Park and the
+ * chips keep using it; but the bridge only writes into a folder it has seen a session in,
+ * never one a request merely names. Kept on disk next to the queue so a takeover does not
+ * forget it, and capped, newest last, because it only ever needs the recent few.
+ */
+const KNOWN_FILE = join(dirname(QUEUE), 'projects.json')
+const KNOWN_MAX = 100
+let known = null
+
+function knownProjects() {
+  if (known) return known
+  try {
+    const list = JSON.parse(readFileSync(KNOWN_FILE, 'utf8'))
+    known = new Set(Array.isArray(list) ? list.filter(k => typeof k === 'string') : [])
+  } catch {
+    known = new Set()
+  }
+  return known
+}
+
+function rememberProject(key) {
+  const set = knownProjects()
+  if (set.has(key)) return
+  set.add(key)
+  while (set.size > KNOWN_MAX) set.delete(set.values().next().value)
+  try {
+    mkdirSync(dirname(KNOWN_FILE), { recursive: true })
+    writeFileSync(KNOWN_FILE, JSON.stringify([...set]))
+  } catch (err) {
+    console.error('[pinpoint] could not save known projects:', err?.message ?? err)
+  }
+}
+
+const isKnownProject = dir => knownProjects().has(canon(dir))
 
 /** One row per project, which is what the toolbar lists. */
 function sessionList() {
   const seen = new Set()
   return sessions().filter(s => !seen.has(s.key) && seen.add(s.key))
-    .map(s => ({ name: basename(s.projectDir), projectDir: s.projectDir }))
+    .map(s => ({ name: displayName(s.projectDir), projectDir: s.projectDir }))
+}
+
+/**
+ * What a folder is called in the toolbar and in errors. A git worktree is named after the
+ * repo it belongs to, "rigboard worktree", because its own folder name is whatever the
+ * tool that made it chose (agent-a9c963b0e4f734fe4) and says nothing about the project.
+ */
+function displayName(dir) {
+  const p = String(dir).replace(/\/+$/, '')
+  const claude = p.match(/^(.*)\/\.claude\/worktrees\/[^/]+$/)
+  if (claude && claude[1]) return `${basename(claude[1])} worktree`
+  try {
+    const gitdir = readFileSync(join(p, '.git'), 'utf8').match(/^gitdir:\s*(.+)$/m)?.[1].trim()
+    const main = gitdir && resolve(p, gitdir).match(/^(.*)\/\.git\/worktrees\/[^/]+\/?$/)?.[1]
+    if (main) return `${basename(main)} worktree`
+  } catch {}
+  return basename(p)
 }
 
 /** Several sessions in one directory: the newest is the one the user is looking at. */
@@ -1071,7 +1127,10 @@ async function resolveRoute(page, pick) {
   const dirs = sessions().filter(s => !seen.has(s.key) && seen.add(s.key)).map(s => s.projectDir)
   const cwd = page ? await detectCwd(page) : null
   const route = (projectDir, how, live, error) =>
-    ({ projectDir, name: projectDir ? basename(projectDir) : null, how, detected: cwd, live, ...(error ? { error } : {}) })
+    ({ projectDir, name: projectDir ? displayName(projectDir) : null, how, detected: cwd, detectedName: cwd ? displayName(cwd) : null, live, ...(error ? { error } : {}) })
+  // The root and home are what Docker, a proxy or `serve` from ~ report. They name no
+  // project, so they count as nothing detected rather than as a project with no session.
+  const located = cwd && !nowhere(cwd) ? cwd : null
 
   let r
   if (pick) {
@@ -1080,11 +1139,16 @@ async function resolveRoute(page, pick) {
     r = live
       ? route(live.projectDir, 'manual', true)
       : route(dir, 'manual', false, `No Claude Code session is running in ${dir}. Start one there, or pick another project.`)
+    r.pick = dir
   } else {
     const match = cwd ? matchProject(cwd, dirs) : null
     if (match) r = route(match, 'auto', true)
-    else if (dirs.length === 1) r = route(dirs[0], 'only', true)
-    else if (cwd) r = route(null, 'none', false, `No Claude Code session is running for ${basename(cwd)} (${cwd}). Start one there.`)
+    // Strict: a page detected in a project with no session is refused even when exactly
+    // one other session runs. The toolbar's picker makes sending there a deliberate click
+    // instead of a silent guess. Only a page nothing could be learned about falls back
+    // to the one session, as before routing.
+    else if (dirs.length === 1 && !located) r = route(dirs[0], 'only', true)
+    else if (located) r = route(null, 'none', false, `No Claude Code session is running for ${displayName(located)} (${located}). Start one there.`)
     else r = route(null, 'none', false, dirs.length ? 'Several Claude Code sessions are running and Pinpoint cannot tell which one this page belongs to.' : 'No Claude Code session is running.')
   }
 
@@ -1094,7 +1158,7 @@ async function resolveRoute(page, pick) {
   if (Date.now() < graceUntil && (!r.live || r.how === 'only')) {
     return {
       ...r, how: 'reconnecting', live: false, standby: r.how === 'only' ? r.projectDir : null,
-      error: 'Claude Code sessions are reconnecting after a handover. Try again in a few seconds.',
+      error: 'A Claude Code session just closed. Try again in a few seconds.',
     }
   }
   return r
@@ -1528,8 +1592,16 @@ async function notifyBatch(batch) {
  */
 function projectFor(route) {
   if (route.live) return route.projectDir
+  // A pick is never swapped for the detected project: the user chose against it.
+  if (route.pick) return isKnownProject(route.pick) ? route.pick : null
   if (route.standby) return route.standby
   return route.detected ? projectAt(route.detected) : null
+}
+
+/** The root or home: below everything, so a project nowhere in particular. */
+function nowhere(dir) {
+  const r = real(resolve(dir))
+  return r === sep || r === real(homedir())
 }
 
 /**
@@ -1554,6 +1626,7 @@ function projectAt(cwd) {
 
 /** Why projectFor found nowhere, worded for the toolbar. */
 function noProjectError(route) {
+  if (route.pick) return `Pinpoint hasn't seen Claude Code in ${route.pick}. Pick another project.`
   if (route.detected && !route.standby && route.how !== 'reconnecting') {
     return `This page's dev server runs from ${route.detected}, which is not a project folder. Pick a project.`
   }
@@ -1662,7 +1735,7 @@ const server = createServer((req, res) => {
       // dispatch from this page would land, and the bridge's own dir when nowhere would.
       // pending and backlog are for the project this page routes to, the same one a
       // dispatch or a Park would use, not for every project or for the bridge's own.
-      const { live, error, standby, ...shown } = route
+      const { live, error, standby, pick, ...shown } = route
       const dir = projectFor(route)
       const key = dir ? canon(dir) : null
       sendJson(res, 200, cors(origin), {

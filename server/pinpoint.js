@@ -26,6 +26,7 @@ import { homedir } from 'node:os'
 import {
   probeProject, withRuntime, tokenIndex, annotate, summaryLine, guardrailLine, chipData, deltaLine,
 } from './design-system.js'
+import { compareVersions } from './version.js'
 
 const PORT = Number(process.env.PINPOINT_PORT ?? 8788)
 /**
@@ -57,7 +58,11 @@ const RETAIN_MS = Number(process.env.PINPOINT_RETAIN_HOURS ?? 24) * 3600_000
 const MAX_BATCHES = Number(process.env.PINPOINT_MAX_BATCHES ?? 200)
 /** A batch carries screenshots, so bodies are large by web standards — but not unbounded. */
 const MAX_BODY = 48 * 1024 * 1024
-const VERSION = '0.2.0'
+/**
+ * Keep in step with package.json and the manifests. PINPOINT_VERSION exists for the yield
+ * test, which needs an older and a newer bridge built from the same file.
+ */
+const VERSION = process.env.PINPOINT_VERSION ?? '0.3.0'
 
 mkdirSync(QUEUE, { recursive: true })
 
@@ -1208,7 +1213,43 @@ async function handlePeer(req, res, url) {
     return sendJson(res, 200, {}, c ? await requestRecapture(id, c) : { error: `no such comment: ${id}` })
   }
 
+  if (url.pathname === '/peer/yield') {
+    // Only to something newer. Two servers of the same version handing the port back and
+    // forth would be a loop, and an older one asking is a bug or a downgrade.
+    const theirs = String(payload?.version ?? '')
+    if (compareVersions(theirs, VERSION) <= 0) {
+      return sendJson(res, 409, {}, { ok: false, version: VERSION, error: 'not newer than this bridge' })
+    }
+    return yieldBridge(res, theirs)
+  }
+
   send(res, 404, {}, 'not found')
+}
+
+/**
+ * Hand the port to a newer server. Sessions keep their server in memory for as long as
+ * they run, so after a plugin update the bridge is usually an old one held by a session
+ * that was open before the update. Without this the new code only takes over once every
+ * old session has closed, which in practice meant pkill.
+ *
+ * The listener closes before the reply goes out, so by the time the asker reads "ok" the
+ * port is already free and its listen goes straight through. Then every open connection
+ * is cut: the toolbars and the peers reconnect on their own and find the new owner. This
+ * server stays alive as a peer: its session keeps its tools, it rejoins the list on the
+ * next retry tick, and it can take the port back if the newer one later exits.
+ */
+function yieldBridge(res, to) {
+  server.close()
+  toolsOnly = true
+  yielded = true
+  console.error(`[pinpoint] handing the bridge to a newer version (${to}), this session is now tools-only`)
+  res.on('finish', () => {
+    server.closeAllConnections()
+    if (retry) clearTimeout(retry)
+    retry = setTimeout(listen, RETRY_MS)
+    retry.unref()
+  })
+  sendJson(res, 200, {}, { ok: true, version: VERSION })
 }
 
 /** A JSON POST to the bridge from a peer, with the key and without an Origin. */
@@ -1843,6 +1884,12 @@ const RETRY_MS = Number(process.env.PINPOINT_RETRY_MS ?? 3000)
 /** @type {NodeJS.Timeout | null} */
 let retry = null
 let toolsOnly = false
+/** Set once this server has handed the port to a newer one, so it never asks back. */
+let yielded = false
+/** One question at a time; the retry tick is faster than a slow owner can answer. */
+let asking = false
+/** Logged once per owner: an old bridge that cannot hand over is not news every 3s. */
+let toldCannotYield = null
 
 const listen = () => server.listen(PORT, '127.0.0.1')
 
@@ -1855,6 +1902,9 @@ server.on('error', err => {
       console.error(`[pinpoint] port ${PORT} already held by another session, running tools-only until it frees up`)
       toolsOnly = true
     }
+    // A dropped link is the moment the owner may have changed, so that is when it is
+    // worth asking who holds the port now. While the link is up the answer is the same.
+    if (!peerLink) askToYield()
     // Whoever holds the port, this session wants to be on its list. A no-op while the
     // link is up; after a drop, this tick is the reconnect.
     connectPeer()
@@ -1864,6 +1914,54 @@ server.on('error', err => {
     console.error('[pinpoint] http server error:', err)
   }
 })
+
+/** GET a path on whoever holds the port, as JSON, or null for anything else. */
+function ownerGet(path, ms = 1500) {
+  return new Promise(done => {
+    const req = httpRequest({ host: '127.0.0.1', port: PORT, path, timeout: ms }, res => {
+      let out = ''
+      res.setEncoding('utf8')
+      res.on('data', d => { out += d })
+      res.on('end', () => { try { done(JSON.parse(out)) } catch { done(null) } })
+    })
+    req.on('timeout', () => req.destroy())
+    req.on('error', () => done(null))
+    req.end()
+  })
+}
+
+/**
+ * The port is held by a bridge older than this one: ask it to hand over (see yieldBridge).
+ * Bridges from before 0.3.0 have no such endpoint and answer 404; those cannot be asked,
+ * and this server never kills anything, so it just joins them as a peer and says once what
+ * would fix it. /pinpoint:doctor gives the exact command. Something on the port that is not
+ * Pinpoint at all answers no JSON and is left alone.
+ */
+async function askToYield() {
+  if (asking || yielded) return
+  asking = true
+  try {
+    const h = await ownerGet('/health')
+    if (!h || typeof h.version !== 'string' || compareVersions(h.version, VERSION) >= 0) return
+    let reply = null
+    try { reply = await peerPost('/peer/yield', { version: VERSION, pid: process.pid }, 2000) } catch (err) {
+      if (toldCannotYield !== h.version) {
+        toldCannotYield = h.version
+        console.error(`[pinpoint] the bridge is an older version (${h.version}) that cannot hand over (${err?.message ?? err}); run /pinpoint:doctor`)
+      }
+      return
+    }
+    if (reply?.ok && !server.listening) {
+      if (retry) clearTimeout(retry)
+      retry = null
+      // Straight away rather than on the next tick: the port is free right now, and every
+      // old peer is on its own retry timer too.
+      listen()
+    }
+  } finally {
+    asking = false
+  }
+}
 
 server.on('listening', () => {
   if (retry) clearTimeout(retry)

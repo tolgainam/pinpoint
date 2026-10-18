@@ -8,9 +8,12 @@
    is settled with the owner on the running app, not here.
 
    Deliberately one dark theme regardless of the page's scheme: the toolbar should read
-   as tooling sitting on top of the app, never as part of it. */
+   as tooling sitting on top of the app, never as part of it.
 
-:host {
+   :root as well as :host, because the welcome page is a plain extension page with no
+   shadow root, and it takes its look from this same file. */
+
+:host, :root {
   /* ------------------------------------------------------------ colour: base */
   --pp-accent: #d97757;
   --pp-bg: #1b1b1d;
@@ -72,10 +75,14 @@
   --pp-text-sm: 11px;
   --pp-text-md: 12px;
   --pp-text-lg: 13px;
+  /* Welcome page only: body copy and headings on a full page, not a toolbar. */
+  --pp-text-xl: 15px;
+  --pp-text-2xl: 22px;
   --pp-weight-semibold: 600;
   --pp-weight-bold: 700;
   --pp-leading-12: 12px;
   --pp-leading-18: 18px;
+  --pp-leading-body: 1.5;
   --pp-tracking-wide: 0.5px;
 
   /* ------------------------------------------------------------ spacing, named by px */
@@ -88,6 +95,10 @@
   --pp-space-8: 8px;
   --pp-space-10: 10px;
   --pp-space-12: 12px;
+  /* Welcome page only: section rhythm on a full page. */
+  --pp-space-16: 16px;
+  --pp-space-24: 24px;
+  --pp-space-32: 32px;
 
   /* ------------------------------------------------------------ radius, named by px */
   --pp-radius-2: 2px;

@@ -224,5 +224,85 @@
     return String(loc.port || (loc.protocol === 'https:' ? '443' : '80'))
   }
 
-  globalThis.PinpointStatus = { view, portOf, tilde, displayNames, same, eventFor, dispatchPick }
+  // ---------------------------------------------------------------- versions
+
+  /**
+   * major.minor.patch as numbers, read the way server/version.js reads them: plain dotted
+   * numbers, a leading v allowed, anything else 0.0.0. Copied rather than imported, since
+   * this file has to stay a classic script. A bridge that sends no version, or one that
+   * does not parse, therefore reads as the oldest there is.
+   */
+  function parseVersion(v) {
+    const m = String(v ?? '').trim().match(/^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?/)
+    return m ? [Number(m[1]), Number(m[2] ?? 0), Number(m[3] ?? 0)] : [0, 0, 0]
+  }
+
+  function compareVersions(a, b) {
+    const x = parseVersion(a)
+    const y = parseVersion(b)
+    for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]
+    return 0
+  }
+
+  const EXTENSION_OLDER = 'Extension is older than the plugin. Run /pinpoint:setup, then press Reload on the Pinpoint card in chrome://extensions.'
+  const PLUGIN_OLDER = 'Plugin is older than the extension. Run claude plugin update pinpoint@pinpoint-marketplace, then restart Claude Code.'
+
+  /**
+   * Whether the bridge and this extension disagree on their version, and what to do
+   * about it. Null when they match, and null while Offline too: with no bridge there is
+   * nothing to compare against, and Offline already has its own fix to show.
+   *
+   * The pill only gains a mark and the popover one line; nothing is blocked, because a
+   * version apart usually still works and the user may be mid-review.
+   *
+   * @param {object|null} health  the worker's ping answer
+   * @param {string} extVersion  chrome.runtime.getManifest().version
+   * @returns {{older: 'extension'|'plugin', line: string}|null}
+   */
+  function versionNote(health, extVersion) {
+    if (!health?.connected) return null
+    const d = compareVersions(health.version, extVersion)
+    if (d === 0) return null
+    return d > 0 ? { older: 'extension', line: EXTENSION_OLDER } : { older: 'plugin', line: PLUGIN_OLDER }
+  }
+
+  // ---------------------------------------------------------------- welcome page
+
+  const SETUP_LINE = 'Run /pinpoint:setup in Claude Code.'
+
+  /**
+   * What the welcome page's "Claude Code" box says after one /health, asked without a
+   * page, so the bridge answers for no tab in particular. Connected names the running
+   * projects the way the popover rows do; not connected gives the one setup line. The
+   * version line is the popover's, so the two never word the same problem differently.
+   *
+   * @param {object|null} health
+   * @param {string} extVersion
+   * @returns {{connected: boolean, title: string, line: string|null, version: ReturnType<typeof versionNote>}}
+   */
+  function bridgeSummary(health, extVersion) {
+    if (!health?.connected) return { connected: false, title: 'Not connected', line: SETUP_LINE, version: null }
+    const sessions = Array.isArray(health.sessions) ? health.sessions : []
+    const names = [...displayNames(sessions).values()]
+    if (!names.length && health.projectDir) names.push(nameOf(health.projectDir))
+    return {
+      connected: true,
+      title: names.length ? `Connected: ${names.join(', ')}` : 'Connected',
+      line: null,
+      version: versionNote(health, extVersion),
+    }
+  }
+
+  /**
+   * The first-show tip's second line. Offline gets the fix instead of the explanation,
+   * so the first thing a new user reads is what to do about it.
+   */
+  const tipLine = v => (v?.state === 'offline'
+    ? 'Run /pinpoint:setup in Claude Code to connect.'
+    : 'The pill shows where comments go.')
+
+  globalThis.PinpointStatus = {
+    view, portOf, tilde, displayNames, same, eventFor, dispatchPick,
+    compareVersions, versionNote, bridgeSummary, tipLine,
+  }
 })()

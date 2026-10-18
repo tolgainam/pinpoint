@@ -6,6 +6,7 @@
   "permissions": ["storage", "tabs", "scripting", "activeTab"],
   "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"],
   "background": { "service_worker": "worker.js" },
+  "options_page": "welcome.html",
   "action": { "default_title": "Pinpoint — show or hide toolbar" },
   "commands": {
     "freeze": {

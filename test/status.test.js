@@ -9,7 +9,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import '../extension/status.js'
 
-const { view, portOf, displayNames, eventFor, dispatchPick } = globalThis.PinpointStatus
+const { view, portOf, displayNames, eventFor, dispatchPick, versionNote, bridgeSummary, tipLine } = globalThis.PinpointStatus
 
 const MYAPP = '/Users/k/Projects/myapp'
 const PINPOINT = '/Users/k/Projects/pinpoint'
@@ -201,4 +201,59 @@ test('bridge events: only the project this page sends to, none in a no-target st
   const none = view(health([MYAPP], { how: 'only', projectDir: MYAPP, detected: WEBSHOP }), null, '5173')
   assert.equal(eventFor(none, MYAPP), false)
   assert.equal(eventFor(none, undefined), true)
+})
+
+// ---------------------------------------------------------------- versions
+
+const on = version => ({ connected: true, version, sessions: [s(MYAPP)], route: { how: 'auto', projectDir: MYAPP } })
+
+test('version: equal versions say nothing', () => {
+  assert.equal(versionNote(on('0.3.0'), '0.3.0'), null)
+  assert.equal(versionNote(on('v0.3'), '0.3.0'), null, 'a missing patch reads as 0')
+})
+
+test('version: a newer bridge means the extension is older, with the reload line', () => {
+  const n = versionNote(on('0.4.0'), '0.3.0')
+  assert.equal(n.older, 'extension')
+  assert.equal(n.line, 'Extension is older than the plugin. Run /pinpoint:setup, then press Reload on the Pinpoint card in chrome://extensions.')
+  assert.equal(versionNote(on('0.3.10'), '0.3.9').older, 'extension', 'compared as numbers, not text')
+})
+
+test('version: an older bridge means the plugin is older, with the update line', () => {
+  const n = versionNote(on('0.2.9'), '0.3.0')
+  assert.equal(n.older, 'plugin')
+  assert.equal(n.line, 'Plugin is older than the extension. Run claude plugin update pinpoint@pinpoint-marketplace, then restart Claude Code.')
+})
+
+test('version: a bridge with no version, or one that does not parse, counts as plugin older', () => {
+  assert.equal(versionNote(on(undefined), '0.3.0').older, 'plugin')
+  assert.equal(versionNote({ connected: true, ok: true, projectDir: MYAPP }, '0.3.0').older, 'plugin')
+  assert.equal(versionNote(on('stub'), '0.3.0').older, 'plugin')
+})
+
+test('version: no check while Offline', () => {
+  assert.equal(versionNote({ connected: false }, '0.3.0'), null)
+  assert.equal(versionNote(null, '0.3.0'), null)
+})
+
+// ---------------------------------------------------------------- welcome page and tip
+
+test('welcome: not connected gives the setup line and no version check', () => {
+  assert.deepEqual(bridgeSummary({ connected: false }, '0.3.0'),
+    { connected: false, title: 'Not connected', line: 'Run /pinpoint:setup in Claude Code.', version: null })
+})
+
+test('welcome: connected names the running projects, and carries the version line', () => {
+  const one = bridgeSummary(on('0.3.0'), '0.3.0')
+  assert.equal(one.connected, true)
+  assert.equal(one.title, 'Connected: myapp')
+  assert.equal(one.version, null)
+  const two = bridgeSummary({ connected: true, version: '0.4.0', sessions: [s(MYAPP), s(PINPOINT)] }, '0.3.0')
+  assert.equal(two.title, 'Connected: myapp, pinpoint')
+  assert.equal(two.version.older, 'extension')
+})
+
+test('tip: second line is the setup line only while Offline', () => {
+  assert.equal(tipLine(view({ connected: false }, null, '5173')), 'Run /pinpoint:setup in Claude Code to connect.')
+  assert.equal(tipLine(view(on('0.3.0'), null, '5173')), 'The pill shows where comments go.')
 })

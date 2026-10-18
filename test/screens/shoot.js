@@ -24,7 +24,7 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(HERE, '..', '..')
 
 export const SCREENS_DIR = HERE
-export const NAMES = ['toolbar', 'popover', 'offline', 'composer']
+export const NAMES = ['toolbar', 'tip', 'popover', 'mismatch', 'offline', 'composer', 'welcome']
 export const baselinePath = name => join(HERE, `${name}.${process.platform}.png`)
 
 const VIEWPORT = { width: 1280, height: 800 }
@@ -76,9 +76,12 @@ const listen = server => new Promise(resolve => server.listen(0, '127.0.0.1', ()
 /**
  * Just enough bridge for the toolbar: /health with two sessions, or a 503 when offline,
  * an /events stream that stays open and says nothing, and an empty design system.
+ *
+ * It answers with the extension's own version, so the toolbar shows no version mark
+ * until a shot sets `state.version` to something else on purpose.
  */
-function stubBridge() {
-  const state = { online: true }
+function stubBridge(version) {
+  const state = { online: true, version }
   const sessions = [
     { name: 'nimbus', projectDir: '/Users/dev/nimbus' },
     { name: 'rigboard', projectDir: '/Users/dev/rigboard' },
@@ -89,7 +92,7 @@ function stubBridge() {
     if (url.pathname === '/health') {
       if (!state.online) return res.writeHead(503).end('offline')
       return json(200, {
-        ok: true, version: 'stub', projectDir: sessions[0].projectDir, pending: 0, backlog: 0, sessions,
+        ok: true, version: state.version, projectDir: sessions[0].projectDir, pending: 0, backlog: 0, sessions,
         route: { how: 'auto', projectDir: sessions[0].projectDir, detected: sessions[0].projectDir, detectedName: 'nimbus' },
       })
     }
@@ -160,7 +163,8 @@ const shot = async (page, selectors) =>
 
 /** @returns {Promise<Record<string, Buffer>>} one PNG per name in NAMES */
 export async function shootAll(chromium) {
-  const { server, state } = stubBridge()
+  const { version } = JSON.parse(await readFile(join(ROOT, 'extension', 'manifest.json'), 'utf8'))
+  const { server, state } = stubBridge(version)
   const bridgePort = await listen(server)
   const demo = await startDemo()
   const ext = await extensionCopy(bridgePort)
@@ -179,7 +183,17 @@ export async function shootAll(chromium) {
       args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--font-render-hinting=none', '--hide-scrollbars'],
     })
     const worker = context.serviceWorkers()[0] ?? await context.waitForEvent('serviceworker')
+    const extId = new URL(worker.url()).host
+    const welcomeUrl = `chrome-extension://${extId}/welcome.html`
     const page = context.pages()[0] ?? await context.newPage()
+
+    // A first install opens the welcome tab. Closed here, so the toggle below reaches the
+    // demo tab, and opened again at the end on purpose, once the bridge is offline.
+    const isWelcome = p => p.url().startsWith(welcomeUrl)
+    const opened = context.pages().find(isWelcome)
+      ?? await context.waitForEvent('page', { predicate: isWelcome, timeout: 10000 }).catch(() => null)
+    if (!opened) throw new Error('the welcome tab did not open on install')
+    await opened.close()
 
     const label = page.locator('#pinpoint-host .pill-label')
     const settle = async text => {
@@ -199,6 +213,14 @@ export async function shootAll(chromium) {
 
     const out = {}
     await settle('nimbus')
+    // A fresh profile has never seen the toolbar, so the first-show tip is up. Shot, then
+    // dismissed with its x, which is also what keeps it out of every shot after this one.
+    await page.locator('#pinpoint-host .tip.show').waitFor({ timeout: 5000 })
+    out.tip = await shot(page, ['#pinpoint-host .bar', '#pinpoint-host .tip'])
+    await page.locator('#pinpoint-host .tip-x').click()
+    await page.locator('#pinpoint-host .tip').waitFor({ state: 'hidden', timeout: 5000 })
+    await page.mouse.move(VIEWPORT.width - 2, VIEWPORT.height - 2)
+    await page.waitForTimeout(150)
     out.toolbar = await shot(page, ['#pinpoint-host .bar'])
 
     await page.locator('#pinpoint-host .pill').click()
@@ -222,10 +244,44 @@ export async function shootAll(chromium) {
     await page.keyboard.press('Escape')
     await page.keyboard.press('Escape')
 
-    // Offline last: the next 5s ping is what notices, so this one waits for it.
+    // A bridge one minor version ahead: the pill gains its mark on the next ping, and
+    // the popover the extension-older line above "How it works".
+    const [maj, min] = version.split('.').map(Number)
+    state.version = `${maj}.${min + 1}.0`
+    await page.mouse.move(VIEWPORT.width - 2, VIEWPORT.height - 2)
+    await page.locator('#pinpoint-host .pill-warn').waitFor({ state: 'visible', timeout: 15000 })
+    await page.locator('#pinpoint-host .pill').click()
+    await page.locator('#pinpoint-host .pop.show .pop-version').waitFor({ state: 'visible' })
+    await page.mouse.move(VIEWPORT.width - 2, VIEWPORT.height - 2)
+    await page.waitForTimeout(150)
+    out.mismatch = await shot(page, ['#pinpoint-host .bar', '#pinpoint-host .pop'])
+    await page.keyboard.press('Escape')
+    // Escape leaves keyboard focus, and its ring, on the pill; the Offline shot is the
+    // toolbar at rest, as it was before this step existed.
+    await page.evaluate(() => document.getElementById('pinpoint-host').shadowRoot.activeElement?.blur())
+
+    // Offline last: the next 5s ping is what notices, so this one waits for it. No
+    // version check while Offline, so the mark goes with it.
     state.online = false
     await settle('Offline')
     out.offline = await shot(page, ['#pinpoint-host .bar'])
+
+    // The welcome page with no bridge: the not-connected box. Step 3 is ticked, since
+    // the toolbar has been on screen by now.
+    // Shot at a narrow width, whole page, so it reads the way it does in a small window.
+    const welcome = await context.newPage()
+    await welcome.setViewportSize({ width: 600, height: 800 })
+    await welcome.goto(welcomeUrl)
+    await welcome.locator('#bridge[data-state="offline"]').waitFor({ timeout: 10000 })
+    await welcome.locator('#step-toolbar.done').waitFor({ timeout: 5000 })
+    await welcome.evaluate(css => {
+      const s = document.createElement('style')
+      s.textContent = css
+      document.head.append(s)
+    }, STILL)
+    await welcome.evaluate(() => document.fonts.ready)
+    await welcome.waitForTimeout(150)
+    out.welcome = await welcome.screenshot({ fullPage: true, animations: 'disabled', caret: 'hide' })
 
     return out
   } finally {

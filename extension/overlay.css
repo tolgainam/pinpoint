@@ -717,6 +717,10 @@ button.danger:hover { color: var(--pp-danger); }
 
 .pill-mark { color: var(--pp-dim); font-size: var(--pp-text-xs); }
 
+/* Bridge and extension on different versions. Dim and small on purpose: nothing is
+   broken yet, and the popover says what to run. */
+.pill-warn { color: var(--pp-dim); font-size: var(--pp-text-xs); font-weight: var(--pp-weight-bold); }
+
 .pill-label {
   max-width: 12ch;
   overflow: hidden;
@@ -748,6 +752,7 @@ button.danger:hover { color: var(--pp-danger); }
   box-shadow: var(--pp-shadow-float);
   font-size: var(--pp-text-md);
   user-select: text;
+  --pp-row: 28px;
 }
 
 .pop.show { display: block; }
@@ -758,7 +763,6 @@ button.danger:hover { color: var(--pp-danger); }
 
 /* Six rows, then it scrolls inside the popover rather than growing off screen. */
 .pop-list {
-  --pp-row: 28px;
   max-height: calc(var(--pp-row) * 6);
   overflow-y: auto;
   border-top: 1px solid var(--pp-line);
@@ -792,6 +796,80 @@ button.danger:hover { color: var(--pp-danger); }
 }
 
 .pop-foot { display: flex; justify-content: flex-end; padding: 0 var(--pp-space-12) var(--pp-space-4); }
+
+/* The version line, set apart above "How it works". The mark hangs in the gutter so the
+   text lines up with the heading's. */
+.pop-version {
+  display: flex;
+  gap: var(--pp-space-6);
+  margin-top: var(--pp-space-4);
+  padding: var(--pp-space-8) var(--pp-space-12) var(--pp-space-6);
+  border-top: 1px solid var(--pp-line);
+  color: var(--pp-dim);
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.pop-version-mark { flex: none; font-weight: var(--pp-weight-bold); }
+
+/* Last row in every state: back to the welcome page. */
+.pop button.pop-how {
+  margin-top: var(--pp-space-4);
+  border-top: 1px solid var(--pp-line);
+}
+
+/* ---------------------------------------------------------------- first-show tip */
+
+/* Above the bar like the popover, and never over it: it only adds, it never covers a
+   control. The arrow is a rotated square whose two outer edges carry the border. */
+.tip {
+  display: none;
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 10px);
+  width: 260px;
+  max-width: calc(100vw - 16px);
+  padding: var(--pp-space-8) var(--pp-space-8) var(--pp-space-8) var(--pp-space-12);
+  border-radius: var(--pp-radius-10);
+  border: 1px solid var(--pp-line);
+  background: var(--pp-bg);
+  color: var(--pp-fg);
+  box-shadow: var(--pp-shadow-float);
+  font-size: var(--pp-text-md);
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.tip.show { display: flex; align-items: flex-start; gap: var(--pp-space-8); }
+.tip.below { bottom: auto; top: calc(100% + 10px); }
+
+.tip-text { flex: 1; min-width: 0; }
+.tip-line { color: var(--pp-dim); }
+
+.bar .tip button.tip-x {
+  flex: none;
+  padding: 0 var(--pp-space-4);
+  border: 0;
+  color: var(--pp-dim);
+  font-size: var(--pp-text-sm);
+}
+
+.tip-arrow {
+  position: absolute;
+  top: 100%;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px; /* design-ok: half the arrow's own size, centres it on the edge */
+  background: var(--pp-bg);
+  border-right: 1px solid var(--pp-line);
+  border-bottom: 1px solid var(--pp-line);
+  transform: rotate(45deg);
+}
+
+.tip.below .tip-arrow {
+  top: 0;
+  transform: rotate(225deg);
+}
 
 .count {
   min-width: 18px;

@@ -646,27 +646,17 @@
   }
 
 
-  /* ---------------------------------------------------------------- ui drawings */
+  /* ---------------------------------------------------------------- screenshots */
 
   /*
-   * The overlay, redrawn rather than photographed.
-   *
-   * Every value below is lifted from extension/overlay.css — the same palette, radii,
-   * type sizes, and borders the real shadow root uses. A screenshot of a 320px dark
-   * panel either sits at natural size and reads as a stamp, or gets scaled and turns to
-   * mush; this stays crisp at any zoom, prints, and cannot go stale in a way nobody
-   * notices. Class names are prefixed `u-` so nothing here collides with the page.
+   * Screenshots of the real toolbar on the demo pages, in docs/img: taken at twice the
+   * pixel size so they stay sharp on a dense screen, and cut on a transparent ground, so
+   * the card's corners and its soft shadow are its own. The margin inside each PNG is the
+   * shadow's room, which is why the figure's own padding is small.
    */
   .ui {
-    --pp-accent: #d97757;
-    --pp-bg:     #1b1b1d;
-    --pp-fg:     #f4f4f5;
-    --pp-dim:    #9ca3af;
-    --pp-line:   #3f3f46;
-    --pp-input:  #131315;
-
     margin: 28px 0 0;
-    padding: 30px 20px;
+    padding: 14px 20px 24px;
     background: var(--paper-2);
     border: 1px solid var(--rule-2);
     border-radius: 4px;
@@ -675,6 +665,18 @@
     align-items: center;
     gap: 16px;
   }
+
+  /* Side by side while they stay readable, then wrapped. The transparent margin in each
+     PNG is the gap. */
+  .ui .shots {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: center;
+    width: 100%;
+  }
+  .ui .shots img { flex: 1 1 300px; min-width: 0; max-width: 416px; height: auto; }
+  .ui img { display: block; max-width: 100%; height: auto; }
 
   .ui figcaption {
     max-width: 620px;
@@ -685,259 +687,6 @@
     text-align: center;
   }
   .ui figcaption code { font-family: var(--mono); font-size: 12px; }
-
-  /* The card and the bar are the two shells everything else sits in. */
-  .u-card {
-    width: 320px;
-    padding: 10px;
-    border-radius: 10px;
-    border: 1px solid var(--pp-line);
-    background: var(--pp-bg);
-    color: var(--pp-fg);
-    box-shadow: 0 10px 32px rgb(23 24 27 / 0.28);
-    font-size: 13px;
-    font-family: var(--sans);
-    text-align: left;
-  }
-
-  .u-bar {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 8px 6px 6px;
-    border-radius: 999px;
-    border: 1px solid var(--pp-line);
-    background: var(--pp-bg);
-    color: var(--pp-fg);
-    box-shadow: 0 6px 24px rgb(23 24 27 / 0.28);
-    font-size: 12px;
-    font-family: var(--sans);
-  }
-
-  .u-grip { display: block; padding: 2px 6px; }
-  .u-grip img { display: block; width: 20px; height: 20px; }
-  .u-dot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; }
-  .u-count { min-width: 18px; text-align: center; color: var(--pp-dim); }
-
-  .u-btn {
-    padding: 5px 10px;
-    border-radius: 7px;
-    border: 1px solid var(--pp-line);
-    background: transparent;
-    color: var(--pp-fg);
-    font: inherit;
-    font-size: 12px;
-    white-space: nowrap;
-  }
-  .u-btn.on { background: var(--pp-accent); border-color: var(--pp-accent); color: #fff; }
-  .u-btn.primary { background: var(--pp-accent); border-color: var(--pp-accent); color: #fff; font-weight: 600; }
-  .u-btn.dim { opacity: 0.45; }
-  .u-btn.bug {
-    padding: 4px 7px;
-    border-color: rgb(208 90 74 / 0.5);
-    color: #f0a08c;
-    font-size: 11px;
-  }
-
-  /* ---- composer parts */
-
-  .u-crumbs { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; padding-bottom: 4px; font-size: 11px; }
-  .u-crumb { padding: 2px 5px; border-radius: 5px; color: var(--pp-dim); white-space: nowrap; }
-  .u-crumb.on { background: var(--pp-accent); color: #fff; font-weight: 600; }
-  .u-sep { color: var(--pp-line); }
-
-  .u-meta {
-    font-size: 11px;
-    color: var(--pp-dim);
-    margin-bottom: 6px;
-    font-family: var(--mono);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .u-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
-  .u-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 3px 7px;
-    border-radius: 999px;
-    border: 1px solid var(--pp-line);
-    background: var(--pp-input);
-    font-size: 11px;
-    line-height: 1.5;
-  }
-  .u-chip .k { color: var(--pp-dim); }
-  .u-chip .v { color: var(--pp-fg); font-variant-numeric: tabular-nums; }
-  .u-chip.warn { border-color: #a16207; background: rgb(161 98 7 / 0.14); }
-  .u-chip .warn { color: #fbbf24; }
-  .u-chip .swatch { width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgb(255 255 255 / 0.35); }
-
-  .u-delta {
-    padding: 4px 7px;
-    margin-bottom: 8px;
-    border-radius: 6px;
-    border-left: 2px solid var(--pp-accent);
-    background: rgb(217 119 87 / 0.1);
-    font-size: 11px;
-    font-family: var(--mono);
-  }
-
-  .u-box {
-    padding: 7px 8px;
-    border-radius: 7px;
-    border: 1px solid var(--pp-line);
-    background: var(--pp-input);
-    color: var(--pp-fg);
-    font-size: 13px;
-    line-height: 1.45;
-    min-height: 46px;
-  }
-  .u-box.focus { border-color: var(--pp-accent); }
-  .u-box .ph { color: var(--pp-dim); }
-
-  .u-hint { margin-top: 5px; font-size: 11px; line-height: 1.3; color: var(--pp-dim); }
-
-  .u-row { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
-  .u-row .sp { flex: 1; }
-
-  .u-toggle { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--pp-dim); }
-  .u-tick {
-    width: 12px;
-    height: 12px;
-    border-radius: 3px;
-    border: 1px solid var(--pp-line);
-    background: var(--pp-input);
-    flex: none;
-  }
-  .u-tick.on {
-    background: var(--pp-accent);
-    border-color: var(--pp-accent);
-    position: relative;
-  }
-  .u-tick.on::after {
-    content: "✓";
-    position: absolute;
-    inset: 0;
-    color: #fff;
-    font-size: 9px;
-    line-height: 12px;
-    text-align: center;
-  }
-
-  /* ---- page-error panel */
-
-  .u-panel {
-    width: 320px;
-    border: 1px solid var(--pp-line);
-    border-left: 2px solid #d05a4a;
-    border-radius: 9px;
-    background: var(--pp-bg);
-    color: var(--pp-fg);
-    box-shadow: 0 10px 30px rgb(23 24 27 / 0.28);
-    font-family: var(--sans);
-    text-align: left;
-  }
-  .u-panel-head { display: flex; align-items: center; gap: 6px; padding: 5px 7px; }
-  .u-panel-head .sp { flex: 1; }
-  .u-more { padding: 0 4px; border: none; background: none; color: var(--pp-dim); font: inherit; font-size: 11px; }
-  .u-list { padding: 0 7px 5px; }
-
-  .u-entry {
-    display: flex;
-    gap: 5px;
-    padding: 3px 0;
-    border-top: 1px solid rgb(255 255 255 / 0.07);
-    font-size: 11px;
-    line-height: 1.4;
-  }
-  .u-kind { flex: none; color: #f0a08c; }
-  .u-kind.net { color: var(--pp-dim); }
-  .u-text { flex: 1; min-width: 0; color: var(--pp-fg); word-break: break-word; }
-  .u-stack {
-    padding: 1px 0 5px 10px;
-    color: var(--pp-dim);
-    font-family: var(--mono);
-    font-size: 10px;
-    line-height: 1.5;
-    word-break: break-all;
-  }
-
-  /* ---- pin + pin-card parts */
-
-  .u-pin {
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    border: 2px solid #fff;
-    background: var(--pp-accent);
-    color: #fff;
-    font-size: 11px;
-    font-weight: 700;
-    line-height: 18px;
-    text-align: center;
-    box-shadow: 0 1px 6px rgb(23 24 27 / 0.35);
-    flex: none;
-  }
-  .u-pin.done { background: #2ea36c; border-color: #d7f5e6; }
-
-  .u-sect {
-    padding: 8px;
-    border-radius: 8px;
-    border-left: 3px solid var(--pp-accent);
-    background: rgb(217 119 87 / 0.07);
-  }
-  .u-sect.done { border-left-color: #2ea36c; background: rgb(46 163 108 / 0.07); }
-
-  .u-note { line-height: 1.45; margin-bottom: 8px; }
-
-  .u-progress {
-    margin-bottom: 8px;
-    padding: 6px 8px;
-    border-radius: 7px;
-    border-left: 2px solid #2ea36c;
-    background: rgb(255 255 255 / 0.05);
-    font-size: 11px;
-    line-height: 1.5;
-  }
-  .u-progress .file { color: var(--pp-dim); font-family: var(--mono); }
-
-  .u-resolution {
-    padding: 6px 8px;
-    border-radius: 7px;
-    background: rgb(63 111 82 / 0.22);
-    color: #a7d7bb;
-    font-size: 12px;
-    line-height: 1.45;
-  }
-
-  /* Two shells side by side where the story needs both; stacked when there is no room. */
-  .u-pair { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; justify-content: center; }
-  .u-third { width: 238px; max-width: 100%; }
-
-
-  /* ---- token picker */
-
-  .u-picker { margin-bottom: 8px; }
-  .u-ramp { display: flex; flex-direction: column; gap: 1px; }
-  .u-step {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 4px 7px;
-    border-radius: 6px;
-    font-size: 11px;
-  }
-  .u-step .b { height: 8px; border-radius: 2px; background: var(--pp-accent); opacity: 0.55; flex: none; }
-  .u-step .n { color: var(--pp-fg); }
-  .u-step .v { margin-left: auto; color: var(--pp-dim); font-variant-numeric: tabular-nums; }
-  .u-step.on { background: #2a2a2e; }
-  .u-step.on .b { opacity: 1; }
-
-  .u-swatches { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
-  .u-sw { height: 26px; border-radius: 6px; border: 1px solid rgb(255 255 255 / 0.18); }
-  .u-sw.on { outline: 2px solid var(--pp-fg); outline-offset: 1px; }
 
   /* ---- feature index */
 
@@ -968,11 +717,9 @@
   @media (max-width: 560px) { .index { grid-template-columns: 1fr; } }
 
   @media (max-width: 700px) {
-    .ui { padding: 20px 12px; }
-    .u-card, .u-panel, .u-third { width: 100%; max-width: 320px; }
-    /* The bar is a single pill of fixed-size controls; let it scroll rather than wrap
-       into something that is no longer recognisably a toolbar. */
-    .u-bar { max-width: 100%; overflow-x: auto; }
+    .ui { padding: 12px 8px 20px; }
+    .ui .shots { flex-direction: column; align-items: center; }
+    .ui .shots img { flex: none; width: 100%; }
   }
 
   /* Eight links do not fit a phone. Scroll the row rather than wrapping it into a second
@@ -994,7 +741,7 @@
   /*
    * Squared, flattened, hairlined. Rounded corners and blurred drop shadows are the
    * default look of everything; a schematic has neither. Scoped to page chrome by name —
-   * the .u-* drawings keep their real radii and shadows, because those are measurements
+   * the screenshots keep their real radii and shadows, because those are measurements
    * of the actual overlay rather than taste.
    */
   main, .pane, .badge, .payload, .panel, .index a, .ui, table, pre, blockquote { border-radius: 0 !important; }
@@ -1155,79 +902,24 @@
   </div>
 
   <figure class="ui">
-    <div class="u-card">
-      <div class="u-crumbs">
-        <span class="u-crumb on">aside.mt-10</span>
-        <span class="u-sep">·</span><span class="u-crumb">main.mx-auto</span>
-        <span class="u-sep">·</span><span class="u-crumb">body</span>
-      </div>
-      <div class="u-meta">[data-testid="tw-off-scale"]</div>
-      <div class="u-chips">
-        <span class="u-chip warn"><span class="k">padding</span> <span class="v">13px</span> <span class="warn">⚠</span></span>
-        <span class="u-chip"><span class="k">size</span> <span class="v">14px</span></span>
-        <span class="u-chip"><span class="k">radius</span> <span class="v">8px</span></span>
-        <span class="u-chip"><span class="k">bg</span> <span class="swatch" style="background:#ff7a45"></span> <span class="v">warm</span></span>
-      </div>
-      <div class="u-delta">padding → <b>p-4</b> · width → <b>w-1/2</b></div>
-      <div class="u-box focus">the strip is too wide, and that padding came from nowhere</div>
-      <div class="u-hint">2 picked values ride with this comment</div>
-      <div class="u-row">
-        <span class="u-toggle"><span class="u-tick on"></span> screenshot</span>
-        <span class="sp"></span>
-        <button class="u-btn">Cancel</button>
-        <button class="u-btn primary">Add</button>
-      </div>
-    </div>
+    <img src="./img/composer.png" alt="The Pinpoint composer on a Tailwind demo page: breadcrumbs, the element selector, token chips for padding, size, radius, text and bg, and a note typed into the box." width="416" height="348">
     <figcaption>
       The composer. <code>padding 13px</code> is ringed in amber because 13 is on no scale
       this project defines; <code>bg warm</code> is not a hex code, because the project
-      names that colour. The line above the note is what will actually be requested.
+      names that colour.
     </figcaption>
   </figure>
 
   <figure class="ui">
-    <div class="u-pair">
-      <div class="u-card" style="padding-bottom:10px">
-        <div class="u-meta">padding · pick from the spacing scale</div>
-        <div class="u-picker">
-          <div class="u-ramp">
-            <div class="u-step"><span class="b" style="width:8px"></span><span class="n">2</span><span class="v">8px</span></div>
-            <div class="u-step"><span class="b" style="width:12px"></span><span class="n">3</span><span class="v">12px</span></div>
-            <div class="u-step on"><span class="b" style="width:16px"></span><span class="n">4</span><span class="v">16px</span></div>
-            <div class="u-step"><span class="b" style="width:20px"></span><span class="n">5</span><span class="v">20px</span></div>
-            <div class="u-step"><span class="b" style="width:24px"></span><span class="n">6</span><span class="v">24px</span></div>
-            <div class="u-step"><span class="b" style="width:32px"></span><span class="n">8</span><span class="v">32px</span></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="u-card" style="padding-bottom:10px">
-        <div class="u-meta">background · pick from the palette</div>
-        <div class="u-picker">
-          <div class="u-swatches">
-            <span class="u-sw" style="background:#eef2ff"></span>
-            <span class="u-sw" style="background:#e0e7ff"></span>
-            <span class="u-sw" style="background:#a5b4fc"></span>
-            <span class="u-sw" style="background:#6366f1"></span>
-            <span class="u-sw on" style="background:#4f46e5"></span>
-            <span class="u-sw" style="background:#4338ca"></span>
-            <span class="u-sw" style="background:#ff7a45"></span>
-            <span class="u-sw" style="background:#0f172a"></span>
-            <span class="u-sw" style="background:#64748b"></span>
-            <span class="u-sw" style="background:#e2e8f0"></span>
-            <span class="u-sw" style="background:#ffffff"></span>
-            <span class="u-sw" style="background:#f8fafc"></span>
-            <span class="u-sw" style="background:#1b1b1d"></span>
-            <span class="u-sw" style="background:#2e7d55"></span>
-          </div>
-        </div>
-      </div>
+    <div class="shots">
+      <img src="./img/picker-spacing.png" alt="The composer with the padding chip open: the project spacing scale drawn as a ramp from 4px to 32px." width="416" height="523">
+      <img src="./img/picker-palette.png" alt="The composer with the bg chip open: the project palette as a grid of swatches." width="416" height="414">
     </div>
     <figcaption>
       The selection bar, both halves. Spacing is drawn as a size rather than listed as
-      numbers — a ramp you can see beats a list you have to read — and only the rungs
-      around the current value are offered. Colour is <em>your palette</em>, not a colour
-      wheel, because the point is to stay inside the system rather than to leave it.
+      numbers — a ramp you can see beats a list you have to read. Colour is <em>your
+      palette</em>, not a colour wheel, because the point is to stay inside the system
+      rather than to leave it.
     </figcaption>
   </figure>
 
@@ -1294,26 +986,15 @@
   </table>
 
   <figure class="ui">
-    <div class="u-pair">
-      <div class="u-card u-third">
-        <div class="u-box"><span class="ph">the gap here is too tight</span></div>
-        <div class="u-hint">&nbsp;</div>
-        <div class="u-row"><span class="sp"></span><button class="u-btn">Cancel</button><button class="u-btn primary">Add</button></div>
-      </div>
-      <div class="u-card u-third">
-        <div class="u-box"><b>?</b> why is this a button</div>
-        <div class="u-hint">answers on the pin, changes no files</div>
-        <div class="u-row"><span class="sp"></span><button class="u-btn">Cancel</button><button class="u-btn primary" style="background:#7c6bd6;border-color:#7c6bd6">Ask</button></div>
-      </div>
-      <div class="u-card u-third">
-        <div class="u-box"><b>!</b> revisit the empty state</div>
-        <div class="u-hint">parked — never dispatched</div>
-        <div class="u-row"><span class="sp"></span><button class="u-btn">Cancel</button><button class="u-btn primary" style="background:#71717a;border-color:#71717a">Backlog</button></div>
-      </div>
+    <div class="shots">
+      <img src="./img/door-note.png" alt="The composer with a plain note typed: the button reads Add." width="416" height="348">
+      <img src="./img/door-ask.png" alt="The composer with a note that starts with a question mark: the hint says Claude answers on the pin and changes no files, and the button reads Ask." width="416" height="363">
+      <img src="./img/door-backlog.png" alt="The composer with a note that starts with an exclamation mark: the hint says it is parked, never dispatched, and the button reads Backlog." width="416" height="363">
     </div>
     <figcaption>
       The same box, three doors. The button and the hint both change on the keystroke that
       types the marker, so you can see which one you took before you commit to it.
+    
     </figcaption>
   </figure>
 
@@ -1382,44 +1063,11 @@
   </div>
 
   <figure class="ui">
-    <div class="u-panel">
-      <div class="u-panel-head">
-        <span class="u-toggle"><span class="u-tick on"></span> send with the batch</span>
-        <span class="sp"></span>
-        <button class="u-more">close</button>
-      </div>
-      <div class="u-list">
-        <div class="u-entry">
-          <span class="u-kind">error</span>
-          <span class="u-text">[nimbus] newsletter signup failed Error: subscribe failed: 404 Not Found ⌄</span>
-        </div>
-        <div class="u-stack">at HTMLButtonElement.&lt;anonymous&gt; (http://localhost:3000/:135:26)</div>
-        <div class="u-entry">
-          <span class="u-kind net">network</span>
-          <span class="u-text">404 POST /api/subscribe</span>
-        </div>
-        <div class="u-entry">
-          <span class="u-kind">exception</span>
-          <span class="u-text">Uncaught TypeError: Cannot redefine property: ethereum</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="u-bar">
-      <span class="u-grip"><img src="./pinpoint-logo.svg" alt="" width="20" height="20"></span>
-      <span class="u-dot"></span>
-      <button class="u-btn on">Commenting</button>
-      <span class="u-count">2</span>
-      <button class="u-btn bug">⚠ 3</button>
-      <button class="u-btn primary">Dispatch</button>
-      <button class="u-btn">✕</button>
-    </div>
-
+    <img src="./img/debug.png" alt="The toolbar with its console panel open above it, listing a failed signup error with its stack unfolded and the 404 network request behind it. The warning button beside Dispatch shows 2." width="578" height="240">
     <figcaption>
-      The <code>⚠ 3</code> sits next to Dispatch because that is what it changes. One entry
-      is unfolded to show the stack that names the file and line. The third is a wallet
-      extension misbehaving in the page's own world — visible precisely because it got
-      there, unlike the console noise extensions keep to themselves.
+      The <code>⚠ 2</code> sits next to Dispatch because that is what it changes. The newest
+      entry is first: the error the page logged, unfolded to show the stack that names
+      the file and line, and under it the 404 that caused it.
     </figcaption>
   </figure>
 </section>
@@ -1467,27 +1115,11 @@
   </div>
 
   <figure class="ui">
-    <div class="u-card">
-      <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:8px">
-        <span class="u-pin done">✓</span>
-        <span class="u-meta" style="flex:1;margin:0;padding-top:3px">aside · [data-testid="tw-off-scale"]</span>
-      </div>
-      <div class="u-sect done">
-        <div class="u-note">Make this half width of its current state.</div>
-        <div class="u-progress">
-          <span class="u-progress-head">edited</span> —
-          <span class="file">demo/fixtures/tailwind/index.html</span>,
-          <span class="file">tailwind.config.js</span>
-        </div>
-        <div class="u-resolution">
-          ✓ Strip is now w-1/2 (848px → 424px) and painted bg-warm / text-pp-bg, both added
-          to the config as named tokens.
-        </div>
-      </div>
-    </div>
+    <img src="./img/resolved.png" alt="A resolved pin card: the original note, a green resolution line saying what Claude changed, and a box to reply if it is still not right." width="416" height="382">
     <figcaption>
       The same pin, after the round trip. Progress landed while the work happened; the tick
       only went green once a fresh crop of that element came back and was read.
+    
     </figcaption>
   </figure>
 

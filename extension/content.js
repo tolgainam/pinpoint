@@ -1099,7 +1099,7 @@
         kind === 'question' ? 'question — Claude answers on the pin and changes no files'
         : kind === 'backlog' && !status.canPark ? 'Pick a project from the status pill first.'
         : kind === 'backlog' ? 'parked — appended to .pinpoint/backlog.md, never dispatched'
-        : deltas.size ? `${deltas.size} picked value${deltas.size === 1 ? '' : 's'} ride with this comment`
+        : deltas.size ? `${deltas.size} picked value${deltas.size === 1 ? ' rides' : 's ride'} with this comment`
         : ''
       hint.classList.toggle('show', !!hint.textContent)
     }

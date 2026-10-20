@@ -12,7 +12,7 @@
   "scripts": {
     "server": "node server/pinpoint.js",
     "demo": "node demo/serve.js",
-    "test": "node --test \"test/**/*.test.js\"",
+    "test": "node --test test/*.test.js",
     "check:design": "node scripts/check-design.js",
     "screens:update": "node scripts/screens-update.js"
   },

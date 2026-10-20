@@ -1,0 +1,159 @@
+/* The welcome page. One column, readable on a phone, in the toolbar's own dark look:
+   every value is a var(--pp-*) from tokens.css, which the page loads first. */
+
+* { box-sizing: border-box; }
+
+html { background: var(--pp-bg); }
+
+body {
+  margin: 0;
+  background: var(--pp-bg);
+  color: var(--pp-fg);
+  font-family: var(--pp-font-sans);
+  font-size: var(--pp-text-xl);
+  line-height: var(--pp-leading-body);
+}
+
+main {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: var(--pp-space-32) var(--pp-space-16);
+}
+
+h1 {
+  margin: 0;
+  font-size: var(--pp-text-2xl);
+  font-weight: var(--pp-weight-bold);
+  color: var(--pp-accent);
+}
+
+.lede { margin: var(--pp-space-4) 0 0; color: var(--pp-dim); }
+
+section { margin-top: var(--pp-space-32); }
+
+h2 {
+  margin: 0 0 var(--pp-space-12);
+  font-size: var(--pp-text-lg);
+  font-weight: var(--pp-weight-semibold);
+  letter-spacing: var(--pp-tracking-wide);
+  text-transform: uppercase;
+  color: var(--pp-dim);
+}
+
+p { margin: 0; }
+
+/* ---------------------------------------------------------------- steps */
+
+.steps { list-style: none; margin: 0; padding: 0; }
+
+.steps li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--pp-space-10);
+  padding: var(--pp-space-6) 0;
+}
+
+/* A box, not a checkbox: the steps are guidance, and only step 3 ticks itself. */
+.box {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--pp-line);
+  border-radius: var(--pp-radius-3);
+  align-self: center;
+}
+
+.steps li.done .box {
+  display: grid;
+  place-items: center;
+  background: var(--pp-ok);
+  border-color: var(--pp-ok);
+}
+
+.steps li.done .box::after {
+  content: "✓";
+  color: var(--pp-bg);
+  font-size: var(--pp-text-xs);
+  font-weight: var(--pp-weight-bold);
+  line-height: 1;
+}
+
+.steps li.done > span:last-child { color: var(--pp-dim); }
+
+.n { flex: none; color: var(--pp-dim); font-variant-numeric: tabular-nums; }
+
+/* ---------------------------------------------------------------- bridge check */
+
+.bridge {
+  padding: var(--pp-space-12) var(--pp-space-16);
+  border: 1px solid var(--pp-line);
+  border-radius: var(--pp-radius-10);
+}
+
+.bridge-head { display: flex; align-items: center; gap: var(--pp-space-8); font-weight: var(--pp-weight-semibold); }
+.bridge-line { margin-top: var(--pp-space-4); color: var(--pp-dim); }
+
+.bridge-version {
+  display: flex;
+  gap: var(--pp-space-8);
+  margin-top: var(--pp-space-10);
+  padding-top: var(--pp-space-10);
+  border-top: 1px solid var(--pp-line);
+  color: var(--pp-dim);
+}
+
+.bridge-version[hidden], .bridge-line[hidden] { display: none; }
+.bridge-version .mark { flex: none; font-weight: var(--pp-weight-bold); }
+
+.bridge-foot { display: flex; justify-content: flex-end; margin-top: var(--pp-space-10); }
+
+button {
+  font: inherit;
+  font-size: var(--pp-text-md);
+  padding: var(--pp-space-5) var(--pp-space-10);
+  border-radius: var(--pp-radius-7);
+  border: 1px solid var(--pp-line);
+  background: transparent;
+  color: var(--pp-fg);
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) { background: var(--pp-hover); }
+button:disabled { opacity: 0.45; cursor: default; }
+
+/* The same dot the toolbar's pill uses: a hollow ring when off, green when on. */
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--pp-dim);
+}
+
+.dot.on { background: var(--pp-ok); border-color: var(--pp-ok); }
+
+/* ---------------------------------------------------------------- pill table */
+
+.pills {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  align-items: center;
+  gap: var(--pp-space-10) var(--pp-space-16);
+  margin: 0;
+}
+
+.pills dd { margin: 0; color: var(--pp-dim); }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pp-space-5);
+  padding: var(--pp-space-3) var(--pp-space-8);
+  border: 1px solid var(--pp-line);
+  border-radius: var(--pp-radius-pill);
+  font-size: var(--pp-text-sm);
+  white-space: nowrap;
+}
+
+.pill .dot { width: 7px; height: 7px; }
+.pill .flag { color: var(--pp-dim); font-size: var(--pp-text-xs); }

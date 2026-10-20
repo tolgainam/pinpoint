@@ -689,6 +689,13 @@ button.danger:hover { color: var(--pp-danger); }
 
 .grip:active { cursor: grabbing; }
 
+.grip img {
+  display: block;
+  width: 20px;
+  height: 20px;
+  pointer-events: none;
+}
+
 /* The status pill: dot plus where Dispatch would go. Same weight as the count, so a
    healthy toolbar stays quiet; the label is what changes when something is off. */
 .bar button.pill {

@@ -7,7 +7,11 @@
   "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"],
   "background": { "service_worker": "worker.js" },
   "options_page": "welcome.html",
-  "action": { "default_title": "Pinpoint — show or hide toolbar" },
+  "icons": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" },
+  "action": {
+    "default_title": "Pinpoint — show or hide toolbar",
+    "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" }
+  },
   "commands": {
     "freeze": {
       "suggested_key": { "default": "Alt+Shift+F" },
@@ -31,7 +35,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["tokens.css", "overlay.css"],
+      "resources": ["tokens.css", "overlay.css", "icons/icon-48.png"],
       "matches": ["http://localhost/*", "http://127.0.0.1/*"]
     }
   ]

@@ -8,7 +8,7 @@
 <meta property="og:title" content="Pinpoint — features">
 <meta property="og:description" content="Stop describing the fix. Hand it over.">
 <meta property="og:type" content="website">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>◈</text></svg>">
+<link rel="icon" type="image/svg+xml" href="./pinpoint-logo.svg">
 <style>
   /*
    * Swiss stock: white paper, near-black ink, one accent, nothing else.
@@ -99,7 +99,7 @@
     border-bottom: 1px solid var(--ink);
     font-size: 13px;
   }
-  nav .mark { color: var(--accent); font-size: 15px; }
+  nav .mark { display: block; width: 22px; height: 22px; }
   nav .name { font-weight: 700; letter-spacing: 0.1em; }
   nav .links { display: flex; gap: 22px; margin-left: auto; }
   nav a { color: var(--ink-2); border: none; }
@@ -714,7 +714,8 @@
     font-family: var(--sans);
   }
 
-  .u-grip { padding: 2px 6px; font-size: 13px; font-weight: 700; color: var(--pp-accent); }
+  .u-grip { display: block; padding: 2px 6px; }
+  .u-grip img { display: block; width: 20px; height: 20px; }
   .u-dot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; }
   .u-count { min-width: 18px; text-align: center; color: var(--pp-dim); }
 
@@ -1067,7 +1068,7 @@
 <main>
 
 <nav>
-  <span class="mark">◈</span>
+  <img class="mark" src="./pinpoint-logo.svg" alt="" width="22" height="22">
   <span class="name">PINPOINT</span>
   <span class="links">
     <a href="./index.html">Overview</a>
@@ -1405,7 +1406,7 @@
     </div>
 
     <div class="u-bar">
-      <span class="u-grip">⌖</span>
+      <span class="u-grip"><img src="./pinpoint-logo.svg" alt="" width="20" height="20"></span>
       <span class="u-dot"></span>
       <button class="u-btn on">Commenting</button>
       <span class="u-count">2</span>

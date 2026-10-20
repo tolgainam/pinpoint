@@ -180,7 +180,7 @@ Left to right:
 
 | Control | What it does |
 |---|---|
-| `⌖` | Grip: drag the bar anywhere |
+| Pinpoint logo | Grip: drag the bar anywhere |
 | status pill | Where Dispatch goes. Your project's name (Auto), a project with a `⚑` (your pick), **Choose**, **Reconnecting** or **Offline**. Click it to pick a session for this localhost port; "How it works" at the bottom reopens the welcome tab. A `!` means the bridge and extension versions differ, and the list says what to run |
 | **Comment** | Comment mode: hover highlights elements, click opens a note composer |
 | count | Pending comments not yet dispatched |
@@ -195,7 +195,7 @@ page's dev server. If that guess is wrong, or there is none, pick another sessio
 pill; the pick is kept for that port.
 
 `⌘↵` adds a note, `Esc` closes the composer or leaves comment mode. Drag the bar by its
-`⌖` grip. Pins survive a reload — they're keyed by origin + pathname in
+logo. Pins survive a reload — they're keyed by origin + pathname in
 `chrome.storage.local`.
 
 When Claude fixes a comment it calls `resolve_comment`, and the pin turns green with a ✓

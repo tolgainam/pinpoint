@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Pinpoint logo</title>
+  <desc id="desc">A coral pinpoint containing a terminal prompt, framed by browser element selection corners.</desc>
+
+  <!-- Browser element-selection frame -->
+  <g fill="none" stroke="#3A2018" stroke-width="72" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M300 132H196c-35 0-64 29-64 64v104"/>
+    <path d="M724 132h104c35 0 64 29 64 64v104"/>
+    <path d="M132 724v104c0 35 29 64 64 64h104"/>
+    <path d="M892 724v104c0 35-29 64-64 64H724"/>
+  </g>
+
+  <!-- Pinpoint / target -->
+  <path fill="#D97757" d="M512 196c-169 0-286 114-286 278 0 171 153 293 286 426 133-133 286-255 286-426 0-164-117-278-286-278Z"/>
+  <circle cx="512" cy="474" r="184" fill="#3A2018"/>
+  <circle cx="512" cy="474" r="184" fill="none" stroke="#F4E8D8" stroke-width="28"/>
+
+  <!-- Terminal dispatch prompt -->
+  <g fill="none" stroke="#F4E8D8" stroke-width="54" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m438 402 82 72-82 72"/>
+    <path d="M564 556h72"/>
+  </g>
+</svg>

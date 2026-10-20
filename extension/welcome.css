@@ -20,6 +20,8 @@ main {
   padding: var(--pp-space-32) var(--pp-space-16);
 }
 
+header .logo { display: block; margin: 0 0 var(--pp-space-12); }
+
 h1 {
   margin: 0;
   font-size: var(--pp-text-2xl);

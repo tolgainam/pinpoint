@@ -1550,7 +1550,13 @@
   // ---------------------------------------------------------------- toolbar
 
   const bar = el('div', 'bar')
-  const grip = el('div', 'grip', '⌖')
+  // The logo is the grip: it is what the bar is called by, and it is what you drag.
+  const grip = el('div', 'grip')
+  const gripMark = document.createElement('img')
+  gripMark.src = chrome.runtime.getURL('icons/icon-48.png')
+  gripMark.alt = ''
+  gripMark.draggable = false
+  grip.append(gripMark)
   const dot = el('div', 'dot')
   const modeBtn = el('button', 'mode', 'Comment')
   const count = el('div', 'count', '0')

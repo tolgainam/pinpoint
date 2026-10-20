@@ -66,7 +66,9 @@
   host.style.cssText = 'all:initial;position:fixed;inset:0;z-index:2147483647;pointer-events:none'
 
   const root = host.attachShadow({ mode: 'open' })
-  const css = await fetch(chrome.runtime.getURL('overlay.css')).then(r => r.text()).catch(() => '')
+  // Tokens first: overlay.css only ever says var(--pp-*), and tokens.css defines them.
+  const sheet = name => fetch(chrome.runtime.getURL(name)).then(r => r.text()).catch(() => '')
+  const css = (await Promise.all([sheet('tokens.css'), sheet('overlay.css')])).join('\n')
   const style = document.createElement('style')
   style.textContent = css
   root.append(style)
@@ -548,6 +550,7 @@
     capture.style.display = on ? 'block' : 'none'
     modeBtn.classList.toggle('on', on)
     modeBtn.textContent = on ? 'Commenting' : 'Comment'
+    if (on) dismissTip()
     if (!on) { closeCard(); hideHighlight(); frozen = null; if (frame) releaseFrame() }
   }
 
@@ -1160,6 +1163,7 @@
         status: kind === 'backlog' ? 'backlog' : 'pending',
       }
       comments.push(comment)
+      dismissTip()
       chrome.storage.local.set({ [PREFS_KEY]: { wantShot, wantDebug } }).catch(() => {})
       closeCard()
       save()
@@ -1539,7 +1543,7 @@
 
   // Named, because unmount has to be able to take them off again.
   const onScroll = schedulePins
-  const onResize = () => { schedulePins(); clampBar() }
+  const onResize = () => { schedulePins(); clampBar(); placeTip() }
   addEventListener('scroll', onScroll, { passive: true, capture: true })
   addEventListener('resize', onResize, { passive: true })
 
@@ -1636,7 +1640,9 @@
   }
 
   function closeBugPanel() {
+    if (!bugPanel.classList.contains('show')) return
     bugPanel.classList.remove('show')
+    paintTip()
   }
 
   /** Re-read the ring and keep the button honest about what is in it. */
@@ -1660,6 +1666,7 @@
     paintBugList()
     bugPanel.classList.add('show')
     placeBugPanel()
+    paintTip()
   }
   bugClose.onclick = closeBugPanel
   bugBox.onchange = () => {
@@ -1707,10 +1714,12 @@
     if (on) { setMode(false); closeBugPanel() }
     bar.style.display = on ? 'none' : ''
     pins.style.display = on ? 'none' : ''
-    if (!on) { placed ? clampBar() : placeBar() }
+    // Place the bar first: the tip is anchored to it.
+    if (!on) { placed ? clampBar() : placeBar(); paintTip() }
   }
 
-  closeBtn.onclick = () => setHidden(true)
+  // Closing the toolbar is a clear enough "I have seen it" for the tip as well.
+  closeBtn.onclick = () => { dismissTip(); setHidden(true) }
 
   // Drag by the grip only, so the buttons stay clickable.
   let drag = null
@@ -1724,6 +1733,7 @@
   grip.addEventListener('pointermove', ev => {
     if (!drag) return
     setBarPos(ev.clientX - drag.dx, ev.clientY - drag.dy)
+    placeTip()
   })
   grip.addEventListener('pointerup', ev => {
     if (!drag) return
@@ -1915,12 +1925,20 @@
   const pill = el('button', 'pill')
   const pillMark = el('span', 'pill-mark', '⚑')
   const pillLabel = el('span', 'pill-label')
+  // A version apart is a quiet mark after the label, never a new colour or a blocked
+  // button: everything still works, and the popover says what to run.
+  const pillWarn = el('span', 'pill-warn', '!')
   // The old status dot moves inside the pill rather than being rebuilt, so the toolbar's
   // own layout code stays as it was.
   bar.insertBefore(pill, dot)
-  pill.append(dot, pillMark, pillLabel)
+  pill.append(dot, pillMark, pillLabel, pillWarn)
   pillMark.style.display = 'none'
+  pillWarn.style.display = 'none'
   pillLabel.textContent = status.label
+
+  const EXT_VERSION = chrome.runtime.getManifest().version
+  /** The bridge and this extension on different versions, or null. status.js decides. */
+  let versionInfo = null
 
   const pop = el('div', 'pop')
   const popHead = el('div', 'pop-head')
@@ -1929,7 +1947,16 @@
   const popFoot = el('div', 'pop-foot')
   const popRetry = el('button', '', 'Retry')
   popFoot.append(popRetry)
-  pop.append(popHead, popLines, popList, popFoot)
+  const popVersion = el('div', 'pop-version')
+  /**
+   * The way back to the welcome page, in every state, Offline included: that is when a
+   * new user most needs it. The worker opens it, because a content script cannot open
+   * an extension page itself.
+   */
+  const popHow = el('button', 'pop-row pop-how')
+  popHow.append(el('span', 'pop-name', 'How it works'), el('span', 'pop-path', '›'))
+  popHow.onclick = () => { chrome.runtime.sendMessage({ type: 'open-welcome' }).catch(() => {}); closePop() }
+  pop.append(popHead, popLines, popList, popFoot, popVersion, popHow)
   bar.append(pop)
 
   const popOpen = () => pop.classList.contains('show')
@@ -1942,10 +1969,12 @@
     pop.classList.add('show')
     popShown = ''
     paintPop()
+    paintTip()
   }
 
   function closePop() {
     pop.classList.remove('show')
+    paintTip()
   }
 
   /**
@@ -1964,13 +1993,16 @@
   function paintPop() {
     if (!popOpen()) return
     // Rebuilding on every ping would drop a click that lands mid-rebuild and lose focus.
-    const shown = JSON.stringify([status.heading, status.lines, status.retry, status.rows])
+    const shown = JSON.stringify([status.heading, status.lines, status.retry, status.rows, versionInfo?.line])
     if (shown === popShown) { placePop(); return }
     popShown = shown
     popHead.textContent = status.heading
     popLines.textContent = ''
     for (const line of status.lines) popLines.append(el('div', 'pop-line', line))
     popFoot.style.display = status.retry ? '' : 'none'
+    popVersion.textContent = ''
+    popVersion.style.display = versionInfo ? '' : 'none'
+    if (versionInfo) popVersion.append(el('span', 'pop-version-mark', '!'), el('span', '', versionInfo.line))
 
     // Rebuilt on every ping, so keep the scroll where the reader left it.
     const scroll = popList.scrollTop
@@ -1998,12 +2030,16 @@
 
   function applyStatus() {
     status = PinpointStatus.view(lastHealth, chosen, PORT, lastDir)
+    versionInfo = PinpointStatus.versionNote(lastHealth, EXT_VERSION)
     dot.classList.toggle('on', status.dot)
     pillMark.style.display = status.pin ? '' : 'none'
+    pillWarn.style.display = versionInfo ? '' : 'none'
     pillLabel.textContent = status.label
     pill.title = status.sendsTo ? `Sending to ${PinpointStatus.tilde(status.sendsTo)}` : status.heading
     paintDispatch()
     paintPop()
+    // Only its second line depends on the status, and only Offline or not.
+    if (status.state !== tipState) paintTip()
     openCard?.repaintIntent?.()
   }
 
@@ -2058,6 +2094,101 @@
     lastDir = dir
     chrome.storage.local.set({ [LAST_KEY]: dir }).catch(() => {})
   }
+
+  // ---------------------------------------------------------------- first-show tip
+
+  /**
+   * One card, the first time the toolbar is ever on screen, on any page: what to click
+   * first and what the pill is for. `pp.tipSeen` in chrome.storage.local is the one flag,
+   * shared by every page and port. It reads "shown" once the tip has been on screen (the
+   * welcome page ticks its step 3 off that) and true once it is gone for good. It only
+   * ever moves forward: undefined to "shown" to true, never back, whichever tab writes.
+   *
+   * It lives inside the bar like the popover, so it follows a drag and goes when the bar
+   * is hidden. It sits above the bar, never over it, so Comment, the pill and Dispatch
+   * stay clickable. It steps aside while the popover or the error panel is open, since
+   * they claim the same space, and comes back when they close. Comment mode ends it for
+   * good: that is the step it explains, and in comment mode a card above the bar would
+   * catch clicks meant for the page underneath.
+   *
+   * Gone, and the flag set, on a click on the card or its x, comment mode starting, the
+   * first comment saved, or the toolbar being closed.
+   */
+  const TIP_KEY = PinpointStatus.TIP_KEY
+  /** @type {undefined|'shown'|true} */
+  let tipSeen = true   // until storage says otherwise, so it never flashes up for an old user
+  const tip = el('div', 'tip')
+  const tipText = el('div', 'tip-text')
+  const tipLine2 = el('div', 'tip-line')
+  tipText.append(el('div', 'tip-head', 'Click Comment, then click any element.'), tipLine2)
+  const tipX = el('button', 'tip-x', '✕')
+  tipX.title = 'Got it'
+  const tipArrow = el('div', 'tip-arrow')
+  tip.append(tipText, tipX, tipArrow)
+  tip.onclick = () => dismissTip()
+  bar.append(tip)
+
+  const tipLoaded = chrome.storage.local.get(TIP_KEY).then(got => { tipSeen = got[TIP_KEY] }).catch(() => {})
+
+  /** The status the tip's second line was last written for, so a ping that changed nothing touches nothing. */
+  let tipState = null
+
+  /**
+   * Show or hide, and nothing else unless it just appeared: no layout read on the 5s
+   * ping. Position is worked out on show, drag and resize only.
+   */
+  function paintTip() {
+    const due = tipSeen !== true && !hidden && !mode && !popOpen() && !bugPanel.classList.contains('show')
+    const was = tip.classList.contains('show')
+    tip.classList.toggle('show', due)
+    if (!due) return
+    if (!tipSeen) markTipShown()
+    if (tipState !== status.state) {
+      tipState = status.state
+      tipLine2.textContent = PinpointStatus.tipLine(status)
+    }
+    if (!was) placeTip()
+  }
+
+  /** undefined to "shown", read first: another tab may already have written true. */
+  function markTipShown() {
+    tipSeen = 'shown'
+    chrome.storage.local.get(TIP_KEY).then(got => {
+      if (got[TIP_KEY] === true) { tipSeen = true; tip.classList.remove('show'); return }
+      if (got[TIP_KEY] === undefined) return chrome.storage.local.set({ [TIP_KEY]: 'shown' })
+    }).catch(() => {})
+  }
+
+  /**
+   * Above the bar, below it when the bar sits at the top edge, the same rule the popover
+   * uses. The arrow points at the middle of Comment wherever the card had to slide to.
+   */
+  function placeTip() {
+    if (!tip.classList.contains('show')) return
+    const r = bar.getBoundingClientRect()
+    tip.classList.toggle('below', r.top < (tip.offsetHeight || 64) + 16)
+    const w = tip.offsetWidth
+    const left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) - r.left
+    tip.style.left = `${left}px`
+    const m = modeBtn.getBoundingClientRect()
+    tipArrow.style.left = `${m.left - r.left - left + m.width / 2}px`
+  }
+
+  function dismissTip() {
+    if (tipSeen === true) return
+    tipSeen = true
+    tip.classList.remove('show')
+    chrome.storage.local.set({ [TIP_KEY]: true }).catch(() => {})
+  }
+
+  // Another tab moved the flag on: follow it here, forward only, rather than waiting for a reload.
+  function onStorage(changes, area) {
+    if (area !== 'local' || !(TIP_KEY in changes)) return
+    const next = changes[TIP_KEY].newValue
+    if (next === true) { tipSeen = true; tip.classList.remove('show') }
+    else if (next === 'shown' && tipSeen === undefined) tipSeen = 'shown'
+  }
+  chrome.storage.onChanged.addListener(onStorage)
 
   // ---------------------------------------------------------------- bridge events
 
@@ -2254,11 +2385,14 @@
     removeEventListener('resize', onResize)
     removeEventListener('keydown', onKeydown, true)
     removeEventListener('pointerdown', onOutside, true)
+    try { chrome.storage.onChanged.removeListener(onStorage) } catch { /* runtime already gone */ }
     host.remove()
   }
 
   await load()
+  await tipLoaded
   render()
+  paintTip()
   ping()
   refreshDebug()
   // Same beat as the health ping. The ring only changes when the page does something,

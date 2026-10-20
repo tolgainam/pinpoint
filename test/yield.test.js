@@ -61,8 +61,13 @@ function setup() {
     procs.push(p)
     return p
   }
-  const done = () => {
-    for (const p of procs) p.child.kill()
+  // Waits for every child to exit: the next test binds the same port straight away.
+  const done = async () => {
+    await Promise.all(procs.map(p => new Promise(r => {
+      if (p.child.exitCode !== null || p.child.signalCode !== null) return r()
+      p.child.once('exit', r)
+      p.child.kill()
+    })))
     rmSync(base, { recursive: true, force: true })
   }
   return { start, done, base }
@@ -91,7 +96,7 @@ test('an older bridge hands the port to a newer server and stays on as a peer', 
     await new Promise(r => setTimeout(r, 600))
     assert.equal((await health()).version, '0.3.0')
   } finally {
-    done()
+    await done()
   }
 })
 
@@ -109,7 +114,7 @@ test('a newer bridge keeps the port when an older server starts', async () => {
     assert.doesNotMatch(owner.log, /handing the bridge/)
     assert.doesNotMatch(late.log, /took over/)
   } finally {
-    done()
+    await done()
   }
 })
 
@@ -128,7 +133,7 @@ test('/peer/yield needs the peer key and a newer version', async () => {
     assert.equal((await post({ 'X-Pinpoint-Peer': key }, { version: '0.3.0' })).status, 409)
     assert.equal((await health()).version, '0.3.0', 'a refused yield leaves the bridge where it was')
   } finally {
-    done()
+    await done()
   }
 })
 
@@ -162,7 +167,7 @@ test('a yield nobody follows up on: the old bridge takes the port back, even if 
     assert.equal(r.status, 200)
     await until(async () => (await health())?.version === '0.2.9', 'the port back again')
   } finally {
-    done()
+    await done()
   }
 })
 
@@ -201,7 +206,7 @@ test('a failed handover is asked again on a backoff, with the peer link up', asy
   } finally {
     fake.close()
     fake.closeAllConnections()
-    done()
+    await done()
   }
 })
 
@@ -218,6 +223,6 @@ test('an empty peer key file is replaced, and an empty header is never a key', a
     assert.ok(readFileSync(join(base, 'peer.key'), 'utf8').trim().length >= 32, 'the empty key file should have been regenerated')
     assert.equal((await health()).version, '0.3.0')
   } finally {
-    done()
+    await done()
   }
 })

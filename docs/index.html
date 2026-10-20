@@ -820,8 +820,11 @@
     <div class="step">
       <h3>Load the browser extension</h3>
       <p class="note">
-        This prints the extension's path, copies it to your clipboard, and opens
-        <code>chrome://extensions</code>. Turn on Developer mode → Load unpacked → paste.
+        This copies the extension to <code>~/.claude/pinpoint/extension</code>, puts the path
+        on your clipboard and opens <code>chrome://extensions</code>. Turn on Developer mode,
+        click Load unpacked, paste the path, then pin the icon. Chrome runs an unpacked
+        extension straight from that folder, so leave it where it is. Setup ends by checking
+        that everything is connected.
       </p>
       <div class="cmd">
         <span class="prompt">&gt;</span>
@@ -835,7 +838,13 @@
       <p class="note">
         Pinpoint activates on <code>localhost</code> and <code>127.0.0.1</code> only.
         The toolbar starts hidden on every page load. Clicking the icon shows or hides
-        it, and grants screenshot permission for that tab.
+        it, and grants screenshot permission for that tab. The pill on the toolbar shows
+        where comments go: your project's name, or Choose when you have several sessions open.
+      </p>
+      <p class="note">
+        <strong>You're done when:</strong> the icon is pinned, clicking it on your dev page
+        shows the toolbar, and the pill shows your project name. If not, run
+        <code>/pinpoint:doctor</code>.
       </p>
     </div>
   </div>
@@ -917,7 +926,7 @@ whole page: ~/.claude/pinpoint/queue/20260822-023835-z0fp/page.png
       <p>Dispatches wake the session on their own. Custom channels aren't allowlisted yet, hence the flag.</p>
       <pre><span class="c">$</span> claude <span class="k">\</span>
   --dangerously-load-development-channels <span class="k">\</span>
-  server:pinpoint</pre>
+  plugin:pinpoint@pinpoint-marketplace</pre>
     </div>
   </div>
 </section>

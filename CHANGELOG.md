@@ -3,6 +3,12 @@
 ## 0.3.0
 
 - The toolbar starts hidden. Clicking the Pinpoint icon shows it.
+- A welcome page opens once on first install: four steps, a bridge check, what the pill
+  says. It is also the extension's Options page, and "How it works" at the bottom of the
+  pill popover opens it again.
+- A one-time tip above the toolbar the first time it is shown, pointing at Comment.
+- Version check: when the bridge and the extension are on different versions, the pill
+  gets a small "!" and the popover says what to run. Nothing is blocked.
 - Per-project routing: comments from a page go to the Claude Code session for that
   page's project, not to whichever session holds the bridge.
 - A status pill on the toolbar shows where comments go, with a session picker when

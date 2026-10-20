@@ -404,6 +404,14 @@
     line-height: 24px;
     text-align: center;
   }
+  .step .shot-img { display: block; max-width: 100%; height: auto; margin-top: 8px; }
+  .step .shot-img.framed { border: 1px solid var(--rule-2); border-radius: 4px; }
+
+  /* A real page with real pins on it, in the same frame as the hero's left pane. */
+  .wide-shot { margin: 28px 0 0; }
+  .wide-shot .pane-body.shot img { width: 100%; }
+  .wide-shot p { margin: 10px 0 0; font-family: var(--sans); font-size: 13px; line-height: 1.55; color: var(--ink-2); }
+
   .step h3 { font-size: 19px; margin-bottom: 6px; letter-spacing: -0.02em; }
   .step .note { font-family: var(--sans); font-size: 14px; color: var(--ink-2); }
 
@@ -736,6 +744,26 @@
 </header>
 
 <section>
+  <div class="kicker">in use</div>
+  <h2>Click, type, dispatch</h2>
+  <div class="prose">
+    <p>
+      Click an element and write what is wrong. Each comment becomes a numbered pin that
+      stays on its element and survives a reload. Dispatch sends the whole batch to the
+      Claude Code session named on the pill.
+    </p>
+  </div>
+  <div class="wide-shot">
+    <div class="pane">
+      <div class="pane-bar"><span class="tt">a demo page, three pins, the toolbar at its foot</span></div>
+      <div class="pane-body shot">
+        <img src="./img/page-pins.png" alt="A demo landing page with three numbered pins: one on the headline, one on the Start free button and one on the stats band. The Pinpoint toolbar sits at the foot of the window, showing the project name, a count of 3 and a Dispatch 3 button." width="1280" height="740">
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
   <div class="kicker">the problem</div>
   <h2>Prose is a lossy channel</h2>
   <div class="prose">
@@ -787,6 +815,7 @@
         <code>/pinpoint:setup</code>
         <button data-copy="/pinpoint:setup">copy</button>
       </div>
+      <img class="shot-img framed" src="./img/welcome.png" alt="The welcome page the extension opens on first install: four steps to tick off, and a box that reads Connected with the project name." width="640" height="549" style="max-width:min(100%,460px)">
     </div>
 
     <div class="step">
@@ -802,6 +831,7 @@
         shows the toolbar, and the pill shows your project name. If not, run
         <code>/pinpoint:doctor</code>.
       </p>
+      <img class="shot-img" src="./img/tip.png" alt="The Pinpoint toolbar the first time it is shown, with a tip above it that reads Click Comment, then click any element." width="502" height="208">
     </div>
   </div>
 </section>

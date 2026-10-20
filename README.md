@@ -1,6 +1,8 @@
 <div align="center">
 
-# ◈ &nbsp;P I N P O I N T
+<img src="docs/pinpoint-logo.svg" alt="Pinpoint logo" width="200">
+
+# P I N P O I N T
 
 ### Comment on the page. Fix it in the terminal.
 

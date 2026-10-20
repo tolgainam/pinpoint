@@ -1,0 +1,131 @@
+/* Pinpoint design tokens. The only place a colour, type size, spacing step, radius or
+   shadow is written as a raw value; everything else uses var(--pp-*). Loaded into the
+   overlay's shadow root just before overlay.css, and `npm run check:design` fails on a
+   raw value anywhere outside this file.
+
+   Values mirror what the overlay drew before the tokens existed, one for one. Two that
+   look almost the same are still two tokens: merging them is a visual change, and that
+   is settled with the owner on the running app, not here.
+
+   Deliberately one dark theme regardless of the page's scheme: the toolbar should read
+   as tooling sitting on top of the app, never as part of it.
+
+   :root as well as :host, because the welcome page is a plain extension page with no
+   shadow root, and it takes its look from this same file. */
+
+:host, :root {
+  /* ------------------------------------------------------------ colour: base */
+  --pp-accent: #d97757;
+  --pp-bg: #1b1b1d;
+  --pp-fg: #f4f4f5;
+  --pp-dim: #9ca3af;
+  --pp-line: #3f3f46;
+  --pp-input: #131315;
+  --pp-hover: #2a2a2e;
+  --pp-ok: #22c55e;
+  --pp-white: #fff;
+  /* Hairlines and washes on the dark surface. */
+  --pp-edge-strong: rgb(255 255 255 / 0.35);
+  --pp-edge: rgb(255 255 255 / 0.18);
+  --pp-divider-faint: rgb(255 255 255 / 0.07);
+  --pp-wash: rgb(255 255 255 / 0.04);
+  --pp-wash-faint: rgb(255 255 255 / 0.03);
+  --pp-accent-wash: rgb(217 119 87 / 0.2);
+  --pp-accent-wash-faint: rgb(217 119 87 / 0.07);
+  --pp-frozen-fg: #f0b39c;
+
+  /* ------------------------------------------------------------ colour: pin states */
+  --pp-sent: #6b7280;
+  --pp-resolved: #2ea36c;
+  --pp-resolved-ring: #d7f5e6;
+  --pp-resolved-fg: #a7d7bb;
+  --pp-resolved-wash: rgb(63 111 82 / 0.18);
+  --pp-question: #7c6bd6;
+  --pp-question-sent: #5a5182;
+  --pp-question-ring: #ded8f7;
+  --pp-question-fg: #c3b8f5;
+  --pp-answer-fg: #cfc7f2;
+  --pp-question-wash-strong: rgb(124 107 214 / 0.22);
+  --pp-question-wash: rgb(124 107 214 / 0.16);
+  --pp-question-wash-faint: rgb(124 107 214 / 0.1);
+  --pp-backlog: #3f3f46;
+  --pp-backlog-ring: #a1a1aa;
+  --pp-backlog-fg: #d4d4d8;
+  --pp-backlog-wash: rgb(113 113 122 / 0.28);
+  --pp-backlog-wash-faint: rgb(161 161 170 / 0.08);
+
+  /* ------------------------------------------------------------ colour: problems */
+  --pp-danger: #f87171;
+  --pp-danger-fg: #fca5a5;
+  --pp-danger-line: rgb(248 113 113 / 0.5);
+  --pp-bug: #d05a4a;
+  --pp-bug-fg: #f0a08c;
+  --pp-bug-line: rgb(208 90 74 / 0.5);
+  --pp-bug-wash: rgb(208 90 74 / 0.15);
+  --pp-warn: #a16207;
+  --pp-warn-wash: rgb(161 98 7 / 0.14);
+  --pp-warn-fg: #fbbf24;
+  --pp-warn-log: #e3b341;
+
+  /* ------------------------------------------------------------ type */
+  --pp-font-sans: ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  --pp-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --pp-text-2xs: 9px;
+  --pp-text-xs: 10px;
+  --pp-text-sm: 11px;
+  --pp-text-md: 12px;
+  --pp-text-lg: 13px;
+  /* Welcome page only: body copy and headings on a full page, not a toolbar. */
+  --pp-text-xl: 15px;
+  --pp-text-2xl: 22px;
+  --pp-weight-semibold: 600;
+  --pp-weight-bold: 700;
+  --pp-leading-12: 12px;
+  --pp-leading-18: 18px;
+  --pp-leading-body: 1.5;
+  --pp-tracking-wide: 0.5px;
+
+  /* ------------------------------------------------------------ spacing, named by px */
+  --pp-space-2: 2px;
+  --pp-space-3: 3px;
+  --pp-space-4: 4px;
+  --pp-space-5: 5px;
+  --pp-space-6: 6px;
+  --pp-space-7: 7px;
+  --pp-space-8: 8px;
+  --pp-space-10: 10px;
+  --pp-space-12: 12px;
+  /* Welcome page only: section rhythm on a full page. */
+  --pp-space-16: 16px;
+  --pp-space-24: 24px;
+  --pp-space-32: 32px;
+
+  /* ------------------------------------------------------------ radius, named by px */
+  --pp-radius-2: 2px;
+  --pp-radius-3: 3px;
+  --pp-radius-4: 4px;
+  --pp-radius-5: 5px;
+  --pp-radius-6: 6px;
+  --pp-radius-7: 7px;
+  --pp-radius-8: 8px;
+  --pp-radius-9: 9px;
+  --pp-radius-10: 10px;
+  --pp-radius-pill: 999px;
+
+  /* ------------------------------------------------------------ shadow */
+  --pp-shadow-float: 0 6px 24px rgb(0 0 0 / 0.35);
+  --pp-shadow-pin: 0 1px 6px rgb(0 0 0 / 0.35);
+  --pp-shadow-card: 0 10px 32px rgb(0 0 0 / 0.4);
+  --pp-shadow-panel: 0 10px 30px rgb(0 0 0 / 0.45);
+  --pp-ring-pulse: 0 0 0 5px color-mix(in srgb, var(--pp-accent) 30%, transparent);
+
+  /* ------------------------------------------------------------ layers */
+  --pp-z-frame: 0;
+  --pp-z-capture: 1;
+  --pp-z-highlight: 2;
+  --pp-z-pin: 3;
+  --pp-z-bar: 10;
+  --pp-z-frame-note: 11;
+  --pp-z-card: 20;
+  --pp-z-toast: 30;
+}

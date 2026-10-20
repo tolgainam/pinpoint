@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Welcome to Pinpoint</title>
+  <!-- Tokens first, the same file the toolbar loads, so the two can never drift. -->
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="welcome.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Pinpoint</h1>
+      <p class="lede">Comment on any element of your local site and send it to Claude Code.</p>
+    </header>
+
+    <section>
+      <h2>Get started</h2>
+      <ol class="steps">
+        <li><span class="box" aria-hidden="true"></span><span class="n">1</span><span>Pin the icon: puzzle piece &gt; pin Pinpoint</span></li>
+        <li><span class="box" aria-hidden="true"></span><span class="n">2</span><span>Open your dev server, e.g. localhost:5173</span></li>
+        <li id="step-toolbar"><span class="box" aria-hidden="true"></span><span class="n">3</span><span>Click the Pinpoint icon to show the toolbar</span></li>
+        <li><span class="box" aria-hidden="true"></span><span class="n">4</span><span>Click Comment, then click an element</span></li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Claude Code</h2>
+      <div class="bridge" id="bridge" data-state="checking">
+        <div class="bridge-head"><span class="dot" aria-hidden="true"></span><span id="bridge-title">Checking</span></div>
+        <div class="bridge-line" id="bridge-line" hidden></div>
+        <div class="bridge-version" id="bridge-version" hidden><span class="mark">!</span><span id="bridge-version-text"></span></div>
+        <div class="bridge-foot" id="bridge-foot"><button id="check-again">Check again</button></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>The pill on the toolbar</h2>
+      <dl class="pills">
+        <dt><span class="pill"><span class="dot on"></span>my-app</span></dt>
+        <dd>Sending to this project</dd>
+        <dt><span class="pill"><span class="dot on"></span><span class="flag">⚑</span>app</span></dt>
+        <dd>Sending to the project you chose</dd>
+        <dt><span class="pill"><span class="dot"></span>Choose</span></dt>
+        <dd>Pick which project this page is</dd>
+        <dt><span class="pill"><span class="dot"></span>Reconnecting</span></dt>
+        <dd>A session just closed; wait</dd>
+        <dt><span class="pill"><span class="dot"></span>Offline</span></dt>
+        <dd>Claude Code is not running</dd>
+      </dl>
+    </section>
+
+    <section>
+      <h2>Screenshots</h2>
+      <p>Chrome only allows a screenshot after you click the Pinpoint icon. Do it once each time the page loads. Comments still send without one.</p>
+    </section>
+  </main>
+  <script src="status.js"></script>
+  <script src="welcome.js"></script>
+</body>
+</html>

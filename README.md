@@ -31,31 +31,56 @@ browser overlay ──POST /dispatch──▶ bridge ──▶ queue on disk (js
 
 ## Install
 
-Two pieces: a Claude Code plugin, and a Chrome extension.
+Two pieces: a Claude Code plugin, and a Chrome extension. Requires Node 20+ and Chrome.
+Nothing else: dependencies install themselves with the plugin.
 
-**1. The plugin**
+1. **Add the marketplace and install the plugin**, in any Claude Code session:
 
-```
-/plugin marketplace add tolgainam/pinpoint
-/plugin install pinpoint@pinpoint-marketplace
-```
+   ```
+   /plugin marketplace add tolgainam/pinpoint
+   /plugin install pinpoint@pinpoint-marketplace
+   ```
 
-**2. The extension**
+2. **Run setup:**
 
-```
-/pinpoint:setup
-```
+   ```
+   /pinpoint:setup
+   ```
 
-This prints the extension's path, copies it to your clipboard, and opens
-`chrome://extensions`. Turn on **Developer mode**, click **Load unpacked**, paste.
+   It copies the extension to `~/.claude/pinpoint/extension`, puts that path on your
+   clipboard and opens `chrome://extensions`.
 
-Requires Node 20+. Nothing else — dependencies install themselves with the plugin.
+3. **Load it in Chrome.** Turn on **Developer mode** (top right), click **Load
+   unpacked**, paste the path and select the folder. "Unpacked" means Chrome runs the
+   extension straight from that folder, so don't move or delete it.
+
+4. **Pin the icon:** the puzzle piece in Chrome's toolbar, then the pin next to Pinpoint.
+   A welcome tab opens once on install with the same steps.
+
+5. **Open your dev app on `localhost` and click the Pinpoint icon.** The toolbar starts
+   hidden on every page; the icon shows and hides it.
+
+Setup ends with the same checks as `/pinpoint:doctor`, each failure with its fix.
+
+**You're done when:** the icon is pinned, clicking it on your dev page shows the toolbar,
+and the pill shows your project name.
+
+### Updating
+
+1. `claude plugin update pinpoint@pinpoint-marketplace` (or update it in `/plugin`).
+2. `/pinpoint:setup`, then press **Reload** on the Pinpoint card in `chrome://extensions`.
+3. Restart the Claude Code sessions you had open. A newer bridge takes over from an older
+   0.3+ one by itself; `/pinpoint:doctor` tells you if an older one needs stopping.
 
 ### Installing from a clone instead
 
-If you'd rather not use the plugin marketplace — testing, hacking on it, or you just want
-everything in one place — the whole thing runs from a clone. Nothing here needs the plugin
+If you'd rather not use the plugin marketplace (testing, hacking on it, or you just want
+everything in one place), the whole thing runs from a clone. Nothing here needs the plugin
 installed.
+
+> **Have the plugin installed too?** The clone's own `.mcp.json` defines a `pinpoint`
+> server, and so does the plugin, so a session in the clone starts both and `/mcp` shows
+> two. Turn one off (or rename the clone's to `pinpoint-dev`). `/pinpoint:doctor` flags it.
 
 **1. Get it and install the one dependency**
 
@@ -67,8 +92,8 @@ cd pinpoint && npm install
 **2. Load the extension**
 
 Open `chrome://extensions`, turn on **Developer mode** (top right), click **Load
-unpacked**, and select the `extension/` folder inside the clone. It'll appear in the
-toolbar — pin it so you can reach it.
+unpacked**, and select the `extension/` folder inside the clone. Chrome runs it from
+there, so after a `git pull` press **Reload** on its card. Pin it so you can reach it.
 
 You won't have `/pinpoint:setup` here, since that's a plugin command. These are the steps
 it would have run for you.
@@ -95,7 +120,7 @@ want to work on, create `.mcp.json`:
 ```
 
 Use real absolute paths for both. `PINPOINT_PROJECT_DIR` defaults to the working
-directory, so it usually resolves on its own — set it explicitly anyway and you'll never
+directory, so it usually resolves on its own; set it explicitly anyway and you'll never
 have to wonder where the backlog and screenshots went.
 
 **4. Start a session in your project**
@@ -105,7 +130,8 @@ cd /path/to/your/project && claude
 ```
 
 Open your dev app on `localhost` and click the Pinpoint icon to bring up the toolbar. The
-dot on it should be green.
+pill on it should show your project name. `node scripts/doctor.js` from the clone runs
+the same checks as `/pinpoint:doctor`.
 
 <details>
 <summary>Just want to try it without wiring up a project?</summary>
@@ -124,21 +150,21 @@ you want for a look around. See [Try it without a project](#try-it-without-a-pro
 
 ### If something isn't working
 
-Three things go wrong, and each has one cause.
+Run `/pinpoint:doctor` first. It checks Node, the bridge and its version, the sessions
+that joined it, duplicate `pinpoint` MCP servers, channels and the extension folder, and
+prints the fix for each problem.
 
-**The dot in the toolbar never turns green.** The bridge isn't running. It starts with your
-Claude Code session, so check the session is open and that `.mcp.json` points at a real
-path. `node server/pinpoint.js` from the clone will tell you if the server itself is
-broken.
-
-**Hovering doesn't highlight anything.** Pinpoint only attaches to `http://localhost/*`
-and `http://127.0.0.1/*` — by design, and not configurable. `0.0.0.0`, a LAN IP, a
-`.local` hostname, or any https:// site will do nothing at all. Check the address bar
-first.
-
-**Comments arrive without screenshots.** Chrome grants screenshot access when you click the
-extension icon and revokes it on the next navigation. Click the icon again after navigating.
-A batch without a screenshot still dispatches — it just says so.
+| What you see | Why | Fix |
+|---|---|---|
+| Pill says **Offline** | No Claude Code session is running Pinpoint's bridge | Start Claude Code in your project, then Retry in the pill. Still Offline: `/pinpoint:doctor` |
+| Pill says **Choose** | Pinpoint can't tell which project this page belongs to | Click the pill and pick a session; the pick is kept for this port |
+| Pill shows your project, but Dispatch is off | No session is running in that folder (the popover says "No Claude Code in ...") | Start Claude Code there, or pick another session from the pill |
+| No toolbar at all | It starts hidden on every page | Click the Pinpoint icon. Pin it (puzzle piece, then pin) if you can't see it |
+| Hovering highlights nothing | Pinpoint only attaches to `http://localhost/*` and `http://127.0.0.1/*`, by design | Check the address bar: `0.0.0.0`, a LAN IP, `.local` or https:// do nothing |
+| Comments arrive without screenshots | Chrome allows a screenshot only after an icon click, and forgets it on every page load | Click the icon once after each load. Comments still send without one |
+| Dispatch works, nothing appears in the session | Channels are off for this session, so comments wait in the queue | Run `/pinpoint:comments`, or restart with the flag in [Two ways to receive comments](#two-ways-to-receive-comments) |
+| Two `pinpoint` servers in `/mcp` | A `.mcp.json` (often a clone of this repo) defines one besides the plugin's | Turn one off. `/pinpoint:doctor` names the file |
+| Odd behaviour after an update, or a **!** on the pill | The extension, the plugin or an open session is on an older version | Follow [Updating](#updating). `/pinpoint:doctor` says which one is behind |
 
 ## Use
 
@@ -150,15 +176,23 @@ again hides it. Pins and comments keep working while it is hidden.
 > and not configurable. On `0.0.0.0`, a LAN IP, a `.local` hostname, or any https:// site,
 > nothing will happen at all — check the address bar before assuming it is broken.
 
+Left to right:
+
 | Control | What it does |
 |---|---|
+| `⌖` | Grip: drag the bar anywhere |
+| status pill | Where Dispatch goes. Your project's name (Auto), a project with a `⚑` (your pick), **Choose**, **Reconnecting** or **Offline**. Click it to pick a session for this localhost port; "How it works" at the bottom reopens the welcome tab. A `!` means the bridge and extension versions differ, and the list says what to run |
 | **Comment** | Comment mode: hover highlights elements, click opens a note composer |
 | count | Pending comments not yet dispatched |
-| **Dispatch** | Sends the batch to the running session |
-| `✕` | Hides the overlay (the icon brings it back) |
+| `⚠ n` | The page's own console errors and failed requests; shown only when there are some |
+| **Dispatch** | Sends the batch to the session the pill names. Disabled while nothing can receive it |
 | **Clear** | Removes every pin on this page; shown only when there are pins |
-| **Alt+Shift+F** | Freezes the page so vanishing states can be pinned, and shows the overlay if hidden |
-| status pill | Dot plus where Dispatch goes: the project name, Choose, or Offline. Click it to see the running sessions and pick one for this port; Auto lets Pinpoint match the page to its project. Dispatch stays disabled while nothing can receive it |
+| `✕` | Hides the toolbar (the icon brings it back) |
+| **Alt+Shift+F** | Freezes the page so vanishing states can be pinned, and shows the toolbar if hidden |
+
+**Several Claude Code sessions?** Comments go to the session whose folder contains the
+page's dev server. If that guess is wrong, or there is none, pick another session from the
+pill; the pick is kept for that port.
 
 `⌘↵` adds a note, `Esc` closes the composer or leaves comment mode. Drag the bar by its
 `⌖` grip. Pins survive a reload — they're keyed by origin + pathname in
@@ -297,10 +331,10 @@ brief tells Claude to trust the screenshot over the selector.
 unhandled rejections, failed `fetch`/XHR responses, and assets that didn't load. Repeats
 are counted rather than pushed, so a render loop that throws costs one slot, not twenty.
 
-Nothing attaches by default. When the page has logged something, the composer grows a
-**debug (n)** toggle; tick it and that comment carries the buffer, with stack traces.
-When the page is clean there's no toggle at all. The buffer is re-read at dispatch, so
-an error thrown while you were typing the note still makes it.
+When the page has logged something, a **⚠ n** button appears on the toolbar next to
+Dispatch. Click it to read the entries, stack traces included; its **send with the batch**
+box decides whether the batch carries them. When the page is clean there's no button at
+all. A comment parked with `!` carries the buffer on its own, since it has no batch.
 
 ### Two ways to receive comments
 
@@ -310,11 +344,14 @@ an error thrown while you were typing the note still makes it.
 /pinpoint:comments
 ```
 
-**Hands-free** — dispatches wake the session on their own:
+**Hands-free**: dispatches wake the session on their own. Start Claude Code with:
 
 ```bash
-claude --dangerously-load-development-channels server:pinpoint
+claude --dangerously-load-development-channels plugin:pinpoint@pinpoint-marketplace
 ```
+
+From a clone with the repo's `.mcp.json`, the last part is `server:pinpoint` instead.
+`/pinpoint:doctor` says whether the session you are in has it on.
 
 [Channels](https://code.claude.com/docs/en/channels-reference) are a research preview, and
 custom ones aren't on Anthropic's allowlist yet — hence the alarming flag and the
@@ -324,9 +361,9 @@ nothing is lost by staying on the pull path.
 ### Screenshots
 
 Clicking the extension icon on a tab is what grants Chrome's `activeTab` permission, and
-that is what `captureVisibleTab` needs. Chrome revokes it on every navigation, so after a
-full page reload you click the icon again. If a capture fails you get the reason in a
-toast, not silence.
+that is what `captureVisibleTab` needs. Chrome revokes it on every navigation, so it takes
+one icon click per page load. Comments still send without one. If a capture fails you get
+the reason in a toast, not silence.
 
 The overlay hides itself before every capture, so pins and the toolbar never appear in
 the image. One viewport capture per action gets cropped per comment, because
@@ -399,6 +436,24 @@ PINPOINT_PROJECT_DIR=demo/fixtures/shadcn npm run server
 ```
 
 See [demo/fixtures/README.md](demo/fixtures/README.md) for what each one is meant to prove.
+
+## Working on the toolbar
+
+```bash
+npm test                    # unit tests, the design check and the reference screenshots
+npm run check:design        # raw colours or px outside extension/tokens.css
+npx playwright install chromium   # once, so the screenshot test runs instead of skipping
+```
+
+Every colour, type size, spacing step, radius and shadow lives in
+`extension/tokens.css`. The PNGs in `test/screens` are the reference look, one set per
+platform; the test fails when a key screen changes. Baselines change only with the
+owner's sign-off, via `npm run screens:update`, which also writes
+`test/screens/PENDING.md` listing what moved.
+
+The full design rules are in [CLAUDE.md](CLAUDE.md). Developing from a clone with the
+plugin also installed gives you two `pinpoint` servers; see
+[Installing from a clone](#installing-from-a-clone-instead).
 
 ## Known limits
 

@@ -1,5 +1,6 @@
 /* Pinpoint overlay. Lives in a shadow root, so nothing here leaks and nothing
-   from the host page reaches in. Every rule is written against :host defaults. */
+   from the host page reaches in. Every rule is written against :host defaults.
+   Colours, type, spacing, radii and shadows come from tokens.css, loaded first. */
 
 :host {
   all: initial;
@@ -7,7 +8,7 @@
 
 * {
   box-sizing: border-box;
-  font-family: ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  font-family: var(--pp-font-sans);
 }
 
 .layer {
@@ -23,7 +24,7 @@
 .capture {
   pointer-events: auto;
   cursor: crosshair;
-  z-index: 1;
+  z-index: var(--pp-z-capture);
 }
 
 /* ---------------------------------------------------------------- frozen frame */
@@ -33,35 +34,35 @@
 .frame {
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: var(--pp-z-frame);
   background-size: 100% 100%;
   background-repeat: no-repeat;
 }
 
 .frame-note {
   position: absolute;
-  z-index: 11;
+  z-index: var(--pp-z-frame-note);
   top: 12px;
   left: 50%;
   transform: translateX(-50%);
-  padding: 5px 12px;
-  border-radius: 999px;
+  padding: var(--pp-space-5) var(--pp-space-12);
+  border-radius: var(--pp-radius-pill);
   border: 1px solid var(--pp-accent);
   background: var(--pp-bg);
   color: var(--pp-accent);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--pp-text-sm);
+  font-weight: var(--pp-weight-semibold);
   white-space: nowrap;
-  box-shadow: 0 6px 24px rgb(0 0 0 / 0.35);
+  box-shadow: var(--pp-shadow-float);
 }
 
 /* ---------------------------------------------------------------- highlight */
 
 .highlight {
   position: absolute;
-  z-index: 2;
+  z-index: var(--pp-z-highlight);
   border: 1.5px solid var(--pp-accent);
-  border-radius: 3px;
+  border-radius: var(--pp-radius-3);
   background: color-mix(in srgb, var(--pp-accent) 12%, transparent);
   transition: all 60ms linear;
   display: none;
@@ -76,13 +77,13 @@
   position: absolute;
   top: -22px;
   left: -1.5px;
-  padding: 2px 6px;
-  border-radius: 4px 4px 0 0;
+  padding: var(--pp-space-2) var(--pp-space-6);
+  border-radius: var(--pp-radius-4) var(--pp-radius-4) 0 0;
   background: var(--pp-accent);
-  color: #fff;
-  font-size: 11px;
+  color: var(--pp-white);
+  font-size: var(--pp-text-sm);
   line-height: 1.4;
-  font-weight: 600;
+  font-weight: var(--pp-weight-semibold);
   white-space: nowrap;
   max-width: 320px;
   overflow: hidden;
@@ -93,39 +94,39 @@
 
 .pin {
   position: absolute;
-  z-index: 3;
+  z-index: var(--pp-z-pin);
   pointer-events: auto;
   width: 22px;
   height: 22px;
-  margin: -11px 0 0 -11px;
+  margin: -11px 0 0 -11px; /* design-ok: half the 22px pin, centres it on its point */
   border-radius: 50%;
-  border: 2px solid #fff;
+  border: 2px solid var(--pp-white);
   background: var(--pp-accent);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 18px;
+  color: var(--pp-white);
+  font-size: var(--pp-text-sm);
+  font-weight: var(--pp-weight-bold);
+  line-height: var(--pp-leading-18);
   text-align: center;
   cursor: pointer;
-  box-shadow: 0 1px 6px rgb(0 0 0 / 0.35);
+  box-shadow: var(--pp-shadow-pin);
   transition: transform 100ms ease;
 }
 
 .pin:hover { transform: scale(1.15); }
-.pin.sent { background: #6b7280; }
+.pin.sent { background: var(--pp-sent); }
 /* Resolved by Claude. Green and ticked, so it reads as done at a glance — a muted
    version of this was indistinguishable from the grey "dispatched" state. */
-.pin.resolved { background: #2ea36c; border-color: #d7f5e6; opacity: 1; }
+.pin.resolved { background: var(--pp-resolved); border-color: var(--pp-resolved-ring); opacity: 1; }
 .pin.detached { opacity: 0.4; border-style: dashed; }
 /* A question never changes code, so it must never read like a fix request waiting to
    land. Violet across pending, dispatched, and answered — the colour says "intent",
    the fill says "how far along". */
-.pin.question { background: #7c6bd6; }
-.pin.question.sent { background: #5a5182; }
-.pin.answered { background: #7c6bd6; border-color: #ded8f7; }
+.pin.question { background: var(--pp-question); }
+.pin.question.sent { background: var(--pp-question-sent); }
+.pin.answered { background: var(--pp-question); border-color: var(--pp-question-ring); }
 /* Parked, not queued: no colour, so it recedes behind anything actually in flight. */
-.pin.backlog { background: #3f3f46; border-color: #a1a1aa; color: #d4d4d8; }
-.pin.backlog.unsaved { border-color: #f87171; border-style: dashed; }
+.pin.backlog { background: var(--pp-backlog); border-color: var(--pp-backlog-ring); color: var(--pp-backlog-fg); }
+.pin.backlog.unsaved { border-color: var(--pp-danger); border-style: dashed; }
 
 /* Comments on one element share a pin, because two pins at the same coordinates means the
    newer one hides the older completely. The badge is how you know to expect more than one
@@ -136,21 +137,21 @@
   left: 14px;
   bottom: 12px;
   min-width: 13px;
-  padding: 0 2px;
-  border-radius: 999px;
+  padding: 0 var(--pp-space-2);
+  border-radius: var(--pp-radius-pill);
   border: 1.5px solid var(--pp-bg);
-  background: #f4f4f5;
-  color: #1b1b1d;
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 12px;
+  background: var(--pp-fg);
+  color: var(--pp-bg);
+  font-size: var(--pp-text-2xs);
+  font-weight: var(--pp-weight-bold);
+  line-height: var(--pp-leading-12);
 }
 
 /* ---------------------------------------------------------------- cards */
 
 .card {
   position: absolute;
-  z-index: 20;
+  z-index: var(--pp-z-card);
   pointer-events: auto;
   /* A stack of comments can outgrow the viewport; scroll it rather than run off-screen. */
   max-height: 70vh;
@@ -158,19 +159,19 @@
   /* Wider than the pin card needs, for the breadcrumb: at 300px only four ancestors
      fit before it starts scrolling, which is most of a chain hidden by default. */
   width: 320px;
-  padding: 10px;
-  border-radius: 10px;
+  padding: var(--pp-space-10);
+  border-radius: var(--pp-radius-10);
   border: 1px solid var(--pp-line);
   background: var(--pp-bg);
   color: var(--pp-fg);
-  box-shadow: 0 10px 32px rgb(0 0 0 / 0.4);
-  font-size: 13px;
+  box-shadow: var(--pp-shadow-card);
+  font-size: var(--pp-text-lg);
 }
 
 .card .meta {
-  font-size: 11px;
+  font-size: var(--pp-text-sm);
   color: var(--pp-dim);
-  margin-bottom: 6px;
+  margin-bottom: var(--pp-space-6);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -180,12 +181,12 @@
   width: 100%;
   min-height: 68px;
   resize: vertical;
-  padding: 7px 8px;
-  border-radius: 7px;
+  padding: var(--pp-space-7) var(--pp-space-8);
+  border-radius: var(--pp-radius-7);
   border: 1px solid var(--pp-line);
   background: var(--pp-input);
   color: var(--pp-fg);
-  font-size: 13px;
+  font-size: var(--pp-text-lg);
   line-height: 1.45;
   outline: none;
 }
@@ -193,12 +194,12 @@
 .card textarea:focus { border-color: var(--pp-accent); }
 
 .card .resolution {
-  margin-bottom: 8px;
-  padding: 6px 8px;
-  border-radius: 7px;
-  background: rgb(63 111 82 / 0.18);
-  color: #a7d7bb;
-  font-size: 12px;
+  margin-bottom: var(--pp-space-8);
+  padding: var(--pp-space-6) var(--pp-space-8);
+  border-radius: var(--pp-radius-7);
+  background: var(--pp-resolved-wash);
+  color: var(--pp-resolved-fg);
+  font-size: var(--pp-text-md);
   line-height: 1.45;
   word-break: break-word;
 }
@@ -210,22 +211,22 @@
 .crumbs {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-bottom: 6px;
-  padding-bottom: 4px;
+  gap: var(--pp-space-4);
+  margin-bottom: var(--pp-space-6);
+  padding-bottom: var(--pp-space-4);
   overflow-x: auto;
   scrollbar-width: none;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: var(--pp-text-sm);
   outline: none;
 }
 
 .crumbs::-webkit-scrollbar { display: none; }
-.crumbs:focus-visible { box-shadow: 0 0 0 1px var(--pp-accent); border-radius: 5px; }
+.crumbs:focus-visible { box-shadow: 0 0 0 1px var(--pp-accent); border-radius: var(--pp-radius-5); }
 
 .crumb {
-  padding: 2px 5px;
-  border-radius: 5px;
+  padding: var(--pp-space-2) var(--pp-space-5);
+  border-radius: var(--pp-radius-5);
   color: var(--pp-dim);
   cursor: pointer;
   flex: none;
@@ -235,8 +236,8 @@
 
 .crumb.on {
   background: var(--pp-accent);
-  color: #fff;
-  font-weight: 600;
+  color: var(--pp-white);
+  font-weight: var(--pp-weight-semibold);
 }
 
 .crumbs .sep {
@@ -249,8 +250,8 @@
 /* Reserved even when empty, so typing `?` does not shove the buttons down a row. */
 .card .hint {
   min-height: 14px;
-  margin-top: 5px;
-  font-size: 11px;
+  margin-top: var(--pp-space-5);
+  font-size: var(--pp-text-sm);
   line-height: 1.3;
   color: var(--pp-dim);
   opacity: 0;
@@ -261,22 +262,22 @@
 
 .card .kind {
   display: inline-block;
-  margin-bottom: 6px;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: rgb(124 107 214 / 0.22);
-  color: #c3b8f5;
-  font-size: 11px;
+  margin-bottom: var(--pp-space-6);
+  padding: var(--pp-space-2) var(--pp-space-7);
+  border-radius: var(--pp-radius-pill);
+  background: var(--pp-question-wash-strong);
+  color: var(--pp-question-fg);
+  font-size: var(--pp-text-sm);
 }
 
 .card .kind.frozen {
-  background: rgb(217 119 87 / 0.2);
-  color: #f0b39c;
+  background: var(--pp-accent-wash);
+  color: var(--pp-frozen-fg);
 }
 
 .card .kind.parked {
-  background: rgb(113 113 122 / 0.28);
-  color: #d4d4d8;
+  background: var(--pp-backlog-wash);
+  color: var(--pp-backlog-fg);
 }
 
 /* ---------------------------------------------------------------- progress */
@@ -284,17 +285,17 @@
 /* What Claude is doing about this pin, while it is doing it. Outcomes only — files and a
    state. The transcript stays in the terminal, where there is room for it. */
 .card .progress {
-  margin-bottom: 8px;
-  padding: 6px 8px;
-  border-radius: 7px;
+  margin-bottom: var(--pp-space-8);
+  padding: var(--pp-space-6) var(--pp-space-8);
+  border-radius: var(--pp-radius-7);
   border-left: 2px solid var(--pp-line);
-  background: rgb(255 255 255 / 0.04);
-  font-size: 11px;
+  background: var(--pp-wash);
+  font-size: var(--pp-text-sm);
   line-height: 1.5;
 }
 
 .card .progress.working { border-left-color: var(--pp-accent); }
-.card .progress.edited { border-left-color: #2ea36c; }
+.card .progress.edited { border-left-color: var(--pp-resolved); }
 .card .progress-head { color: var(--pp-fg); }
 .card .file { color: var(--pp-dim); font-variant-numeric: tabular-nums; }
 
@@ -303,8 +304,8 @@
 .pin.working { animation: pp-pulse 1.6s ease-in-out infinite; }
 
 @keyframes pp-pulse {
-  0%, 100% { box-shadow: 0 1px 6px rgb(0 0 0 / 0.35); }
-  50% { box-shadow: 0 1px 6px rgb(0 0 0 / 0.35), 0 0 0 5px color-mix(in srgb, var(--pp-accent) 30%, transparent); }
+  0%, 100% { box-shadow: var(--pp-shadow-pin); }
+  50% { box-shadow: var(--pp-shadow-pin), var(--pp-ring-pulse); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -317,8 +318,8 @@
    a long negotiation belongs in the session, not in a box this size. */
 .card textarea.reply {
   min-height: 44px;
-  margin-top: 8px;
-  font-size: 12px;
+  margin-top: var(--pp-space-8);
+  font-size: var(--pp-text-md);
 }
 
 /* ---------------------------------------------------------------- token chips */
@@ -328,8 +329,8 @@
 .chips {
   display: none;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 6px;
+  gap: var(--pp-space-4);
+  margin-bottom: var(--pp-space-6);
 }
 
 .chips.show { display: flex; }
@@ -337,12 +338,12 @@
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 7px;
-  border-radius: 999px;
+  gap: var(--pp-space-5);
+  padding: var(--pp-space-3) var(--pp-space-7);
+  border-radius: var(--pp-radius-pill);
   border: 1px solid var(--pp-line);
   background: var(--pp-input);
-  font-size: 11px;
+  font-size: var(--pp-text-sm);
   line-height: 1.5;
 }
 
@@ -351,8 +352,8 @@
 .chip-val { color: var(--pp-fg); font-variant-numeric: tabular-nums; }
 
 /* A value on no scale is the thing worth noticing before you write the note. */
-.chip.warn { border-color: #a16207; background: rgb(161 98 7 / 0.14); }
-.chip-warn { color: #fbbf24; }
+.chip.warn { border-color: var(--pp-warn); background: var(--pp-warn-wash); }
+.chip-warn { color: var(--pp-warn-fg); }
 
 /* A pick already made reads as pending, not as fact — it describes the page after the fix. */
 .chip.changed { border-color: var(--pp-accent); background: color-mix(in srgb, var(--pp-accent) 16%, transparent); }
@@ -361,12 +362,12 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  border: 1px solid rgb(255 255 255 / 0.35);
+  border: 1px solid var(--pp-edge-strong);
 }
 
 /* ---------------------------------------------------------------- pickers */
 
-.picker { display: none; margin-bottom: 8px; }
+.picker { display: none; margin-bottom: var(--pp-space-8); }
 .picker.show { display: block; }
 
 /* Spacing as a size rather than a number: a ramp you can see is faster to choose from
@@ -376,28 +377,28 @@
 .step {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 7px;
-  border-radius: 6px;
+  gap: var(--pp-space-8);
+  padding: var(--pp-space-4) var(--pp-space-7);
+  border-radius: var(--pp-radius-6);
   border-color: transparent;
-  font-size: 11px;
+  font-size: var(--pp-text-sm);
   text-align: left;
 }
 
-.step .bar { height: 8px; border-radius: 2px; background: var(--pp-accent); opacity: 0.55; flex: none; }
+.step .bar { height: 8px; border-radius: var(--pp-radius-2); background: var(--pp-accent); opacity: 0.55; flex: none; }
 .step .name { color: var(--pp-fg); }
 .step .val { margin-left: auto; color: var(--pp-dim); font-variant-numeric: tabular-nums; }
 .step.on { background: var(--pp-hover); }
 .step.on .bar { opacity: 1; }
 
 /* The project's palette, not a colour wheel: the point is to stay inside the system. */
-.swatches { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+.swatches { display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--pp-space-5); }
 
 .swatch {
   height: 26px;
   padding: 0;
-  border-radius: 6px;
-  border: 1px solid rgb(255 255 255 / 0.18);
+  border-radius: var(--pp-radius-6);
+  border: 1px solid var(--pp-edge);
 }
 
 .swatch.on { outline: 2px solid var(--pp-fg); outline-offset: 1px; }
@@ -408,8 +409,8 @@
    off a comment card, because it is a fact about the page: the element you happen to be
    pinning did not cause it and usually has nothing to do with it. */
 .debug {
-  border-radius: 7px;
-  border-left: 2px solid #d05a4a;
+  border-radius: var(--pp-radius-7);
+  border-left: 2px solid var(--pp-bug);
   background: var(--pp-bg);
   color: var(--pp-fg);
 }
@@ -420,9 +421,9 @@
   width: 320px;
   max-width: calc(100vw - 16px);
   border: 1px solid var(--pp-line);
-  border-left: 2px solid #d05a4a;
-  border-radius: 9px;
-  box-shadow: 0 10px 30px rgb(0 0 0 / 0.45);
+  border-left: 2px solid var(--pp-bug);
+  border-radius: var(--pp-radius-9);
+  box-shadow: var(--pp-shadow-panel);
   pointer-events: auto;
 }
 
@@ -430,30 +431,30 @@
 
 /* The count, sitting next to Dispatch because that is what it changes. */
 button.bug {
-  padding: 4px 7px;
-  border-color: rgb(208 90 74 / 0.5);
-  color: #f0a08c;
-  font-size: 11px;
+  padding: var(--pp-space-4) var(--pp-space-7);
+  border-color: var(--pp-bug-line);
+  color: var(--pp-bug-fg);
+  font-size: var(--pp-text-sm);
   font-variant-numeric: tabular-nums;
 }
 
-button.bug:hover:not(:disabled) { background: rgb(208 90 74 / 0.15); }
+button.bug:hover:not(:disabled) { background: var(--pp-bug-wash); }
 
 .debug-head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 7px;
+  gap: var(--pp-space-6);
+  padding: var(--pp-space-5) var(--pp-space-7);
 }
 
 .debug-head .spacer { flex: 1; }
 
 button.debug-more {
   flex: none;
-  padding: 0 4px;
+  padding: 0 var(--pp-space-4);
   border-color: transparent;
   color: var(--pp-dim);
-  font-size: 11px;
+  font-size: var(--pp-text-sm);
 }
 
 button.debug-more:hover:not(:disabled) { background: none; color: var(--pp-fg); }
@@ -462,26 +463,26 @@ button.debug-more:hover:not(:disabled) { background: none; color: var(--pp-fg); 
 .debug-list {
   max-height: 180px;
   overflow-y: auto;
-  padding: 0 7px 5px;
+  padding: 0 var(--pp-space-7) var(--pp-space-5);
 }
 
 .debug-list.hide { display: none; }
 
 .debug-entry {
   display: flex;
-  gap: 5px;
-  padding: 3px 0;
-  border-top: 1px solid rgb(255 255 255 / 0.07);
-  font-size: 11px;
+  gap: var(--pp-space-5);
+  padding: var(--pp-space-3) 0;
+  border-top: 1px solid var(--pp-divider-faint);
+  font-size: var(--pp-text-sm);
   line-height: 1.4;
 }
 
 .debug-kind {
   flex: none;
-  color: #f0a08c;
+  color: var(--pp-bug-fg);
 }
 
-.debug-kind.warn { color: #e3b341; }
+.debug-kind.warn { color: var(--pp-warn-log); }
 .debug-kind.network,
 .debug-kind.resource { color: var(--pp-dim); }
 
@@ -500,10 +501,10 @@ button.debug-more:hover:not(:disabled) { background: none; color: var(--pp-fg); 
 
 .debug-stack {
   display: none;
-  padding: 1px 0 5px 10px;
+  padding: 1px 0 var(--pp-space-5) var(--pp-space-10);
   color: var(--pp-dim);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 10px;
+  font-family: var(--pp-font-mono);
+  font-size: var(--pp-text-xs);
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-all;
@@ -518,25 +519,25 @@ button.debug-more:hover:not(:disabled) { background: none; color: var(--pp-fg); 
 }
 
 /* No scale to pick from, so nudge the number instead — the honest fallback. */
-.stepper { display: flex; align-items: center; gap: 6px; }
-.stepper .val { min-width: 52px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; }
+.stepper { display: flex; align-items: center; gap: var(--pp-space-6); }
+.stepper .val { min-width: 52px; text-align: center; font-size: var(--pp-text-md); font-variant-numeric: tabular-nums; }
 .stepper .spacer { flex: 1; }
 
 /* ---------------------------------------------------------------- picked values */
 
 /* On the pin card, the part of the comment that says exactly what was asked for. */
-.card .deltas { margin-bottom: 8px; }
+.card .deltas { margin-bottom: var(--pp-space-8); }
 
 .card .delta {
-  padding: 4px 7px;
-  border-radius: 6px;
+  padding: var(--pp-space-4) var(--pp-space-7);
+  border-radius: var(--pp-radius-6);
   border-left: 2px solid var(--pp-accent);
   background: color-mix(in srgb, var(--pp-accent) 10%, transparent);
-  font-size: 11px;
+  font-size: var(--pp-text-sm);
   font-variant-numeric: tabular-nums;
 }
 
-.card .delta + .delta { margin-top: 3px; }
+.card .delta + .delta { margin-top: var(--pp-space-3); }
 
 /* ---------------------------------------------------------------- card header */
 
@@ -545,8 +546,8 @@ button.debug-more:hover:not(:disabled) { background: none; color: var(--pp-fg); 
 .card-head {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: var(--pp-space-8);
+  margin-bottom: var(--pp-space-8);
 }
 
 .card-head .meta {
@@ -557,10 +558,10 @@ button.debug-more:hover:not(:disabled) { background: none; color: var(--pp-fg); 
 
 button.close {
   flex: none;
-  padding: 1px 6px;
+  padding: 1px var(--pp-space-6);
   border-color: transparent;
   color: var(--pp-dim);
-  font-size: 11px;
+  font-size: var(--pp-text-sm);
 }
 
 button.close:hover:not(:disabled) { color: var(--pp-fg); }
@@ -572,27 +573,27 @@ button.close:hover:not(:disabled) { color: var(--pp-fg); }
    and, more to the point, reachable — the second comment on an element used to have no
    way in at all. */
 .card .sect {
-  padding: 8px;
-  border-radius: 8px;
+  padding: var(--pp-space-8);
+  border-radius: var(--pp-radius-8);
   border-left: 3px solid var(--pp-line);
-  background: rgb(255 255 255 / 0.03);
+  background: var(--pp-wash-faint);
 }
 
-.card .sect + .sect { margin-top: 8px; }
+.card .sect + .sect { margin-top: var(--pp-space-8); }
 /* Resolved comments recede: what is still in flight should read loudest. */
 .card .sect.done { opacity: 0.7; }
 
-.card .sect.action { border-left-color: var(--pp-accent); background: rgb(217 119 87 / 0.07); }
-.card .sect.question { border-left-color: #7c6bd6; background: rgb(124 107 214 / 0.1); }
-.card .sect.backlog { border-left-color: #a1a1aa; background: rgb(161 161 170 / 0.08); }
+.card .sect.action { border-left-color: var(--pp-accent); background: var(--pp-accent-wash-faint); }
+.card .sect.question { border-left-color: var(--pp-question); background: var(--pp-question-wash-faint); }
+.card .sect.backlog { border-left-color: var(--pp-backlog-ring); background: var(--pp-backlog-wash-faint); }
 
 .card .answer {
-  margin-bottom: 8px;
-  padding: 6px 8px;
-  border-radius: 7px;
-  background: rgb(124 107 214 / 0.16);
-  color: #cfc7f2;
-  font-size: 12px;
+  margin-bottom: var(--pp-space-8);
+  padding: var(--pp-space-6) var(--pp-space-8);
+  border-radius: var(--pp-radius-7);
+  background: var(--pp-question-wash);
+  color: var(--pp-answer-fg);
+  font-size: var(--pp-text-md);
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
@@ -601,15 +602,15 @@ button.close:hover:not(:disabled) { color: var(--pp-fg); }
 .card .note {
   white-space: pre-wrap;
   line-height: 1.45;
-  margin-bottom: 8px;
+  margin-bottom: var(--pp-space-8);
   word-break: break-word;
 }
 
 .row {
   display: flex;
-  gap: 6px;
+  gap: var(--pp-space-6);
   align-items: center;
-  margin-top: 8px;
+  margin-top: var(--pp-space-8);
 }
 
 .row .spacer { flex: 1; }
@@ -618,9 +619,9 @@ button.close:hover:not(:disabled) { color: var(--pp-fg); }
 
 button {
   font: inherit;
-  font-size: 12px;
-  padding: 5px 10px;
-  border-radius: 7px;
+  font-size: var(--pp-text-md);
+  padding: var(--pp-space-5) var(--pp-space-10);
+  border-radius: var(--pp-radius-7);
   border: 1px solid var(--pp-line);
   background: transparent;
   color: var(--pp-fg);
@@ -634,8 +635,8 @@ button:disabled { opacity: 0.45; cursor: default; }
 button.primary {
   background: var(--pp-accent);
   border-color: var(--pp-accent);
-  color: #fff;
-  font-weight: 600;
+  color: var(--pp-white);
+  font-weight: var(--pp-weight-semibold);
 }
 
 button.primary:hover:not(:disabled) { filter: brightness(1.08); }
@@ -643,46 +644,46 @@ button.primary:hover:not(:disabled) { filter: brightness(1.08); }
 /* The primary button changes colour the moment the note starts with `?`. That colour
    is the whole confirmation that question mode is on — there is no switch to look at. */
 button.primary.ask {
-  background: #7c6bd6;
-  border-color: #7c6bd6;
+  background: var(--pp-question);
+  border-color: var(--pp-question);
 }
-button.danger:hover { color: #f87171; }
+button.danger:hover { color: var(--pp-danger); }
 
 /* On the toolbar rather than in a card: smaller, and never the loudest thing in the pill. */
 .bar button.danger {
-  padding: 4px 8px;
-  font-size: 11px;
+  padding: var(--pp-space-4) var(--pp-space-8);
+  font-size: var(--pp-text-sm);
   color: var(--pp-dim);
 }
 
-.bar button.danger:hover { color: #f87171; border-color: rgb(248 113 113 / 0.5); }
+.bar button.danger:hover { color: var(--pp-danger); border-color: var(--pp-danger-line); }
 
 /* ---------------------------------------------------------------- toolbar */
 
 .bar {
   position: absolute;
-  z-index: 10;
+  z-index: var(--pp-z-bar);
   pointer-events: auto;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px 6px 6px;
-  border-radius: 999px;
+  gap: var(--pp-space-8);
+  padding: var(--pp-space-6) var(--pp-space-8) var(--pp-space-6) var(--pp-space-6);
+  border-radius: var(--pp-radius-pill);
   border: 1px solid var(--pp-line);
   background: var(--pp-bg);
   color: var(--pp-fg);
-  box-shadow: 0 6px 24px rgb(0 0 0 / 0.35);
-  font-size: 12px;
+  box-shadow: var(--pp-shadow-float);
+  font-size: var(--pp-text-md);
   user-select: none;
 }
 
 .grip {
   cursor: grab;
-  padding: 2px 6px;
-  border-radius: 999px;
-  font-size: 13px;
-  letter-spacing: 0.5px;
-  font-weight: 700;
+  padding: var(--pp-space-2) var(--pp-space-6);
+  border-radius: var(--pp-radius-pill);
+  font-size: var(--pp-text-lg);
+  letter-spacing: var(--pp-tracking-wide);
+  font-weight: var(--pp-weight-bold);
   color: var(--pp-accent);
 }
 
@@ -693,12 +694,12 @@ button.danger:hover { color: #f87171; }
 .bar button.pill {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 8px;
-  border-radius: 999px;
+  gap: var(--pp-space-5);
+  padding: var(--pp-space-3) var(--pp-space-8);
+  border-radius: var(--pp-radius-pill);
   border-color: var(--pp-line);
   color: var(--pp-fg);
-  font-size: 11px;
+  font-size: var(--pp-text-sm);
 }
 
 /* Off is a hollow ring rather than red: "no session for this project" and "connecting"
@@ -714,7 +715,11 @@ button.danger:hover { color: #f87171; }
 
 .dot.on { background: var(--pp-ok); border-color: var(--pp-ok); }
 
-.pill-mark { color: var(--pp-dim); font-size: 10px; }
+.pill-mark { color: var(--pp-dim); font-size: var(--pp-text-xs); }
+
+/* Bridge and extension on different versions. Dim and small on purpose: nothing is
+   broken yet, and the popover says what to run. */
+.pill-warn { color: var(--pp-dim); font-size: var(--pp-text-xs); font-weight: var(--pp-weight-bold); }
 
 .pill-label {
   max-width: 12ch;
@@ -739,38 +744,38 @@ button.danger:hover { color: #f87171; }
   bottom: calc(100% + 8px);
   width: 300px;
   max-width: calc(100vw - 16px);
-  padding: 10px 0 6px;
-  border-radius: 10px;
+  padding: var(--pp-space-10) 0 var(--pp-space-6);
+  border-radius: var(--pp-radius-10);
   border: 1px solid var(--pp-line);
   background: var(--pp-bg);
   color: var(--pp-fg);
-  box-shadow: 0 6px 24px rgb(0 0 0 / 0.35);
-  font-size: 12px;
+  box-shadow: var(--pp-shadow-float);
+  font-size: var(--pp-text-md);
   user-select: text;
+  --pp-row: 28px;
 }
 
 .pop.show { display: block; }
 .pop.below { bottom: auto; top: calc(100% + 8px); }
 
-.pop-head { padding: 0 12px; font-weight: 600; }
-.pop-lines { padding: 2px 12px 8px; color: var(--pp-dim); line-height: 1.45; word-break: break-word; }
+.pop-head { padding: 0 var(--pp-space-12); font-weight: var(--pp-weight-semibold); }
+.pop-lines { padding: var(--pp-space-2) var(--pp-space-12) var(--pp-space-8); color: var(--pp-dim); line-height: 1.45; word-break: break-word; }
 
 /* Six rows, then it scrolls inside the popover rather than growing off screen. */
 .pop-list {
-  --pp-row: 28px;
   max-height: calc(var(--pp-row) * 6);
   overflow-y: auto;
   border-top: 1px solid var(--pp-line);
-  padding-top: 4px;
+  padding-top: var(--pp-space-4);
 }
 
 .pop button.pop-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--pp-space-8);
   width: 100%;
   height: var(--pp-row);
-  padding: 0 12px;
+  padding: 0 var(--pp-space-12);
   border: 0;
   border-radius: 0;
   text-align: left;
@@ -778,7 +783,7 @@ button.danger:hover { color: #f87171; }
 }
 
 .pop button.pop-row:hover { background: var(--pp-hover); }
-.pop-mark { color: var(--pp-dim); flex: none; font-size: 10px; }
+.pop-mark { color: var(--pp-dim); flex: none; font-size: var(--pp-text-xs); }
 .pop-row.on .pop-mark { color: var(--pp-accent); }
 .pop-name { flex: none; }
 .pop-path {
@@ -790,7 +795,81 @@ button.danger:hover { color: #f87171; }
   text-align: right;
 }
 
-.pop-foot { display: flex; justify-content: flex-end; padding: 0 12px 4px; }
+.pop-foot { display: flex; justify-content: flex-end; padding: 0 var(--pp-space-12) var(--pp-space-4); }
+
+/* The version line, set apart above "How it works". The mark hangs in the gutter so the
+   text lines up with the heading's. */
+.pop-version {
+  display: flex;
+  gap: var(--pp-space-6);
+  margin-top: var(--pp-space-4);
+  padding: var(--pp-space-8) var(--pp-space-12) var(--pp-space-6);
+  border-top: 1px solid var(--pp-line);
+  color: var(--pp-dim);
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.pop-version-mark { flex: none; font-weight: var(--pp-weight-bold); }
+
+/* Last row in every state: back to the welcome page. */
+.pop button.pop-how {
+  margin-top: var(--pp-space-4);
+  border-top: 1px solid var(--pp-line);
+}
+
+/* ---------------------------------------------------------------- first-show tip */
+
+/* Above the bar like the popover, and never over it: it only adds, it never covers a
+   control. The arrow is a rotated square whose two outer edges carry the border. */
+.tip {
+  display: none;
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 10px);
+  width: 260px;
+  max-width: calc(100vw - 16px);
+  padding: var(--pp-space-8) var(--pp-space-8) var(--pp-space-8) var(--pp-space-12);
+  border-radius: var(--pp-radius-10);
+  border: 1px solid var(--pp-line);
+  background: var(--pp-bg);
+  color: var(--pp-fg);
+  box-shadow: var(--pp-shadow-float);
+  font-size: var(--pp-text-md);
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.tip.show { display: flex; align-items: flex-start; gap: var(--pp-space-8); }
+.tip.below { bottom: auto; top: calc(100% + 10px); }
+
+.tip-text { flex: 1; min-width: 0; }
+.tip-line { color: var(--pp-dim); }
+
+.bar .tip button.tip-x {
+  flex: none;
+  padding: 0 var(--pp-space-4);
+  border: 0;
+  color: var(--pp-dim);
+  font-size: var(--pp-text-sm);
+}
+
+.tip-arrow {
+  position: absolute;
+  top: 100%;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px; /* design-ok: half the arrow's own size, centres it on the edge */
+  background: var(--pp-bg);
+  border-right: 1px solid var(--pp-line);
+  border-bottom: 1px solid var(--pp-line);
+  transform: rotate(45deg);
+}
+
+.tip.below .tip-arrow {
+  top: 0;
+  transform: rotate(225deg);
+}
 
 .count {
   min-width: 18px;
@@ -802,48 +881,33 @@ button.danger:hover { color: #f87171; }
 button.mode.on {
   background: var(--pp-accent);
   border-color: var(--pp-accent);
-  color: #fff;
+  color: var(--pp-white);
 }
 
 .toast {
   position: absolute;
-  z-index: 30;
+  z-index: var(--pp-z-toast);
   pointer-events: none;
-  padding: 6px 12px;
-  border-radius: 999px;
+  padding: var(--pp-space-6) var(--pp-space-12);
+  border-radius: var(--pp-radius-pill);
   background: var(--pp-bg);
   border: 1px solid var(--pp-line);
   color: var(--pp-fg);
-  font-size: 12px;
-  box-shadow: 0 6px 24px rgb(0 0 0 / 0.35);
+  font-size: var(--pp-text-md);
+  box-shadow: var(--pp-shadow-float);
   opacity: 0;
   transition: opacity 160ms ease;
   max-width: 60vw;
 }
 
 .toast.show { opacity: 1; }
-.toast.bad { border-color: #f87171; color: #fca5a5; }
-
-/* ---------------------------------------------------------------- palette */
-
-/* Deliberately one dark theme regardless of the page's scheme: the toolbar should
-   read as tooling sitting on top of the app, never as part of it. */
-:host {
-  --pp-accent: #d97757;
-  --pp-bg: #1b1b1d;
-  --pp-fg: #f4f4f5;
-  --pp-dim: #9ca3af;
-  --pp-line: #3f3f46;
-  --pp-input: #131315;
-  --pp-hover: #2a2a2e;
-  --pp-ok: #22c55e;
-}
+.toast.bad { border-color: var(--pp-danger); color: var(--pp-danger-fg); }
 
 .toggle {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 11px;
+  gap: var(--pp-space-5);
+  font-size: var(--pp-text-sm);
   color: var(--pp-dim);
   cursor: pointer;
   user-select: none;

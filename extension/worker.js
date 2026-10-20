@@ -8,7 +8,7 @@
  */
 const BRIDGE = 'http://127.0.0.1:8788'
 const TIMEOUT = 4000
-const ACCENT = '#d97757'
+const ACCENT = '#d97757' /* design-ok: the badge API takes a literal; mirrors --pp-accent in tokens.css */
 const LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/
 
 // ---------------------------------------------------------------- bridge
@@ -264,6 +264,10 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
   if (msg?.type === 'design-system') { post('/design-system', routed(msg.payload, sender, msg.pick)).then(respond); return true }
   if (msg?.type === 'recapture') { post('/recapture', msg.payload).then(respond); return true }
   if (msg?.type === 'capture') { capture().then(respond); return true }
+  // The welcome page's bridge check: no page and no pick, so the bridge answers for no
+  // tab in particular. Asked once on open and on "Check again", never on a timer.
+  if (msg?.type === 'check-bridge') { health().then(respond); return true }
+  if (msg?.type === 'open-welcome') { openWelcome().then(() => respond({ ok: true })); return true }
   if (msg?.type === 'count') {
     const tabId = sender.tab?.id
     if (tabId) badge(tabId, msg.n ? String(msg.n) : '', msg.n ? `${msg.n} comment${msg.n === 1 ? '' : 's'} waiting to dispatch` : 'Pinpoint — show or hide toolbar')
@@ -308,8 +312,20 @@ chrome.commands?.onCommand.addListener(async (command, tab) => {
   chrome.tabs.sendMessage(tab.id, { type: 'freeze' }).catch(() => {})
 })
 
+/**
+ * The welcome page, always in a new tab. It is also the options page, but
+ * openOptionsPage would focus an old copy instead, and "How it works" should read as
+ * opening something, not as nothing happening because the tab is somewhere else.
+ */
+function openWelcome() {
+  return chrome.tabs.create({ url: chrome.runtime.getURL('welcome.html') }).catch(() => {})
+}
+
 // Attach to localhost tabs that were already open at install or reload time.
-chrome.runtime.onInstalled.addListener(async () => {
+chrome.runtime.onInstalled.addListener(async details => {
+  // A first install only. An update or a reload of the unpacked folder is someone who
+  // has already seen it, and a tab popping open on every reload would be noise.
+  if (details?.reason === 'install') openWelcome()
   ensureStream()
   try {
     const tabs = await chrome.tabs.query({ url: ['http://localhost/*', 'http://127.0.0.1/*'] })

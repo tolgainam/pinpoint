@@ -453,8 +453,7 @@ platform; the test fails when a key screen changes. Baselines change only with t
 owner's sign-off, via `npm run screens:update`, which also writes
 `test/screens/PENDING.md` listing what moved.
 
-The full design rules are in [CLAUDE.md](CLAUDE.md). Developing from a clone with the
-plugin also installed gives you two `pinpoint` servers; see
+Developing from a clone with the plugin also installed gives you two `pinpoint` servers; see
 [Installing from a clone](#installing-from-a-clone-instead).
 
 ## Known limits

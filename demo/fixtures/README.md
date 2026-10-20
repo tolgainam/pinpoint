@@ -23,6 +23,11 @@ PINPOINT_PROJECT_DIR=demo/fixtures/tailwind npm run server     # probe reads tha
 | [/fixtures/shadcn/](http://localhost:3000/fixtures/shadcn/) | `demo/fixtures/shadcn` | `components.json` plus `@layer base :root`; hsl triplets matched back to `--primary` and friends; `data-slot` and `data-radix-*` fingerprints found in the page |
 | [/fixtures/chakra/](http://localhost:3000/fixtures/chakra/) | `demo/fixtures/chakra` | an `extendTheme` literal read as text; `space` in rem resolved to a 4px step; `--chakra-*` variables and `chakra-*` classes found at runtime |
 | [/](http://localhost:3000/) | the repo root | no library at all — CSS custom properties only |
+| [/fixtures/longform/](http://localhost:3000/fixtures/longform/) | `demo/fixtures/longform` | no library either, but a long page of elements a pin struggles with: a translating carousel, a fading one, a sideways-scrolling strip, a table scrolling inside its own box, a sticky scroll story, SVG charts that draw on scroll, a hover-only tooltip, and a canvas chart with no DOM inside |
+
+The longform page is here for the pins rather than the probe. It sits under `fixtures/`
+only so its tokens stay out of the Vanilla page's summary. Its images are generated SVGs,
+so it needs no network.
 
 Running the bridge with `PINPOINT_PROJECT_DIR` set here also puts that project's
 `.pinpoint/backlog.md` and `.pinpoint/shots/` inside it. Those are gitignored.

@@ -21,3 +21,7 @@ PLAN-0.2.md
 
 # Screenshot test output on a mismatch (actual and diff PNGs).
 test/screens/.out/
+
+# The backlog, history and shots are this repo's own working notes. Pinpoint supports
+# committing them (see the README), but they are kept private here.
+.pinpoint/

@@ -10,7 +10,7 @@
       "name": "pinpoint",
       "source": "./",
       "description": "Pin comments to elements on a localhost page and dispatch them — with screenshots — into this session",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "category": "development",
       "tags": ["browser", "frontend", "screenshots", "devtools"],
       "author": {

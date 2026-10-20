@@ -360,6 +360,9 @@
   }
   /* The hero's kicker is a standing label, not a section number. */
   header .kicker::before { content: none; }
+  /* The 0.3 section sits outside the 01-06 numbering that the contents bar uses. */
+  #setup { counter-increment: none; }
+  #setup > .kicker::before { content: "0.3"; }
 
   h2 {
     font-size: clamp(27px, 3.6vw, 38px);
@@ -830,6 +833,7 @@
 
 <div class="subnav" id="subnav">
   <a href="#index"><span class="n">00</span>Contents</a>
+  <a href="#setup"><span class="n">0.3</span>Setup</a>
   <a href="#say"><span class="n">01</span>Picked values</a>
   <a href="#intent"><span class="n">02</span>Markers</a>
   <a href="#context"><span class="n">03</span>Freeze</a>
@@ -839,14 +843,15 @@
 </div>
 
 <header class="hero">
-  <div class="kicker">version 0.2</div>
+  <div class="kicker">versions 0.2 and 0.3</div>
   <h1 class="tagline">Stop describing the fix.<br><em>Hand it over.</em></h1>
 
   <p class="lede">
     0.1 carried the element. 0.2 carries the intent: the value you actually want in the
     project's own vocabulary, whether the comment is a request or a question, the state
     that only existed while a menu was open — and what the page logged while you were
-    looking at it.
+    looking at it. 0.3 makes it easy to start and easy to trust: a welcome page, a pill
+    that says where comments go, and a doctor for when they do not arrive.
   </p>
 
   <pre class="ascii flow" aria-hidden="true">  <b>◈</b> <i>pick a value</i>  ──▶  <b>dispatch</b>  ──▶  <i>watch it work</i>  ──▶  <b>✓</b> <i>verified against a fresh crop</i></pre>
@@ -876,6 +881,47 @@
     <a href="#errors"><span class="n">08</span><h3>Page errors</h3><p>What the page logged, with the stack, sent once per batch.</p></a>
     <a href="#loop"><span class="n">09</span><h3>A closed loop</h3><p>Progress, follow-up rounds, and fixes verified against a fresh crop.</p></a>
   </div>
+</section>
+
+<!-- ---------------------------------------------------------------- setup -->
+
+<section id="setup">
+  <div class="kicker">new in 0.3</div>
+  <h2>Know where your comments are going</h2>
+  <div class="prose">
+    <p>
+      The toolbar starts hidden on every page, and the icon shows it. The first time it
+      appears, a tip points at <strong>Comment</strong>. A <strong>pill</strong> on the
+      toolbar names the project that receives Dispatch: your project's folder,
+      <strong>Choose</strong> when several sessions are open, <strong>Offline</strong> when
+      none is. Click it to pick a session for that port.
+    </p>
+    <p>
+      Comments go to the Claude Code session whose folder holds the page's dev server, not
+      to whichever session happened to start the bridge. When the session holding the
+      bridge closes, another takes over.
+    </p>
+    <p>
+      A welcome tab opens once after install, with four steps and a live check of the
+      bridge; <strong>How it works</strong> in the pill's popover opens it again.
+      <code>/pinpoint:setup</code> copies the extension to a stable folder, so an update
+      needs only Reload in <code>chrome://extensions</code>, and
+      <code>/pinpoint:doctor</code> prints a pass or fail list with one fix for each
+      problem. If the bridge and the extension are on different versions, the pill gets a
+      small <strong>!</strong> and the popover says what to run. Nothing is blocked.
+    </p>
+  </div>
+
+  <figure class="ui">
+    <div class="shots">
+      <img src="./img/tip.png" alt="The Pinpoint toolbar the first time it is shown, with a tip above it that reads Click Comment, then click any element." width="502" height="208">
+      <img src="./img/welcome.png" alt="The welcome page the extension opens on first install: four steps to tick off, and a box that reads Connected with the project name." width="640" height="549">
+    </div>
+    <figcaption>
+      The first-show tip, and the welcome page with the bridge connected. The pill on the
+      toolbar says the same thing in one word.
+    </figcaption>
+  </figure>
 </section>
 
 <!-- ---------------------------------------------------------------- values -->
@@ -1171,7 +1217,7 @@
 </section>
 
 <footer>
-  <span>◈ Pinpoint 0.2 · source available</span>
+  <span>Pinpoint 0.3 · source available</span>
   <span><a href="https://github.com/tolgainam/pinpoint">github.com/tolgainam/pinpoint</a></span>
 </footer>
 

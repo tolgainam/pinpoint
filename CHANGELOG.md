@@ -3,6 +3,8 @@
 ## 0.3.0
 
 - The toolbar starts hidden. Clicking the Pinpoint icon shows it.
+- A new logo: the extension icon in Chrome, the grip on the toolbar and the header of the
+  welcome page.
 - A welcome page opens once on first install: four steps, a bridge check, what the pill
   says. It is also the extension's Options page, and "How it works" at the bottom of the
   pill popover opens it again.
@@ -21,3 +23,9 @@
 - Bridge takeover and yield: when the session holding the bridge closes, another takes it
   over, and an older bridge hands the port to a newer one after an update. Bridges older
   than 0.3.0 cannot be asked; `/pinpoint:doctor` prints the command that stops them.
+- Demo: a longform page (carousels, scroll containers, sticky sections, charts) for testing
+  pins on elements that move, and a reworked Chakra page. `DEMO_PORT` picks the port.
+
+For contributors: colours, type and spacing come from `extension/tokens.css`, a raw-value
+check and reference screenshots run in `npm test`, and CI runs the tests on Node 20 and 22.
+The rules are in `CONTRIBUTING.md`.

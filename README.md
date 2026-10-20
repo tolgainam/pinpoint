@@ -425,6 +425,9 @@ Set `PINPOINT_TOKEN` to also require an `X-Pinpoint-Token` header.
 npm run demo    # five demo pages on :3000
 ```
 
+Port 3000 taken? `DEMO_PORT=3100 npm run demo` serves them on another one. The extension
+works on any `localhost` port.
+
 Pin something, dispatch it, watch it get fixed. The stylesheets hot-swap rather than
 reloading the page, so screenshot permission survives between rounds.
 

@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Book a demo — Marigold</title>
+
+<!--
+  Same injected variables as the overview page. Chakra writes them into every page it
+  renders, so a second page carries its own copy rather than sharing a stylesheet.
+-->
+<style>
+  :root {
+    --chakra-colors-brand-50: #f5f3ff;
+    --chakra-colors-brand-100: #ede9fe;
+    --chakra-colors-brand-300: #c4b5fd;
+    --chakra-colors-brand-500: #8b5cf6;
+    --chakra-colors-brand-600: #7c3aed;
+    --chakra-colors-brand-700: #6d28d9;
+    --chakra-colors-ink-900: #1a1b25;
+    --chakra-colors-ink-700: #3b3d4d;
+    --chakra-colors-ink-500: #6b6e85;
+    --chakra-colors-line: #e6e4f0;
+    --chakra-colors-surface: #ffffff;
+    --chakra-colors-canvas: #faf9fe;
+
+    --chakra-space-1: 0.25rem;
+    --chakra-space-2: 0.5rem;
+    --chakra-space-3: 0.75rem;
+    --chakra-space-4: 1rem;
+    --chakra-space-5: 1.25rem;
+    --chakra-space-6: 1.5rem;
+    --chakra-space-8: 2rem;
+    --chakra-space-10: 2.5rem;
+    --chakra-space-12: 3rem;
+    --chakra-space-16: 4rem;
+    --chakra-space-32: 8rem;
+
+    --chakra-fontSizes-xs: 0.75rem;
+    --chakra-fontSizes-sm: 0.875rem;
+    --chakra-fontSizes-md: 1rem;
+    --chakra-fontSizes-lg: 1.125rem;
+    --chakra-fontSizes-xl: 1.25rem;
+    --chakra-fontSizes-2xl: 1.5rem;
+    --chakra-fontSizes-4xl: 2.25rem;
+
+    --chakra-radii-sm: 4px;
+    --chakra-radii-md: 8px;
+    --chakra-radii-lg: 12px;
+    --chakra-radii-xl: 20px;
+    --chakra-radii-full: 9999px;
+  }
+</style>
+
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="/switch.css">
+</head>
+<body>
+
+<header class="chakra-nav" data-testid="ck-nav">
+  <div class="chakra-nav__inner">
+    <a class="chakra-nav__logo" href="/fixtures/chakra/"><span class="chakra-nav__mark" aria-hidden="true"></span>Marigold</a>
+    <nav class="chakra-nav__links" aria-label="Main">
+      <a href="/fixtures/chakra/">Overview</a>
+      <a href="#">Docs</a>
+      <a href="#">Pricing</a>
+      <a href="#">Customers</a>
+    </nav>
+    <div class="chakra-nav__actions">
+      <a class="chakra-link" href="#">Sign in</a>
+      <a class="chakra-link" href="/fixtures/chakra/book-a-demo/" aria-current="page">Book a demo →</a>
+    </div>
+  </div>
+</header>
+
+<div class="chakra-container" data-testid="ck-booking-container">
+
+  <header data-testid="ck-booking-header">
+    <a class="chakra-link chakra-back" href="../" data-testid="ck-back">← Back to Marigold</a>
+    <div><span class="chakra-badge">Book a demo</span></div>
+    <h1 class="chakra-heading" data-testid="ck-booking-title">See it on your own theme</h1>
+    <p class="chakra-text chakra-text--muted">
+      Thirty minutes with an engineer. Bring your brand colours and we'll drop them into
+      <code>src/theme.js</code> while you watch.
+    </p>
+  </header>
+
+  <div class="chakra-booking">
+    <!-- Static like the rest of the fixture: submitting only reloads this page. -->
+    <form class="chakra-card chakra-form" action="./" method="get" data-testid="ck-booking-form">
+      <div class="chakra-form__row">
+        <label class="chakra-field">
+          <span class="chakra-field__label">Full name</span>
+          <input class="chakra-input" name="name" autocomplete="name" required>
+        </label>
+        <label class="chakra-field">
+          <span class="chakra-field__label">Work email</span>
+          <input class="chakra-input" type="email" name="email" placeholder="name@company.com" autocomplete="email" required>
+        </label>
+      </div>
+
+      <div class="chakra-form__row">
+        <label class="chakra-field">
+          <span class="chakra-field__label">Company</span>
+          <input class="chakra-input" name="company" autocomplete="organization">
+        </label>
+        <label class="chakra-field">
+          <span class="chakra-field__label">Team size</span>
+          <select class="chakra-input" name="size">
+            <option>1–10</option>
+            <option>11–50</option>
+            <option>51–200</option>
+            <option>200+</option>
+          </select>
+        </label>
+      </div>
+
+      <label class="chakra-field">
+        <span class="chakra-field__label">Preferred date</span>
+        <input class="chakra-input" type="date" name="date">
+      </label>
+
+      <label class="chakra-field">
+        <span class="chakra-field__label">Anything we should know?</span>
+        <textarea class="chakra-input" name="notes" rows="4" placeholder="Your stack, your design system, what you want to see."></textarea>
+      </label>
+
+      <button class="chakra-button chakra-button--solid" type="submit" data-testid="ck-booking-submit">Request a demo</button>
+    </form>
+
+    <aside class="chakra-panel chakra-booking__aside" data-testid="ck-booking-aside">
+      <h2 class="chakra-card__title">What you'll see</h2>
+      <ul class="chakra-list">
+        <li>Your palette and spacing scale as one theme literal</li>
+        <li>Semantic tokens carrying dark mode end to end</li>
+        <li>Questions answered by an engineer, not a script</li>
+      </ul>
+      <p class="chakra-text chakra-text--muted">We'll confirm a time by email within a working day.</p>
+    </aside>
+  </div>
+
+</div>
+
+<footer class="chakra-footer" data-testid="ck-footer">
+  <div class="chakra-footer__inner">
+    <div class="chakra-footer__top">
+      <div>
+        <span class="chakra-footer__logo">Marigold</span>
+        <p class="chakra-footer__tagline">One theme object for every screen your team ships.</p>
+      </div>
+      <nav class="chakra-footer__cols" aria-label="Footer">
+        <div>
+          <h2 class="chakra-footer__heading">Product</h2>
+          <ul class="chakra-footer__links">
+            <li><a href="/fixtures/chakra/">Overview</a></li>
+            <li><a href="/fixtures/chakra/book-a-demo/">Book a demo</a></li>
+            <li><a href="#">Pricing</a></li>
+          </ul>
+        </div>
+        <div>
+          <h2 class="chakra-footer__heading">Resources</h2>
+          <ul class="chakra-footer__links">
+            <li><a href="#">Docs</a></li>
+            <li><a href="#">Theme reference</a></li>
+            <li><a href="#">Changelog</a></li>
+          </ul>
+        </div>
+        <div>
+          <h2 class="chakra-footer__heading">Company</h2>
+          <ul class="chakra-footer__links">
+            <li><a href="#">About</a></li>
+            <li><a href="#">Careers</a></li>
+            <li><a href="#">Contact</a></li>
+          </ul>
+        </div>
+      </nav>
+    </div>
+    <div class="chakra-footer__bottom">
+      <span>© 2026 Marigold</span>
+      <span><a href="#">Privacy</a> · <a href="#">Terms</a></span>
+    </div>
+  </div>
+</footer>
+
+<nav class="demo-switch" data-testid="demo-switch" aria-label="Demo pages">
+  <a href="/">Vanilla</a>
+  <a href="/fixtures/tailwind/">Tailwind</a>
+  <a href="/fixtures/shadcn/">shadcn</a>
+  <a href="/fixtures/chakra/" aria-current="page">Chakra</a>
+  <a href="/fixtures/longform/">Longform</a>
+</nav>
+
+</body>
+</html>

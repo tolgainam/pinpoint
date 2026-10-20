@@ -1,3 +1,7 @@
+# Contributing
+
+These rules are for people working on the toolbar. The plugin does not load this file.
+
 ## Design rules
 
 - Colours, type, spacing, radii, shadows and layers come only from `extension/tokens.css`, as `var(--pp-*)`.

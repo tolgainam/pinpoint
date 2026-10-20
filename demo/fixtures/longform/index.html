@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tern — Season report 2026</title>
+
+<!--
+  The long page. No design-system library, like the Vanilla page, but everything on it
+  is the kind of element a pin has trouble with: a carousel that translates its slides
+  out of view, one that fades them, a strip that scrolls sideways, a table that scrolls
+  inside its own box, a story whose image sticks while the text moves past it, SVG charts
+  that draw themselves, a hover tooltip that exists only under the pointer, and a canvas
+  chart with no DOM inside it at all.
+
+  It sits under fixtures/ so its tokens stay out of the Vanilla page's design-system
+  summary. The content lives here rather than in app.js, so a pinned element's text can
+  still be found in the source.
+-->
+
+<link rel="stylesheet" href="./style.css">
+<link rel="stylesheet" href="/switch.css">
+</head>
+<body>
+
+<header class="topbar" data-testid="lf-topbar">
+  <a class="logo" href="#top" data-testid="lf-logo">Tern<span>Expeditions</span></a>
+  <nav class="topnav" data-testid="lf-topnav" aria-label="Sections">
+    <a href="#destinations">Destinations</a>
+    <a href="#numbers">Numbers</a>
+    <a href="#gallery">Gallery</a>
+    <a href="#story">Laugavegur</a>
+    <a href="#departures">Departures</a>
+    <a href="#voices">Voices</a>
+  </nav>
+  <button class="btn btn-accent" data-testid="lf-book">Book 2027</button>
+  <div class="progress" aria-hidden="true"><span data-progress data-testid="lf-progress"></span></div>
+</header>
+
+<!-- ============================================================ hero -->
+
+<section class="hero" id="top" data-testid="lf-hero">
+  <img class="hero__img" src="./img/fjord.svg" alt="A fjord at dusk, the peaks reflected in still water">
+  <div class="hero__body">
+    <p class="kicker">Season report · 2026</p>
+    <h1 class="hero__title" data-testid="lf-hero-title">Eleven months, 257 departures, one very patient mule.</h1>
+    <p class="hero__sub" data-testid="lf-hero-sub">
+      Where our travellers went this year, what they made of it, and what we are changing
+      before the 2027 season opens.
+    </p>
+    <a class="scroll-cue" href="#destinations" data-testid="lf-scroll-cue">Scroll to the season ↓</a>
+  </div>
+</section>
+
+<section class="stats" data-testid="lf-stats">
+  <div class="stat" data-testid="lf-stat-travellers">
+    <span class="stat__label">Travellers</span>
+    <strong class="stat__value">2,418</strong>
+    <span class="stat__delta stat__delta--up">+18% on 2025</span>
+    <svg class="spark" viewBox="0 0 120 32" preserveAspectRatio="none" data-spark="86,104,152,188,241,322,398,376,284,171,96" aria-hidden="true"></svg>
+  </div>
+  <div class="stat" data-testid="lf-stat-departures">
+    <span class="stat__label">Departures</span>
+    <strong class="stat__value">257</strong>
+    <span class="stat__delta stat__delta--up">+31 on 2025</span>
+    <svg class="spark" viewBox="0 0 120 32" preserveAspectRatio="none" data-spark="9,11,16,20,26,34,41,39,30,19,12" aria-hidden="true"></svg>
+  </div>
+  <div class="stat" data-testid="lf-stat-group">
+    <span class="stat__label">Average group</span>
+    <strong class="stat__value">9.4</strong>
+    <span class="stat__delta">−0.6, on purpose</span>
+    <svg class="spark" viewBox="0 0 120 32" preserveAspectRatio="none" data-spark="10.2,10,9.8,9.9,9.6,9.5,9.4,9.3,9.2,9.1,9" aria-hidden="true"></svg>
+  </div>
+  <div class="stat" data-testid="lf-stat-nps">
+    <span class="stat__label">Net promoter</span>
+    <strong class="stat__value">72</strong>
+    <span class="stat__delta stat__delta--up">+5 on 2025</span>
+    <svg class="spark" viewBox="0 0 120 32" preserveAspectRatio="none" data-spark="64,66,65,68,70,69,71,73,74,72,75" aria-hidden="true"></svg>
+  </div>
+</section>
+
+<!-- ============================================================ destinations: translate carousel -->
+
+<!-- Autoplays every six seconds and pauses while the pointer is over it. The pointer has
+     to leave to reach the toolbar, so the slide you meant to pin will have moved on:
+     freeze first, or pin the half-visible neighbour and see where the pin lands. -->
+<section class="section" id="destinations" data-carousel="slide" data-autoplay="6000" data-testid="lf-destinations">
+  <div class="section__head">
+    <div>
+      <p class="kicker">Destinations</p>
+      <h2 class="section__title">Six routes carried the season</h2>
+    </div>
+    <div class="controls">
+      <button class="icon-btn" data-carousel-prev aria-label="Previous route" data-testid="lf-carousel-prev">←</button>
+      <button class="icon-btn" data-carousel-next aria-label="Next route" data-testid="lf-carousel-next">→</button>
+    </div>
+  </div>
+
+  <div class="carousel__viewport" data-testid="lf-carousel">
+    <ol class="carousel__track">
+      <li class="slide is-active" data-slide data-testid="lf-slide-dolomites">
+        <img src="./img/dolomites.svg" alt="Jagged pale peaks above a pine forest">
+        <div class="slide__caption">
+          <span class="tag">Italy · 8 days</span>
+          <h3>Alta Via 1, Dolomites</h3>
+          <p>Hut to hut under the Tofane. Sold out by March, so we added two September dates.</p>
+          <dl class="slide__facts">
+            <div><dt>Distance</dt><dd>120 km</dd></div>
+            <div><dt>Ascent</dt><dd>7,300 m</dd></div>
+            <div><dt>Rating</dt><dd>4.9</dd></div>
+          </dl>
+        </div>
+      </li>
+      <li class="slide" data-slide data-testid="lf-slide-erg-chebbi">
+        <img src="./img/erg-chebbi.svg" alt="Layered orange dunes under a low sun">
+        <div class="slide__caption">
+          <span class="tag">Morocco · 6 days</span>
+          <h3>Erg Chebbi Crossing</h3>
+          <p>Three nights in the dunes with no engine within earshot. October was the pick.</p>
+          <dl class="slide__facts">
+            <div><dt>Distance</dt><dd>64 km</dd></div>
+            <div><dt>Camps</dt><dd>3</dd></div>
+            <div><dt>Rating</dt><dd>4.7</dd></div>
+          </dl>
+        </div>
+      </li>
+      <li class="slide" data-slide data-testid="lf-slide-torres">
+        <img src="./img/torres.svg" alt="Granite towers with snow above a turquoise lake">
+        <div class="slide__caption">
+          <span class="tag">Chile · 7 days</span>
+          <h3>Torres del Paine W</h3>
+          <p>The wind is the whole story. We moved the Base Torres climb to the morning.</p>
+          <dl class="slide__facts">
+            <div><dt>Distance</dt><dd>80 km</dd></div>
+            <div><dt>Ascent</dt><dd>3,400 m</dd></div>
+            <div><dt>Rating</dt><dd>4.8</dd></div>
+          </dl>
+        </div>
+      </li>
+      <li class="slide" data-slide data-testid="lf-slide-annapurna">
+        <img src="./img/annapurna.svg" alt="Snow-covered Himalayan ridges above forested foothills">
+        <div class="slide__caption">
+          <span class="tag">Nepal · 16 days</span>
+          <h3>Annapurna Circuit</h3>
+          <p>Our longest route, and the one with the mule. Thorong La at 5,416 m on day eleven.</p>
+          <dl class="slide__facts">
+            <div><dt>Distance</dt><dd>210 km</dd></div>
+            <div><dt>High point</dt><dd>5,416 m</dd></div>
+            <div><dt>Rating</dt><dd>4.9</dd></div>
+          </dl>
+        </div>
+      </li>
+      <li class="slide" data-slide data-testid="lf-slide-song-kol">
+        <img src="./img/song-kol.svg" alt="A high alpine lake with yurts on green grassland">
+        <div class="slide__caption">
+          <span class="tag">Kyrgyzstan · 8 days</span>
+          <h3>Song-Köl on horseback</h3>
+          <p>Yurt stays at 3,000 m. New this year, and the best-rated first season we have had.</p>
+          <dl class="slide__facts">
+            <div><dt>Distance</dt><dd>95 km</dd></div>
+            <div><dt>Yurts</dt><dd>4 nights</dd></div>
+            <div><dt>Rating</dt><dd>4.8</dd></div>
+          </dl>
+        </div>
+      </li>
+      <li class="slide" data-slide data-testid="lf-slide-faroe">
+        <img src="./img/faroe.svg" alt="Green sea cliffs and a red cabin above a grey sea">
+        <div class="slide__caption">
+          <span class="tag">Faroe Islands · 5 days</span>
+          <h3>Faroe Coast Path</h3>
+          <p>Short days, big weather. Every group lost at least one afternoon to fog.</p>
+          <dl class="slide__facts">
+            <div><dt>Distance</dt><dd>58 km</dd></div>
+            <div><dt>Ferries</dt><dd>3</dd></div>
+            <div><dt>Rating</dt><dd>4.5</dd></div>
+          </dl>
+        </div>
+      </li>
+    </ol>
+  </div>
+  <div class="dots" role="tablist" aria-label="Routes" data-carousel-dots data-testid="lf-carousel-dots"></div>
+</section>
+
+<!-- ============================================================ numbers: charts -->
+
+<div class="band band--night">
+  <section class="section" id="numbers" data-testid="lf-numbers">
+    <div class="section__head">
+      <div>
+        <p class="kicker">The season in numbers</p>
+        <h2 class="section__title">Busier, later in the year, and better rated</h2>
+      </div>
+      <p class="section__hint">Hover the charts for the detail.</p>
+    </div>
+
+    <div class="chart-grid">
+      <!-- SVG, drawn by app.js when it scrolls into view. The tooltip is removed from the
+           layout the moment the pointer leaves, which is what freeze is for. -->
+      <figure class="chart-card chart-card--wide" data-testid="lf-chart-travellers">
+        <figcaption class="chart-card__head">
+          <div>
+            <h3>Travellers per month</h3>
+            <p class="chart-card__note">July was the busiest month we have ever run.</p>
+          </div>
+          <div class="legend">
+            <span class="key key--a">2026</span>
+            <span class="key key--b">2025</span>
+          </div>
+        </figcaption>
+        <div class="chart chart--line" data-line-chart></div>
+        <div class="tooltip" data-testid="lf-chart-tooltip" hidden></div>
+      </figure>
+
+      <figure class="chart-card" data-testid="lf-chart-regions">
+        <figcaption class="chart-card__head">
+          <div>
+            <h3>Departures by region</h3>
+            <p class="chart-card__note">257 in total, Europe still half of them.</p>
+          </div>
+        </figcaption>
+        <div class="bars" data-bars>
+          <div class="bar-row"><span>Europe</span><div class="bar-track"><div class="bar bar--europe" data-value="112"></div></div><strong>112</strong></div>
+          <div class="bar-row"><span>Asia</span><div class="bar-track"><div class="bar bar--asia" data-value="58"></div></div><strong>58</strong></div>
+          <div class="bar-row"><span>Americas</span><div class="bar-track"><div class="bar bar--americas" data-value="46"></div></div><strong>46</strong></div>
+          <div class="bar-row"><span>Africa</span><div class="bar-track"><div class="bar bar--africa" data-value="41"></div></div><strong>41</strong></div>
+        </div>
+      </figure>
+
+      <figure class="chart-card" data-testid="lf-chart-rating">
+        <figcaption class="chart-card__head">
+          <div>
+            <h3>How it felt</h3>
+            <p class="chart-card__note">From 1,902 post-trip reviews.</p>
+          </div>
+        </figcaption>
+        <div class="donut">
+          <div class="donut__chart" data-donut="68,23,6,3">
+            <div class="donut__center"><strong>4.6</strong><span>out of 5</span></div>
+          </div>
+          <ul class="donut__legend">
+            <li><i class="swatch swatch--1"></i>Five stars<b>68%</b></li>
+            <li><i class="swatch swatch--2"></i>Four stars<b>23%</b></li>
+            <li><i class="swatch swatch--3"></i>Three stars<b>6%</b></li>
+            <li><i class="swatch swatch--4"></i>Two or fewer<b>3%</b></li>
+          </ul>
+        </div>
+      </figure>
+
+      <!-- A canvas: pinning anywhere on it gives you the canvas element and nothing more.
+           The hover readout is pixels, not a node. -->
+      <figure class="chart-card chart-card--wide" data-testid="lf-chart-elevation">
+        <figcaption class="chart-card__head">
+          <div>
+            <h3>Laugavegur elevation profile</h3>
+            <p class="chart-card__note">Hover for the height at any point on the trail.</p>
+          </div>
+          <span class="chart-card__note">55 km · 1,480 m up · 1,860 m down</span>
+        </figcaption>
+        <canvas class="elevation" data-elevation role="img" aria-label="Elevation from Landmannalaugar at 600 m, up to 1,050 m at Hrafntinnusker, down to Þórsmörk at 220 m"></canvas>
+        <ol class="stages">
+          <li><b>Landmannalaugar</b>0 km</li>
+          <li><b>Hrafntinnusker</b>12 km</li>
+          <li><b>Álftavatn</b>24 km</li>
+          <li><b>Emstrur</b>39 km</li>
+          <li><b>Þórsmörk</b>55 km</li>
+        </ol>
+      </figure>
+    </div>
+  </section>
+</div>
+
+<!-- ============================================================ gallery: horizontal scroll -->
+
+<!-- Its own scroll container. Pin a photo, scroll the strip, and the pin has to follow
+     the element rather than the page. -->
+<section class="section" id="gallery" data-strip data-testid="lf-gallery">
+  <div class="section__head">
+    <div>
+      <p class="kicker">From the field</p>
+      <h2 class="section__title">Travellers' photos, lightly cropped</h2>
+    </div>
+    <div class="controls">
+      <button class="icon-btn" data-strip-prev aria-label="Scroll photos back" data-testid="lf-strip-prev">←</button>
+      <button class="icon-btn" data-strip-next aria-label="Scroll photos forward" data-testid="lf-strip-next">→</button>
+    </div>
+  </div>
+
+  <div class="strip" tabindex="0" data-testid="lf-strip">
+    <figure class="shot shot--wide" data-testid="lf-shot-aurora">
+      <img src="./img/aurora.svg" alt="Green aurora over a dark ridge and a still lake" loading="lazy">
+      <figcaption>Aurora over Hrafntinnusker <span>· Ines M.</span></figcaption>
+    </figure>
+    <figure class="shot" data-testid="lf-shot-atlas">
+      <img src="./img/atlas.svg" alt="Red ridges of the High Atlas at sunset" loading="lazy">
+      <figcaption>Last light, High Atlas <span>· Tomás R.</span></figcaption>
+    </figure>
+    <figure class="shot" data-testid="lf-shot-lofoten">
+      <img src="./img/lofoten.svg" alt="Red fishing cabins below misty sea peaks" loading="lazy">
+      <figcaption>Reine, the morning the fog lifted <span>· Hana K.</span></figcaption>
+    </figure>
+    <figure class="shot shot--wide" data-testid="lf-shot-namib">
+      <img src="./img/namib.svg" alt="Deep orange dunes under a pale morning sky" loading="lazy">
+      <figcaption>Sossusvlei before breakfast <span>· Joel A.</span></figcaption>
+    </figure>
+    <figure class="shot" data-testid="lf-shot-landmannalaugar">
+      <img src="./img/landmannalaugar.svg" alt="Striped rhyolite hills in pastel colours" loading="lazy">
+      <figcaption>Rhyolite hills, Landmannalaugar <span>· Priya S.</span></figcaption>
+    </figure>
+    <figure class="shot" data-testid="lf-shot-fjord">
+      <img src="./img/fjord.svg" alt="A fjord at dusk" loading="lazy">
+      <figcaption>Dusk on Geirangerfjord <span>· Marek W.</span></figcaption>
+    </figure>
+    <figure class="shot shot--wide" data-testid="lf-shot-dolomites">
+      <img src="./img/dolomites.svg" alt="Pale peaks above pine forest" loading="lazy">
+      <figcaption>Rifugio Lagazuoi, 6am <span>· Ines M.</span></figcaption>
+    </figure>
+    <figure class="shot" data-testid="lf-shot-song-kol">
+      <img src="./img/song-kol.svg" alt="Yurts beside a high lake" loading="lazy">
+      <figcaption>Yurts at Song-Köl <span>· Aida B.</span></figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ============================================================ story: sticky scroll -->
+
+<!-- The image column sticks and cross-fades as each day scrolls through the middle of
+     the viewport. Four images share one box; only the active one is visible. -->
+<section class="story" id="story" data-story data-testid="lf-story">
+  <div class="section__head story__head">
+    <div>
+      <p class="kicker">Route in focus</p>
+      <h2 class="section__title">Four days on the Laugavegur</h2>
+    </div>
+  </div>
+
+  <div class="story__media">
+    <div class="story__sticky" data-testid="lf-story-media">
+      <img class="story__img is-active" data-step-img="0" src="./img/landmannalaugar.svg" alt="Striped rhyolite hills">
+      <img class="story__img" data-step-img="1" src="./img/aurora.svg" alt="Aurora over a snowy ridge">
+      <img class="story__img" data-step-img="2" src="./img/song-kol.svg" alt="A lake below green slopes">
+      <img class="story__img" data-step-img="3" src="./img/dolomites.svg" alt="Birch woods below peaks">
+      <div class="story__day" data-testid="lf-story-day">Day <span data-story-day>1</span> of 4</div>
+    </div>
+  </div>
+
+  <ol class="story__steps">
+    <li class="step is-active" data-step="0" data-testid="lf-step-1">
+      <p class="kicker">Day 1 · Landmannalaugar to Hrafntinnusker · 12 km</p>
+      <h3>Rhyolite, obsidian, and a hot river</h3>
+      <p>The trail climbs 450 m out of the valley through hills striped orange, green and grey. Soak in the hot river before you leave; there is not another one for four days.</p>
+    </li>
+    <li class="step" data-step="1" data-testid="lf-step-2">
+      <p class="kicker">Day 2 · Hrafntinnusker to Álftavatn · 12 km</p>
+      <h3>Snowfields in July</h3>
+      <p>The highest night of the trek. The hut sits among steam vents and old snow, and on a clear September night the sky does the rest.</p>
+    </li>
+    <li class="step" data-step="2" data-testid="lf-step-3">
+      <p class="kicker">Day 3 · Álftavatn to Emstrur · 15 km</p>
+      <h3>Two river crossings and a lake</h3>
+      <p>Bring sandals. The Bláfjallakvísl is knee-deep and glacial, and it is the part everyone talks about at dinner.</p>
+    </li>
+    <li class="step" data-step="3" data-testid="lf-step-4">
+      <p class="kicker">Day 4 · Emstrur to Þórsmörk · 16 km</p>
+      <h3>Down into the birch woods</h3>
+      <p>Black sand gives way to the Markarfljót canyon, then to Þórsmörk's birches: the first trees in 55 km, and a bus back to Reykjavík.</p>
+    </li>
+  </ol>
+</section>
+
+<!-- ============================================================ departures: inner scroll -->
+
+<!-- The table scrolls inside its own 420px box with a sticky header, and the tabs hide
+     rows outright. A pinned row can scroll out of its container or stop existing. -->
+<section class="section" id="departures" data-departures data-testid="lf-departures">
+  <div class="section__head">
+    <div>
+      <p class="kicker">2027 departures</p>
+      <h2 class="section__title">Pick a date before the Dolomites sell out again</h2>
+    </div>
+  </div>
+
+  <div class="departures">
+    <div>
+      <div class="tabs" role="tablist" data-testid="lf-tabs">
+        <button class="tab" role="tab" aria-selected="true" data-filter="all">All</button>
+        <button class="tab" role="tab" aria-selected="false" data-filter="Europe">Europe</button>
+        <button class="tab" role="tab" aria-selected="false" data-filter="Asia">Asia</button>
+        <button class="tab" role="tab" aria-selected="false" data-filter="Africa">Africa</button>
+        <button class="tab" role="tab" aria-selected="false" data-filter="Americas">Americas</button>
+      </div>
+
+      <div class="table-scroll" tabindex="0" data-testid="lf-table-scroll">
+        <table class="table">
+          <thead>
+            <tr><th>Route</th><th>Region</th><th>Starts</th><th class="num">Days</th><th>Places</th><th class="num">From</th></tr>
+          </thead>
+          <tbody data-testid="lf-departures-body">
+            <tr data-region="Africa"><td class="route">Toubkal Circuit, High Atlas</td><td>Africa</td><td>14 Mar</td><td class="num">7</td><td class="places" data-left="8" data-cap="12"><span class="meter"><i></i></span>8 left</td><td class="num">€1,380</td></tr>
+            <tr data-region="Asia"><td class="route">Annapurna Circuit, Nepal</td><td>Asia</td><td>2 Apr</td><td class="num">16</td><td class="places" data-left="2" data-cap="10"><span class="meter"><i></i></span>2 left</td><td class="num">€2,640</td></tr>
+            <tr data-region="Africa"><td class="route">Erg Chebbi Crossing</td><td>Africa</td><td>18 Apr</td><td class="num">6</td><td class="places" data-left="10" data-cap="12"><span class="meter"><i></i></span>10 left</td><td class="num">€1,540</td></tr>
+            <tr data-region="Europe"><td class="route">Faroe Coast Path</td><td>Europe</td><td>22 May</td><td class="num">5</td><td class="places" data-left="6" data-cap="10"><span class="meter"><i></i></span>6 left</td><td class="num">€1,960</td></tr>
+            <tr data-region="Asia"><td class="route">Markha Valley, Ladakh</td><td>Asia</td><td>6 Jun</td><td class="num">10</td><td class="places" data-left="9" data-cap="12"><span class="meter"><i></i></span>9 left</td><td class="num">€1,990</td></tr>
+            <tr data-region="Europe"><td class="route">Alta Via 1, Dolomites</td><td>Europe</td><td>21 Jun</td><td class="num">8</td><td class="places" data-left="1" data-cap="12"><span class="meter"><i></i></span>1 left</td><td class="num">€2,190</td></tr>
+            <tr data-region="Europe"><td class="route">Lofoten Traverse, Norway</td><td>Europe</td><td>28 Jun</td><td class="num">7</td><td class="places" data-left="5" data-cap="10"><span class="meter"><i></i></span>5 left</td><td class="num">€2,780</td></tr>
+            <tr data-region="Asia"><td class="route">Song-Köl on horseback</td><td>Asia</td><td>5 Jul</td><td class="num">8</td><td class="places" data-left="3" data-cap="8"><span class="meter"><i></i></span>3 left</td><td class="num">€1,720</td></tr>
+            <tr data-region="Europe"><td class="route">Laugavegur, Iceland</td><td>Europe</td><td>12 Jul</td><td class="num">6</td><td class="places" data-left="4" data-cap="12"><span class="meter"><i></i></span>4 left</td><td class="num">€2,450</td></tr>
+            <tr data-region="Europe"><td class="route">Alta Via 1, Dolomites</td><td>Europe</td><td>19 Jul</td><td class="num">8</td><td class="places" data-left="0" data-cap="12"><span class="meter"><i></i></span>Sold out</td><td class="num">€2,190</td></tr>
+            <tr data-region="Europe"><td class="route">Tour du Mont Blanc</td><td>Europe</td><td>26 Jul</td><td class="num">11</td><td class="places" data-left="7" data-cap="12"><span class="meter"><i></i></span>7 left</td><td class="num">€2,890</td></tr>
+            <tr data-region="Americas"><td class="route">West Coast Trail, Canada</td><td>Americas</td><td>2 Aug</td><td class="num">7</td><td class="places" data-left="6" data-cap="10"><span class="meter"><i></i></span>6 left</td><td class="num">€2,210</td></tr>
+            <tr data-region="Europe"><td class="route">Laugavegur, Iceland</td><td>Europe</td><td>16 Aug</td><td class="num">6</td><td class="places" data-left="11" data-cap="12"><span class="meter"><i></i></span>11 left</td><td class="num">€2,450</td></tr>
+            <tr data-region="Europe"><td class="route">Alta Via 1, Dolomites</td><td>Europe</td><td>6 Sep</td><td class="num">8</td><td class="places" data-left="9" data-cap="12"><span class="meter"><i></i></span>9 left</td><td class="num">€2,190</td></tr>
+            <tr data-region="Africa"><td class="route">Erg Chebbi Crossing</td><td>Africa</td><td>9 Oct</td><td class="num">6</td><td class="places" data-left="3" data-cap="12"><span class="meter"><i></i></span>3 left</td><td class="num">€1,540</td></tr>
+            <tr data-region="Americas"><td class="route">Huayhuash Circuit, Peru</td><td>Americas</td><td>17 Oct</td><td class="num">12</td><td class="places" data-left="8" data-cap="10"><span class="meter"><i></i></span>8 left</td><td class="num">€2,980</td></tr>
+            <tr data-region="Africa"><td class="route">Namib Dune Sea</td><td>Africa</td><td>4 Nov</td><td class="num">9</td><td class="places" data-left="10" data-cap="10"><span class="meter"><i></i></span>10 left</td><td class="num">€3,120</td></tr>
+            <tr data-region="Americas"><td class="route">Torres del Paine W, Chile</td><td>Americas</td><td>28 Nov</td><td class="num">7</td><td class="places" data-left="5" data-cap="12"><span class="meter"><i></i></span>5 left</td><td class="num">€3,340</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <aside class="aside-card" data-testid="lf-departures-aside">
+      <h3>2027 at a glance</h3>
+      <p><span data-count>18</span> departures shown. Deposits are refundable until 60 days before you travel.</p>
+      <dl>
+        <dt>Routes</dt><dd>14</dd>
+        <dt>From</dt><dd>€1,380</dd>
+        <dt>Deposit</dt><dd>20%</dd>
+        <dt>Group size</dt><dd>8 to 12</dd>
+      </dl>
+      <button class="btn btn-accent" data-testid="lf-hold">Hold a place</button>
+    </aside>
+  </div>
+</section>
+
+<!-- ============================================================ voices: fade carousel -->
+
+<!-- Every quote is in the DOM at once, stacked in one grid cell; only the active one is
+     visible. A pin on a hidden quote has a real element and nothing to show. -->
+<div class="band band--warm">
+  <section class="section" id="voices" data-carousel="fade" data-autoplay="7000" data-testid="lf-voices">
+    <p class="kicker voices__kicker">Voices</p>
+    <div class="quotes">
+      <blockquote class="quote is-active" data-slide data-testid="lf-quote-1">
+        <p>“The guide knew every hut warden by name and every weather front by smell. I have never eaten that much polenta.”</p>
+        <footer><span class="avatar">IM</span><span><strong>Ines Moreau</strong><span class="who">Alta Via 1 · July</span></span></footer>
+      </blockquote>
+      <blockquote class="quote" data-slide data-testid="lf-quote-2">
+        <p>“I booked Erg Chebbi for the dunes and came home talking about the silence. Three nights without a single engine.”</p>
+        <footer><span class="avatar avatar--sea">TR</span><span><strong>Tomás Ribeiro</strong><span class="who">Erg Chebbi Crossing · October</span></span></footer>
+      </blockquote>
+      <blockquote class="quote" data-slide data-testid="lf-quote-3">
+        <p>“Smaller groups made the difference. Nine of us, one mule, and nobody waiting at the top of every climb.”</p>
+        <footer><span class="avatar avatar--moss">HK</span><span><strong>Hana Kobayashi</strong><span class="who">Annapurna Circuit · April</span></span></footer>
+      </blockquote>
+      <blockquote class="quote" data-slide data-testid="lf-quote-4">
+        <p>“The river crossing on day three was cold enough to hurt, and I would do it again tomorrow.”</p>
+        <footer><span class="avatar avatar--sand">JA</span><span><strong>Joel Asante</strong><span class="who">Laugavegur · August</span></span></footer>
+      </blockquote>
+    </div>
+    <div class="dots" role="tablist" aria-label="Quotes" data-carousel-dots data-testid="lf-quote-dots"></div>
+  </section>
+</div>
+
+<!-- ============================================================ faq -->
+
+<section class="section faq" data-testid="lf-faq">
+  <p class="kicker">Before you ask</p>
+  <h2 class="section__title">Questions we answer every week</h2>
+  <div class="faq__list">
+    <details data-testid="lf-faq-fitness">
+      <summary>How fit do I need to be?</summary>
+      <p>If you can walk six hours with a light pack two days running, you can do every route here except Annapurna and Huayhuash, which need a few weeks of hills first.</p>
+    </details>
+    <details data-testid="lf-faq-included">
+      <summary>What is included in the price?</summary>
+      <p>Guides, huts or camps, most meals, luggage transfers and the transfer from the nearest airport. Flights and travel insurance are yours.</p>
+    </details>
+    <details data-testid="lf-faq-solo">
+      <summary>Can I come on my own?</summary>
+      <p>About a third of our travellers do. We pair solo travellers in twin rooms at no extra cost, or you can pay a single supplement.</p>
+    </details>
+    <details data-testid="lf-faq-weather">
+      <summary>What happens if the weather closes the route?</summary>
+      <p>The guide reroutes, and every route has a planned bad-weather variant. If a whole departure is cancelled, you get a full refund or a free transfer to another date.</p>
+    </details>
+    <details data-testid="lf-faq-booking">
+      <summary>When does 2027 booking open?</summary>
+      <p>On 1 November. People on the list below get a 48-hour head start.</p>
+    </details>
+  </div>
+</section>
+
+<!-- ============================================================ cta -->
+
+<section class="cta" data-testid="lf-cta">
+  <img src="./img/atlas.svg" alt="" loading="lazy">
+  <div class="cta__body">
+    <p class="kicker">2027</p>
+    <h2>Booking opens on 1 November</h2>
+    <form class="signup" data-signup data-testid="lf-signup">
+      <input type="email" placeholder="you@example.com" aria-label="Email" required data-testid="lf-signup-email">
+      <button class="btn btn-accent" data-testid="lf-signup-submit">Get the head start</button>
+    </form>
+    <p class="signup__note" data-signup-note aria-live="polite"></p>
+  </div>
+</section>
+
+<footer class="footer" data-testid="lf-footer">
+  <span class="logo">Tern<span>Expeditions</span></span>
+  <nav><a href="#">Trips</a><a href="#">Guides</a><a href="#">Responsible travel</a><a href="#">Contact</a></nav>
+  <small>© 2026 Tern Expeditions</small>
+</footer>
+
+<nav class="demo-switch" data-testid="demo-switch" aria-label="Demo pages">
+  <a href="/">Vanilla</a>
+  <a href="/fixtures/tailwind/">Tailwind</a>
+  <a href="/fixtures/shadcn/">shadcn</a>
+  <a href="/fixtures/chakra/">Chakra</a>
+  <a href="/fixtures/longform/" aria-current="page">Longform</a>
+</nav>
+
+<script src="./app.js"></script>
+
+</body>
+</html>

@@ -420,14 +420,16 @@ Set `PINPOINT_TOKEN` to also require an `X-Pinpoint-Token` header.
 ## Try it without a project
 
 ```bash
-npm run demo    # four demo pages on :3000
+npm run demo    # five demo pages on :3000
 ```
 
 Pin something, dispatch it, watch it get fixed. The stylesheets hot-swap rather than
 reloading the page, so screenshot permission survives between rounds.
 
-`/` is a deliberately opinionated landing page with no design system at all. The other
-three — `/fixtures/tailwind/`, `/fixtures/shadcn/`, `/fixtures/chakra/` — each sit in a
+`/` is a deliberately opinionated landing page with no design system at all.
+`/fixtures/longform/` is a long page full of carousels, scroll containers, sticky
+sections and charts, for testing pins on elements that move. The other three —
+`/fixtures/tailwind/`, `/fixtures/shadcn/`, `/fixtures/chakra/` — each sit in a
 directory that looks like a real project built with that stack, so the design-system
 probe has something to read:
 
@@ -451,7 +453,7 @@ platform; the test fails when a key screen changes. Baselines change only with t
 owner's sign-off, via `npm run screens:update`, which also writes
 `test/screens/PENDING.md` listing what moved.
 
-The full design rules are in [CLAUDE.md](CLAUDE.md). Developing from a clone with the
+The full design rules are in [CONTRIBUTING.md](CONTRIBUTING.md). Developing from a clone with the
 plugin also installed gives you two `pinpoint` servers; see
 [Installing from a clone](#installing-from-a-clone-instead).
 

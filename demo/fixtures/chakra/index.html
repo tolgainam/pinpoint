@@ -36,6 +36,7 @@
     --chakra-space-10: 2.5rem;
     --chakra-space-12: 3rem;
     --chakra-space-16: 4rem;
+    --chakra-space-32: 8rem;
 
     --chakra-fontSizes-xs: 0.75rem;
     --chakra-fontSizes-sm: 0.875rem;
@@ -58,6 +59,22 @@
 </head>
 <body>
 
+<header class="chakra-nav" data-testid="ck-nav">
+  <div class="chakra-nav__inner">
+    <a class="chakra-nav__logo" href="/fixtures/chakra/"><span class="chakra-nav__mark" aria-hidden="true"></span>Marigold</a>
+    <nav class="chakra-nav__links" aria-label="Main">
+      <a href="/fixtures/chakra/" aria-current="page">Overview</a>
+      <a href="#">Docs</a>
+      <a href="#">Pricing</a>
+      <a href="#">Customers</a>
+    </nav>
+    <div class="chakra-nav__actions">
+      <a class="chakra-link" href="#">Sign in</a>
+      <a class="chakra-link" href="/fixtures/chakra/book-a-demo/">Book a demo →</a>
+    </div>
+  </div>
+</header>
+
 <div class="chakra-container" data-testid="ck-container">
 
   <header data-testid="ck-header">
@@ -70,7 +87,7 @@
     </p>
     <div class="chakra-stack" data-testid="ck-actions">
       <button class="chakra-button chakra-button--solid" data-testid="ck-cta-primary">Start free</button>
-      <button class="chakra-button chakra-button--outline" data-testid="ck-cta-secondary">Book a demo</button>
+      <a class="chakra-button chakra-button--outline" href="./book-a-demo/" data-testid="ck-cta-secondary">Book a demo</a>
     </div>
   </header>
 
@@ -112,13 +129,116 @@
     </div>
   </section>
 
+  <!-- Portraits from randomuser.me, kept in ./avatars so the fixture makes no third-party requests. -->
+  <section class="chakra-team" data-testid="ck-team">
+    <h2 class="chakra-card__title">Who's building with it</h2>
+    <p class="chakra-text chakra-text--muted">Four teams, one theme object.</p>
+
+    <div class="chakra-team__grid">
+      <article class="chakra-card" data-testid="ck-user-amara">
+        <div class="chakra-team__who">
+          <span class="chakra-avatar" aria-hidden="true"><img src="./avatars/amara.jpg" alt=""></span>
+          <div>
+            <h3 class="chakra-team__name">Amara Okafor</h3>
+            <p class="chakra-team__role">Design lead, Fernbrook</p>
+          </div>
+        </div>
+        <p class="chakra-text chakra-text--muted">
+          Retunes the brand palette once in <code>theme.js</code>, and marketing and product
+          screens follow without a single ticket.
+        </p>
+      </article>
+
+      <article class="chakra-card" data-testid="ck-user-jonas">
+        <div class="chakra-team__who">
+          <span class="chakra-avatar" aria-hidden="true"><img src="./avatars/jonas.jpg" alt=""></span>
+          <div>
+            <h3 class="chakra-team__name">Jonas Lindqvist</h3>
+            <p class="chakra-team__role">Frontend engineer, Tidewater</p>
+          </div>
+        </div>
+        <p class="chakra-text chakra-text--muted">
+          Shipped dark mode by swapping semantic tokens instead of rewriting components.
+        </p>
+      </article>
+
+      <article class="chakra-card" data-testid="ck-user-priya">
+        <div class="chakra-team__who">
+          <span class="chakra-avatar" aria-hidden="true"><img src="./avatars/priya.jpg" alt=""></span>
+          <div>
+            <h3 class="chakra-team__name">Priya Raman</h3>
+            <p class="chakra-team__role">Product designer, Loomwise</p>
+          </div>
+        </div>
+        <p class="chakra-text chakra-text--muted">
+          Hands off spacing as token names, so design reviews argue about intent, not pixels.
+        </p>
+      </article>
+
+      <article class="chakra-card" data-testid="ck-user-mateo">
+        <div class="chakra-team__who">
+          <span class="chakra-avatar" aria-hidden="true"><img src="./avatars/mateo.jpg" alt=""></span>
+          <div>
+            <h3 class="chakra-team__name">Mateo Álvarez</h3>
+            <p class="chakra-team__role">Staff engineer, Northpine</p>
+          </div>
+        </div>
+        <p class="chakra-text chakra-text--muted">
+          Themes three white-label apps from one component library and one config each.
+        </p>
+      </article>
+    </div>
+  </section>
+
 </div>
+
+<footer class="chakra-footer" data-testid="ck-footer">
+  <div class="chakra-footer__inner">
+    <div class="chakra-footer__top">
+      <div>
+        <span class="chakra-footer__logo">Marigold</span>
+        <p class="chakra-footer__tagline">One theme object for every screen your team ships.</p>
+      </div>
+      <nav class="chakra-footer__cols" aria-label="Footer">
+        <div>
+          <h2 class="chakra-footer__heading">Product</h2>
+          <ul class="chakra-footer__links">
+            <li><a href="/fixtures/chakra/">Overview</a></li>
+            <li><a href="/fixtures/chakra/book-a-demo/">Book a demo</a></li>
+            <li><a href="#">Pricing</a></li>
+          </ul>
+        </div>
+        <div>
+          <h2 class="chakra-footer__heading">Resources</h2>
+          <ul class="chakra-footer__links">
+            <li><a href="#">Docs</a></li>
+            <li><a href="#">Theme reference</a></li>
+            <li><a href="#">Changelog</a></li>
+          </ul>
+        </div>
+        <div>
+          <h2 class="chakra-footer__heading">Company</h2>
+          <ul class="chakra-footer__links">
+            <li><a href="#">About</a></li>
+            <li><a href="#">Careers</a></li>
+            <li><a href="#">Contact</a></li>
+          </ul>
+        </div>
+      </nav>
+    </div>
+    <div class="chakra-footer__bottom">
+      <span>© 2026 Marigold</span>
+      <span><a href="#">Privacy</a> · <a href="#">Terms</a></span>
+    </div>
+  </div>
+</footer>
 
 <nav class="demo-switch" data-testid="demo-switch" aria-label="Demo pages">
   <a href="/">Vanilla</a>
   <a href="/fixtures/tailwind/">Tailwind</a>
   <a href="/fixtures/shadcn/">shadcn</a>
   <a href="/fixtures/chakra/" aria-current="page">Chakra</a>
+  <a href="/fixtures/longform/">Longform</a>
 </nav>
 
 <script src="/misbehave.js"></script>

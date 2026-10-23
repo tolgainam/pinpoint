@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.2
+
+- Typing `?` or `!` at the start of a note now says what it will do at once: a line above the
+  box ("You are asking a question", "You are adding to the backlog"), a coloured box, and the
+  button becomes Ask or Backlog. The space after the marker is optional, and a marker with
+  nothing after it cannot be sent.
+- Answers reach the pin. Claude's own calls came as `reply {id, message}` about as often as
+  `reply {id, text}`, and the bridge read only `text`, so half the answers arrived empty and the
+  pin said "answered" with nothing under it. `reply` now takes either name, refuses an empty
+  answer and tells Claude how to call it again, and `resolve_comment` takes the note under
+  `note` and the other names Claude uses as well as `resolution`.
+- Inspecting pauses while the pointer is over the toolbar, so no highlight hangs over Dispatch.
+- The toolbar stays open in a tab once you show it, through reloads, until you close it with the
+  cross or the icon. A new tab starts hidden.
+- A question's answer opens on its pin by itself, and a "resolved" message no longer covers it.
+- The composer sits below the element, or above it when there is no room, and keeps its Add
+  button in reach on a short window.
+- The toolbar no longer blinks for the whole wait before a screenshot; it hides only for the
+  moment of the capture.
+
 ## 0.4.1
 
 - Answers go back to the tab that asked. Before, the bridge sent every reply, resolve and

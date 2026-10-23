@@ -128,6 +128,13 @@ function capture() {
   return run
 }
 
+/** Wait out the gap since the last capture, so the page can hide itself only when it is time. */
+async function captureTurn() {
+  await captureQueue.catch(() => {})
+  const wait = Math.max(0, CAPTURE_GAP - (Date.now() - lastCapture))
+  if (wait) await new Promise(r => setTimeout(r, wait))
+}
+
 async function captureOnce() {
   const wait = Math.max(0, CAPTURE_GAP - (Date.now() - lastCapture))
   if (wait) await new Promise(r => setTimeout(r, wait))
@@ -267,6 +274,25 @@ async function ensureStream() {
   backoff = Math.min(backoff * 2, 30000)
 }
 
+// ---------------------------------------------------------------- open state
+
+const openKey = tabId => `open:${tabId}`
+
+async function openState(tabId) {
+  if (tabId == null) return false
+  try { return !!(await chrome.storage.session.get(openKey(tabId)))[openKey(tabId)] } catch { return false }
+}
+
+async function setOpenState(tabId, open) {
+  if (tabId == null) return
+  try {
+    if (open) await chrome.storage.session.set({ [openKey(tabId)]: true })
+    else await chrome.storage.session.remove(openKey(tabId))
+  } catch { /* session storage unavailable: the toolbar just starts hidden */ }
+}
+
+chrome.tabs.onRemoved.addListener(tabId => { setOpenState(tabId, false) })
+
 // ---------------------------------------------------------------- badge
 
 /**
@@ -338,6 +364,11 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
   if (msg?.type === 'backlog') { post('/backlog', routed(msg.payload, sender, msg.pick)).then(respond); return true }
   if (msg?.type === 'design-system') { post('/design-system', routed(msg.payload, sender, msg.pick)).then(respond); return true }
   if (msg?.type === 'recapture') { post('/recapture', msg.payload).then(respond); return true }
+  // Whether the toolbar was left open in this tab. Per tab, and gone with the tab or the
+  // browser session: a new tab starts hidden, as it always did.
+  if (msg?.type === 'open-state') { openState(sender.tab?.id).then(open => respond({ open })); return true }
+  if (msg?.type === 'set-open') { setOpenState(sender.tab?.id, !!msg.open).then(() => respond({ ok: true })); return true }
+  if (msg?.type === 'capture-wait') { captureTurn().then(() => respond({ ok: true })); return true }
   if (msg?.type === 'capture') { capture().then(respond); return true }
   // The welcome page's bridge check: no page and no pick, so the bridge answers for no
   // tab in particular. Asked once on open and on "Check again", never on a timer.

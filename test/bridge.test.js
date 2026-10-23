@@ -126,6 +126,36 @@ test('every Phase D tool is advertised', async () => {
   }
 })
 
+test('reply refuses an empty answer and says how to call it, and takes the usual other names', async () => {
+  const empty = await call('reply', { id: '20260101-000000-abcd#1' })
+  assert.equal(empty.isError, true)
+  assert.match(textOf(empty), /needs `text`/)
+  assert.equal((await call('reply', { id: '20260101-000000-abcd#1', text: '   ' })).isError, true)
+
+  // Claude's own calls used `message` about as often as `text`. Both arrive.
+  await call('reply', { id: '20260101-000000-abcd#1', message: 'Sent as message.' })
+  await waitFor(e => e.type === 'reply' && e.text === 'Sent as message.', 'the reply sent as message')
+
+  const before = events.length
+  const ok = await call('reply', { id: '20260101-000000-abcd#1', answer: 'It is the secondary style.' })
+  assert.notEqual(ok.isError, true)
+  const sent = await waitFor(e => e.type === 'reply' && e.text === 'It is the secondary style.', 'the reply event')
+  assert.equal(events.length > before, true)
+  assert.equal(sent.id, '20260101-000000-abcd#1')
+})
+
+test('resolve_comment takes the note under the names Claude uses for it', async () => {
+  const res = await post('/dispatch', {
+    origin: 'http://localhost:3000',
+    url: 'http://localhost:3000/',
+    comments: [{ note: 'tighten this', selector: '[data-testid="cta"]', rect: { x: 4, y: 4, w: 80, h: 30 } }],
+  })
+  assert.equal(res.ok, true)
+  // Claude's own calls came as {id, note} as well as {id, resolution}.
+  await call('resolve_comment', { id: `${res.batch}#1`, note: 'Raised the padding to 14px' })
+  assert.match(history(), /Raised the padding to 14px/)
+})
+
 test('a dispatched batch reaches list_comments and the history file', async () => {
   const res = await post('/dispatch', {
     origin: 'http://localhost:3000',

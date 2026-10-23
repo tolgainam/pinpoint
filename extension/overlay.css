@@ -154,7 +154,7 @@
   z-index: var(--pp-z-card);
   pointer-events: auto;
   /* A stack of comments can outgrow the viewport; scroll it rather than run off-screen. */
-  max-height: 70vh;
+  max-height: calc(100vh - 2 * var(--pp-space-8));
   overflow-y: auto;
   /* Wider than the pin card needs, for the breadcrumb: at 300px only four ancestors
      fit before it starts scrolling, which is most of a chain hidden by default. */
@@ -259,6 +259,34 @@
 }
 
 .card .hint.show { opacity: 1; }
+
+/* What the note will do, above the box. The row is always there, so a marker typed into the
+   box changes colour and words and never moves anything. */
+.card .intent {
+  min-height: 16px;
+  margin-bottom: var(--pp-space-5);
+  font-size: var(--pp-text-sm);
+  line-height: 1.3;
+  color: var(--pp-dim);
+}
+.card .intent strong { margin-right: var(--pp-space-6); font-weight: var(--pp-weight-bold); }
+
+/* The box itself takes the colour of what it will become: the same purple as a question's pin
+   and button, the grey of a parked pin. Declared after the focus rule so the colour holds. */
+.card[data-kind="question"] .intent strong,
+.card[data-kind="question"] .intent { color: var(--pp-question-fg); }
+.card[data-kind="question"] textarea,
+.card[data-kind="question"] textarea:focus {
+  border-color: var(--pp-question);
+  background: var(--pp-question-wash-faint);
+}
+.card[data-kind="backlog"] .intent strong,
+.card[data-kind="backlog"] .intent { color: var(--pp-backlog-fg); }
+.card[data-kind="backlog"] textarea,
+.card[data-kind="backlog"] textarea:focus {
+  border-color: var(--pp-backlog-ring);
+  background: var(--pp-backlog-wash-faint);
+}
 
 .card .kind {
   display: inline-block;
@@ -583,6 +611,15 @@ button.close:hover:not(:disabled) { color: var(--pp-fg); }
 /* Resolved comments recede: what is still in flight should read loudest. */
 .card .sect.done { opacity: 0.7; }
 
+.card > .row {
+  /* The Add button is the way out of the composer: it stays in reach when the card scrolls. */
+  position: sticky;
+  bottom: calc(-1 * var(--pp-space-10));
+  padding-bottom: var(--pp-space-10);
+  margin-bottom: calc(-1 * var(--pp-space-10));
+  background: var(--pp-bg);
+}
+
 .card .sect.action { border-left-color: var(--pp-accent); background: var(--pp-accent-wash-faint); }
 .card .sect.question { border-left-color: var(--pp-question); background: var(--pp-question-wash-faint); }
 .card .sect.backlog { border-left-color: var(--pp-backlog-ring); background: var(--pp-backlog-wash-faint); }
@@ -643,6 +680,11 @@ button.primary:hover:not(:disabled) { filter: brightness(1.08); }
 
 /* The primary button changes colour the moment the note starts with `?`. That colour
    is the whole confirmation that question mode is on — there is no switch to look at. */
+button.primary.park {
+  background: var(--pp-backlog);
+  border-color: var(--pp-backlog-ring);
+  color: var(--pp-backlog-fg);
+}
 button.primary.ask {
   background: var(--pp-question);
   border-color: var(--pp-question);

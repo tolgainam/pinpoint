@@ -32,8 +32,8 @@ If a store link is printed at the top of the output, tell the user to install fr
 the folder steps below it are the fallback for developers.
 
 The install is done when, on their dev page, clicking the Pinpoint icon shows the
-toolbar and the pill on it shows their project name. The toolbar starts hidden, so a
-page with no toolbar before that click is normal.
+toolbar and the pill on it shows their project name. The toolbar starts hidden in a new tab, so a
+page with no toolbar before that click is normal. After that it stays open in the tab.
 
 Then look at the checks at the end of the output:
 

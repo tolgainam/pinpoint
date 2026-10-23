@@ -199,7 +199,7 @@ ${storeBlock()}
     4. pin the icon: click the puzzle piece in Chrome's toolbar, then the pin next to Pinpoint
 
   Then open your dev app on localhost and click the Pinpoint icon.
-  The toolbar starts hidden; the icon is what shows it. That click also lets
+  The toolbar starts hidden in a new tab; the icon shows it, and it then stays open. That click also lets
   Pinpoint take screenshots of that tab.
 
   Other sites (a staging server, say): the same click asks your browser for that one

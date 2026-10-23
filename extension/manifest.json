@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Pinpoint",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Pin comments to elements on a local dev page and dispatch them into a running Claude Code session.",
   "permissions": ["storage", "tabs", "scripting", "activeTab"],
   "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"],

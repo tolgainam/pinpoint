@@ -496,9 +496,12 @@
   const MARKER = { '?': 'question', '!': 'backlog' }
 
   function intentOf(note) {
-    const m = note.match(/^\s*([?!])\s*(\S[\s\S]*)$/)
+    // A space after the marker is optional (`?why` works as well as `? why`), and the marker
+    // counts the moment it is typed, before any text follows, so the composer can say so.
+    const m = note.match(/^\s*([?!])\s*([\s\S]*)$/)
     // The marker never travels with the text: it would land in the batch heading and in
-    // backlog titles, where it reads as a typo.
+    // backlog titles, where it reads as a typo. Only the first one counts: a `?` later in the
+    // note is part of the question.
     return m ? { kind: MARKER[m[1]], text: m[2].trim() } : { kind: null, text: note.trim() }
   }
 
@@ -614,6 +617,10 @@
   let lastShotError = ''
 
   async function captureViewport() {
+    // Chrome allows two captures a second and the worker spaces them out. Wait for the
+    // turn first, while the toolbar is still showing: waiting after it was hidden made the
+    // whole overlay blink for as long as the queue took.
+    try { await send({ type: 'capture-wait' }) } catch { /* the capture below reports it */ }
     host.style.visibility = 'hidden'
     await nextPaint()
     try {
@@ -759,12 +766,42 @@
     if (mode) hideHighlight()
   }
 
-  /** Keep a card fully on screen no matter which corner the element sits in. */
-  function placeCard(card, x, y) {
+  /**
+   * Put a card next to what it is about and keep all of it on screen.
+   *
+   * With the element's rect it goes below the element when the whole card fits there, above
+   * it when that fits instead, and otherwise at the edge nearest the click. Clamping alone,
+   * which this used to do, pushed a tall card up over the element it was about, and a card
+   * that grew afterwards ran off the bottom with its Add button out of reach.
+   *
+   * The anchor is remembered, so a card whose content changes (the crumbs, the picker, a
+   * longer answer) is placed again as it grows.
+   */
+  function placeCard(card, x, y, rect) {
+    if (rect !== undefined || !card._anchor) card._anchor = { x, y, rect }
+    const a = card._anchor
+    const m = 8
     const w = card.offsetWidth || 320
-    const h = card.offsetHeight || 160
-    card.style.left = `${Math.max(8, Math.min(x, innerWidth - w - 8))}px`
-    card.style.top = `${Math.max(8, Math.min(y, innerHeight - h - 8))}px`
+    const h = Math.min(card.offsetHeight || 160, innerHeight - 2 * m)
+    let top = a.y
+    const r = typeof a.rect === 'function' ? a.rect() : a.rect
+    if (r) {
+      const below = r.bottom + m
+      const above = r.top - h - m
+      if (below + h <= innerHeight - m) top = below
+      else if (above >= m) top = above
+    }
+    card.style.left = `${Math.max(m, Math.min(a.x, innerWidth - w - m))}px`
+    card.style.top = `${Math.max(m, Math.min(top, innerHeight - h - m))}px`
+    if (!card._watch && window.ResizeObserver) {
+      let last = card.offsetHeight
+      card._watch = new ResizeObserver(() => {
+        if (card.offsetHeight === last) return
+        last = card.offsetHeight
+        placeCard(card, a.x, a.y)
+      })
+      card._watch.observe(card)
+    }
   }
 
   function openComposer(target, x, y, snapRect) {
@@ -780,6 +817,12 @@
     const box = el('textarea')
     box.placeholder = 'What is wrong here?    ⌘↵ add · ? ask · ! backlog'
     const hint = el('div', 'hint')
+    // Above the box, so what the note is going to do is read before it is written. It always
+    // takes its row, so typing a marker does not move the box.
+    const intent = el('div', 'intent')
+    const intentTitle = el('strong', '')
+    const intentSub = el('span', '')
+    intent.append(intentTitle, intentSub)
 
     const row = el('div', 'row')
     const shotLabel = el('label', 'toggle')
@@ -800,13 +843,13 @@
     const cancel = el('button', '', 'Cancel')
     const add = el('button', 'primary', 'Add')
     row.append(shotLabel, el('span', 'spacer'), cancel, add)
-    card.append(crumbs, meta, chips, picker, box, hint, row)
+    card.append(crumbs, meta, chips, picker, intent, box, hint, row)
     layer.append(card)
     openCard = card
     card.cleanup = restorePreviews
     // Whether Park is possible changes with the 5s ping, so the toolbar repaints this.
     card.repaintIntent = () => paintIntent()
-    placeCard(card, x + 12, y + 12)
+    placeCard(card, x + 12, y + 12, () => (snapRect && depth === 0 ? snapRect : target.getBoundingClientRect()))
     box.focus()
 
     // ------------------------------------------------------------ token chips
@@ -1048,6 +1091,7 @@
       paintCrumbs()
       paintMeta()
       paintChips()
+      if (card.isConnected) placeCard(card, x + 12, y + 12)
 
       if (entry.probed) return
       entry.probed = true
@@ -1106,16 +1150,29 @@
     /** The button and the hint are the only confirmation that a marker took effect,
         so both change on the keystroke that types it. */
     function paintIntent() {
-      const { kind } = intentOf(box.value)
+      const { kind, text } = intentOf(box.value)
+      card.dataset.kind = kind ?? ''
       add.textContent = kind === 'question' ? 'Ask' : kind === 'backlog' ? 'Backlog' : 'Add'
       add.classList.toggle('ask', kind === 'question')
-      // Park needs a project to write into, though not a running session.
-      add.disabled = kind === 'backlog' && !status.canPark
-      hint.textContent =
-        kind === 'question' ? 'question — Claude answers on the pin and changes no files'
-        : kind === 'backlog' && !status.canPark ? 'Pick a project from the status pill first.'
-        : kind === 'backlog' ? 'parked — appended to .pinpoint/backlog.md, never dispatched'
-        : deltas.size ? `${deltas.size} picked value${deltas.size === 1 ? ' rides' : 's ride'} with this comment`
+      add.classList.toggle('park', kind === 'backlog')
+      // Park needs a project to write into, though not a running session. A marker with
+      // nothing after it asks nothing, unless a picked value carries the request.
+      add.disabled = (kind === 'backlog' && !status.canPark) || (!!kind && !text && !deltas.size)
+      if (kind === 'question') {
+        intentTitle.textContent = 'You are asking a question'
+        intentSub.textContent = '· Claude answers on the pin, no files change'
+        intent.title = ''
+      } else if (kind === 'backlog') {
+        intentTitle.textContent = 'You are adding to the backlog'
+        intentSub.textContent = status.canPark ? '· saved for later, not sent now' : '· pick a project first'
+        intent.title = 'Saved to .pinpoint/backlog.md in the project. Claude reads it when you ask it to.'
+      } else {
+        intentTitle.textContent = ''
+        intentSub.textContent = '? asks a question · ! adds to the backlog'
+        intent.title = ''
+      }
+      hint.textContent = !kind && deltas.size
+        ? `${deltas.size} picked value${deltas.size === 1 ? ' rides' : 's ride'} with this comment`
         : ''
       hint.classList.toggle('show', !!hint.textContent)
     }
@@ -1126,8 +1183,12 @@
       const picks = [...deltas.values()]
       // A picked value is a complete request on its own — "padding → p-8" leaves nothing
       // to ask about — so the note stops being mandatory once there is one.
-      const note = box.value.trim()
-        || picks.map(d => `${d.prop} → ${d.toToken ?? d.to}`).join(', ')
+      const raw = box.value.trim()
+      const picked = picks.map(d => `${d.prop} → ${d.toToken ?? d.to}`).join(', ')
+      const typed = intentOf(raw)
+      // A marker with nothing after it is not a note. With picks it still is: the picks are
+      // the request, and the marker only says what kind.
+      const note = typed.kind && !typed.text ? (picked ? `${raw[0]} ${picked}` : '') : (raw || picked)
       if (!note) { box.focus(); return }
       // Checked here and not only on the button, because ⌘↵ calls this directly.
       if (intentOf(note).kind === 'backlog' && !status.canPark) { paintIntent(); box.focus(); return }
@@ -1456,7 +1517,7 @@
       card.refresh = fill
       // Re-anchor: the card is shorter now, and a clamped one should drift back toward
       // the pin rather than stay pushed up against the viewport edge.
-      placeCard(card, x + 12, y + 12)
+      placeCard(card, x + 12, y + 12, { top: y, bottom: y + 24, left: x, right: x + 24 })
     }
 
     layer.append(card)
@@ -1533,6 +1594,16 @@
       return { pin, comment: c, stack }
     })
     positionPins()
+  }
+
+  /** Open the card of the pin this comment is on, if the pin is on screen. */
+  function revealPin(c) {
+    const entry = pinNodes.find(p => p.stack.includes(c))
+    if (!entry) return false
+    const r = entry.pin.getBoundingClientRect()
+    if (r.width === 0 || r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) return false
+    openPinCard(entry.stack, r.left, r.top)
+    return true
   }
 
   /**
@@ -1711,7 +1782,7 @@
   layer.append(toast)
 
   let toastTimer
-  function say(text, bad) {
+  function say(text, bad, ms = 3200) {
     toast.textContent = text
     toast.classList.toggle('bad', !!bad)
     toast.classList.add('show')
@@ -1719,7 +1790,7 @@
     toast.style.left = `${Math.max(8, r.left)}px`
     toast.style.top = `${Math.max(8, r.top - 36)}px`
     clearTimeout(toastTimer)
-    toastTimer = setTimeout(() => toast.classList.remove('show'), 3200)
+    toastTimer = setTimeout(() => toast.classList.remove('show'), ms)
   }
 
   modeBtn.onclick = () => setMode(!mode)
@@ -1736,10 +1807,11 @@
    * this is "get out of my way while I look at the page", not "forget everything". The
    * toolbar icon brings it back, which is also how it was summoned in the first place.
    *
-   * Every page load starts hidden, and that is deliberate: the script mounts on every
-   * localhost page, and a toolbar sitting over an app you only meant to look at is in the
-   * way more often than not. Nothing is stored, so the next load is hidden again. Comments,
-   * the bridge and the badge keep running underneath, exactly as they do after ✕.
+   * A new tab starts hidden, and that is deliberate: the script mounts on every localhost
+   * page, and a toolbar sitting over an app you only meant to look at is in the way more
+   * often than not. Showing it is remembered for that tab (see rememberOpen), so it is not
+   * summoned again on every reload. Comments, the bridge and the badge keep running
+   * underneath, exactly as they do after ✕.
    */
   let hidden = true
   function setHidden(on) {
@@ -1751,8 +1823,25 @@
     if (!on) { placed ? clampBar() : placeBar(); paintTip() }
   }
 
+  /**
+   * The toolbar stays where you left it. Showing it in a tab keeps it showing through reloads
+   * and navigation in that tab until you hide it with the cross or the icon; a new tab starts
+   * hidden. The worker keeps the flag, per tab. Only a choice made here writes it, so the
+   * hidden start of a fresh page cannot overwrite what the last page left behind.
+   */
+  const rememberOpen = () => { send({ type: 'set-open', open: !hidden }).catch(() => {}) }
+
   // Closing the toolbar is a clear enough "I have seen it" for the tip as well.
-  closeBtn.onclick = () => { dismissTip(); setHidden(true) }
+  closeBtn.onclick = () => { dismissTip(); setHidden(true); rememberOpen() }
+
+  /**
+   * Over the toolbar, inspecting pauses. The pointer events there belong to the toolbar, so
+   * the capture layer stops hearing the mouse and the highlight stayed behind on whatever page
+   * element it was last on: a dashed box and a size label hanging over the buttons while you
+   * aimed at Dispatch. Hide it on the way in; the next move over the page brings it back. A
+   * pinned selection (the composer is open) is not a hover and stays.
+   */
+  bar.addEventListener('pointerenter', () => { if (mode && !frozen && !openCard) hideHighlight() })
 
   // Drag by the grip only, so the buttons stay clickable.
   let drag = null
@@ -2264,13 +2353,22 @@
     // stays there. An unaddressed one is a status line, and a toast is all it deserves.
     if (ev.type === 'reply') {
       const hit = ev.id ? byServerId(ev.id) : null
+      if (hit && !String(ev.text ?? '').trim()) {
+        // Nothing to show. Marking the pin "answered" over an empty card is what hid this.
+        say(`#${hit.n} — Claude replied without an answer. Look in the terminal.`, true, 6000)
+        return
+      }
       if (hit) {
         hit.answer = ev.text
         if (hit.status !== 'resolved') hit.status = 'answered'
         save()
         render()
+        // The answer is the point, so show it: open the pin's card instead of leaving it
+        // behind a click. Not over a card that is already open, and not for a pin that is
+        // off screen, where the toast has to carry it.
+        if (hit.question && !openCard && revealPin(hit)) return
       }
-      if (ev.text) say(`${hit ? `#${hit.n} — ` : ''}${ev.text}`.slice(0, 180))
+      if (ev.text) say(`${hit ? `#${hit.n} — ` : ''}${ev.text}`.slice(0, 600), false, 9000)
       return
     }
 
@@ -2313,6 +2411,10 @@
     if (ev.resolution) hit.resolution = ev.resolution
     save()
     render()
+    // A question is closed by its answer. Claude often resolves it right after replying, and
+    // a "resolved" toast over the answer is how the answer got lost. If the card is open,
+    // it keeps showing the answer and that is all there is to say.
+    if (hit.question && hit.answer) { openCard?.refresh?.(); return }
     say(`✓ #${hit.n} resolved${ev.resolution ? ` — ${ev.resolution}` : ''}`)
   }
 
@@ -2395,13 +2497,14 @@
     // mean different things. Comment mode lives on the toolbar's own button.
     if (msg?.type === 'toggle') {
       setHidden(!hidden)
+      rememberOpen()
       respond({ ok: true, mode, hidden })
       return false
     }
     // Freezing an overlay nobody can see would pin against an invisible toolbar, so the
     // hotkey brings it up first.
     if (msg?.type === 'freeze') {
-      if (hidden) setHidden(false)
+      if (hidden) { setHidden(false); rememberOpen() }
       freezeFrame()
       respond({ ok: true })
       return false
@@ -2437,6 +2540,8 @@
 
   await load()
   await tipLoaded
+  // A tab where the toolbar was left open opens it again.
+  send({ type: 'open-state' }).then(r => { if (r?.open && hidden) setHidden(false) }).catch(() => {})
   render()
   paintTip()
   ping()

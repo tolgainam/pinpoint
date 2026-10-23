@@ -99,7 +99,8 @@ Nothing else: dependencies install themselves with the plugin.
    tab opens once on install with the same steps.
 
 6. **Open your dev app on `localhost` and click the Pinpoint icon.** The toolbar starts
-   hidden on every page; the icon shows and hides it. On any other site, such as a staging
+   hidden in a new tab. Once you show it, it stays open in that tab, through reloads, until
+   you close it with ✕ or the icon. On any other site, such as a staging
    server, the same click asks your browser for that one site.
 
 Setup ends with the same checks as `/pinpoint:doctor`, each failure with its fix.
@@ -227,7 +228,7 @@ prints the fix for each problem.
 | Pill says **Offline** | No Claude Code session is running Pinpoint's bridge | Start Claude Code in your project, then Retry in the pill. Still Offline: `/pinpoint:doctor` |
 | Pill says **Choose** | Pinpoint can't tell which project this page belongs to | Click the pill and pick a session; the pick is kept for this port |
 | Pill shows your project, but Dispatch is off | No session is running in that folder (the popover says "No Claude Code in ...") | Start Claude Code there, or pick another session from the pill |
-| No toolbar at all | It starts hidden on every page | Click the Pinpoint icon. Pin it (puzzle piece, then pin) if you can't see it |
+| No toolbar at all | It starts hidden in a new tab | Click the Pinpoint icon once; it then stays open in that tab. Pin it (puzzle piece, then pin) if you can't see it |
 | Hovering highlights nothing | Pinpoint only attaches to `http://localhost/*` and `http://127.0.0.1/*`, by design | Check the address bar: `0.0.0.0`, a LAN IP, `.local` or https:// do nothing |
 | Comments arrive without screenshots | Chrome allows a screenshot only after an icon click, and forgets it on every page load | Click the icon once after each load. Comments still send without one |
 | Dispatch works, nothing appears in the session | Channels are off for this session, so comments wait in the queue | Run `/pinpoint:comments`, or restart with the flag in [Two ways to receive comments](#two-ways-to-receive-comments) |
@@ -237,12 +238,14 @@ prints the fix for each problem.
 ## Use
 
 Open your dev app on `http://localhost:…`, then click the Pinpoint icon in Chrome's
-toolbar. The overlay starts hidden on every page load; the icon shows it and clicking it
-again hides it. Pins and comments keep working while it is hidden.
+toolbar. The overlay starts hidden in a new tab. The icon shows it, and it then stays open in that
+tab, through reloads and navigation, until you hide it with ✕ or by clicking the icon again.
+Pins and comments keep working while it is hidden.
 
-> **It only attaches to `http://localhost/*` and `http://127.0.0.1/*`.** That is deliberate
-> and not configurable. On `0.0.0.0`, a LAN IP, a `.local` hostname, or any https:// site,
-> nothing will happen at all — check the address bar before assuming it is broken.
+> **`http://localhost` and `http://127.0.0.1` are always on.** Any other http or https site, such
+> as a staging server, asks your browser for that one site when you click the icon; say no and
+> it still works for that page. On `0.0.0.0`, a LAN IP or a `.local` hostname, check the address
+> bar before assuming it is broken.
 
 Left to right:
 
@@ -324,9 +327,11 @@ nothing on screen for the comments that don't need it.
 | `?` | A question. Claude answers with `reply` and changes no files; the answer lands on the pin card. The button turns violet. |
 | `!` | Parked on the backlog instead of dispatched. |
 
-Only the first marker counts, and it has to have a note after it — a comment that
-genuinely reads `!` is still a note. The button label and the line under the box both
-change on the keystroke that types the marker, so you can see it took.
+Only the first character counts, and a space after it is optional: `?why` and `? why` are
+the same. A `?` later in the note is just part of the question. As soon as you type the
+marker, a line above the box says what the note will do ("You are asking a question",
+"You are adding to the backlog"), the box takes its colour, and the button becomes **Ask** or
+**Backlog**. A marker with nothing after it cannot be sent.
 
 ### Park it for later
 

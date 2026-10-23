@@ -28,6 +28,13 @@ if (!browser.ok) console.log(`e2e skipped: ${browser.why}`)
 /** A bridge that answers /health as one running session and keeps every dispatch it gets. */
 function recordingBridge(version) {
   const dispatched = []
+  const streams = new Set()
+  let seq = 0
+  /** Claude's side: an event on the stream the extension is listening to. */
+  const emit = event => {
+    const frame = `data: ${JSON.stringify({ seq: ++seq, projectDir: PROJECT.projectDir, ...event })}\n\n`
+    for (const res of streams) res.write(frame)
+  }
   /** A bridge started with PINPOINT_TOKEN asks every POST for it. Empty means it does not. */
   const state = { token: '' }
   const server = createServer((req, res) => {
@@ -41,7 +48,10 @@ function recordingBridge(version) {
     }
     if (url.pathname === '/events') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' })
-      return res.write(': stub\n\n')
+      res.write(': stub\n\n')
+      streams.add(res)
+      req.on('close', () => streams.delete(res))
+      return
     }
     if (url.pathname === '/design-system') return json(200, { ok: true, detected: false })
     if (url.pathname === '/dispatch' && req.method === 'POST') {
@@ -50,14 +60,14 @@ function recordingBridge(version) {
       req.on('data', d => { body += d })
       req.on('end', () => {
         dispatched.push(JSON.parse(body))
-        json(200, { ok: true, batch: 'e2e-0001', count: dispatched.at(-1).comments.length, projectDir: PROJECT.projectDir, name: PROJECT.name })
+        json(200, { ok: true, batch: `e2e-000${dispatched.length}`, count: dispatched.at(-1).comments.length, projectDir: PROJECT.projectDir, name: PROJECT.name })
       })
       return
     }
     json(404, { ok: false })
   })
   server.keepAliveTimeout = 0
-  return { server, dispatched, state }
+  return { server, dispatched, state, emit }
 }
 
 let context, page, worker, demo, bridge, profile, ext, bridgeServer
@@ -139,9 +149,26 @@ test('a pin survives a reload', { skip: !browser.ok, timeout: 60000 }, async () 
     await new Promise(r => setTimeout(r, 50))
   }
   await page.reload()
-  await host('.bar').waitFor({ state: 'attached', timeout: 15000 })
-  await iconClick()
+  // The toolbar was open before the reload, so it is open after it: no icon click.
+  await host('.bar').waitFor({ timeout: 15000 })
   await host('.pin').first().waitFor({ timeout: 15000 })
+})
+
+test('the toolbar stays open through reloads until it is closed, and a closed one stays closed', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await page.reload()
+  await host('.bar').waitFor({ timeout: 15000 })
+  // Closed with the cross: a reload does not bring it back.
+  await host('.bar > button').last().click()
+  await host('.bar').waitFor({ state: 'hidden', timeout: 5000 })
+  await page.reload()
+  await host('.bar').waitFor({ state: 'attached', timeout: 15000 })
+  await page.waitForTimeout(800)
+  assert.equal(await host('.bar').isVisible(), false)
+  // The icon opens it again, and that is remembered too.
+  await iconClick()
+  await host('.bar').waitFor({ timeout: 15000 })
+  await page.reload()
+  await host('.bar').waitFor({ timeout: 15000 })
 })
 
 test('the saved bridge token is sent, and a bridge that wants one says so', { skip: !browser.ok, timeout: 60000 }, async () => {
@@ -201,13 +228,237 @@ test('the welcome page offers lasting screenshot access and starts with it off',
   }
 })
 
+test('the composer stays on screen for an element at the bottom of the page', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await page.goto(`http://localhost:${demo.port}/`)
+  await host('.bar').waitFor({ timeout: 15000 })
+  // A short window puts the button near the bottom edge, with no room for the card below it.
+  await page.setViewportSize({ width: 1280, height: 560 })
+  await page.waitForTimeout(200)
+  await host('.mode').click()
+  const box = await page.locator('[data-testid="cta-secondary"]').boundingBox()
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+  await host('.card textarea').waitFor()
+  await page.waitForTimeout(300)
+
+  const { width, height } = page.viewportSize()
+  const card = await host('.card').boundingBox()
+  const add = await host('.card button.primary').boundingBox()
+  assert.ok(card.y >= 0 && card.y + card.height <= height, `the card runs off the screen: ${JSON.stringify(card)}`)
+  assert.ok(add.y >= 0 && add.y + add.height <= height, `the Add button is out of reach: ${JSON.stringify(add)}`)
+  assert.ok(card.x >= 0 && card.x + card.width <= width)
+  // Above the button, not on top of it, because there was no room below.
+  assert.ok(card.y + card.height <= box.y + 1, `the card covers the element it is about: card ${JSON.stringify(card)} element ${JSON.stringify(box)}`)
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Escape')
+  await page.setViewportSize({ width: 1280, height: 800 })
+})
+
+test('an answer is shown on the pin without hunting for it, and "resolved" does not hide it', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await page.evaluate(() => window.scrollTo(0, 0))
+  await host('.mode').click()
+  const box = await page.locator('[data-testid="cta-secondary"]').boundingBox()
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+  await host('.card textarea').fill('? why is this grey')
+  await host('.card input[type=checkbox]').first().uncheck().catch(() => {})
+  await host('.card button.primary').click()
+  await page.keyboard.press('Escape')
+  await host('button.primary', { hasText: 'Dispatch' }).first().click()
+  await page.waitForFunction(() => true)
+  const until = Date.now() + 8000
+  while (Date.now() < until && !(bridge.dispatched.at(-1)?.comments?.[0]?.question)) await new Promise(r => setTimeout(r, 50))
+  assert.ok(bridge.dispatched.at(-1)?.comments?.[0]?.question, 'the question was not dispatched')
+  const batch = `e2e-000${bridge.dispatched.length}`
+  await page.waitForTimeout(500)
+
+  bridge.emit({ type: 'reply', id: `${batch}#1`, text: 'It is the secondary button style.' })
+  await host('.card .answer').filter({ hasText: 'secondary button style' }).waitFor({ timeout: 8000 })
+
+  // Claude usually resolves a question right after answering. The answer must stay.
+  bridge.emit({ type: 'resolved', id: `${batch}#1`, resolution: '' })
+  await page.waitForTimeout(700)
+  assert.equal(await host('.card .answer').filter({ hasText: 'secondary button style' }).count(), 1)
+  assert.equal(await host('.toast.show').filter({ hasText: 'resolved' }).count(), 0)
+  await page.keyboard.press('Escape')
+})
+
+test('inspecting pauses over the toolbar, so no highlight hangs over the buttons', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await page.goto(`http://localhost:${demo.port}/`)
+  await host('.bar').waitFor({ timeout: 15000 })
+  await host('.mode').click()
+  const shown = () => page.evaluate(() => {
+    const hl = document.getElementById('pinpoint-host').shadowRoot.querySelector('.highlight')
+    return !!hl && getComputedStyle(hl).display !== 'none'
+  })
+  // Hovering the page highlights an element...
+  const hero = await page.locator('[data-testid="hero-title"]').boundingBox()
+  await page.mouse.move(hero.x + 20, hero.y + 10)
+  await page.mouse.move(hero.x + 40, hero.y + 12)
+  await page.waitForTimeout(200)
+  assert.equal(await shown(), true, 'nothing was highlighted on the page')
+  // ...and moving onto the toolbar puts the highlight away.
+  const send = await host('button.primary').first().boundingBox()
+  await page.mouse.move(send.x + send.width / 2, send.y + send.height / 2, { steps: 6 })
+  await page.waitForTimeout(200)
+  assert.equal(await shown(), false, 'the highlight is still up over the toolbar')
+  // Back on the page it comes back.
+  await page.mouse.move(hero.x + 20, hero.y + 10, { steps: 6 })
+  await page.waitForTimeout(200)
+  assert.equal(await shown(), true, 'inspecting did not resume on the page')
+  await page.keyboard.press('Escape')
+})
+
+test('only a leading ? makes a question; the other question marks stay in the text', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await page.evaluate(() => window.scrollTo(0, 0))
+  /** Write a note on an element, dispatch it, and return what the bridge received. */
+  async function sent(selector, note) {
+    const before = bridge.dispatched.length
+    await host('.mode').click()
+    const box = await page.locator(selector).boundingBox()
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+    await host('.card textarea').fill(note)
+    await host('.card input[type=checkbox]').first().uncheck().catch(() => {})
+    await host('.card button.primary').click()
+    await page.keyboard.press('Escape')
+    await host('button.primary', { hasText: 'Dispatch' }).first().click()
+    const until = Date.now() + 8000
+    while (bridge.dispatched.length === before && Date.now() < until) await new Promise(r => setTimeout(r, 50))
+    assert.ok(bridge.dispatched.length > before, `nothing was dispatched for: ${note}`)
+    await page.waitForTimeout(300)
+    return bridge.dispatched.at(-1).comments[0]
+  }
+
+  // The first character decides. The rest, question marks included, is just the question.
+  const asked = await sent('[data-testid="hero-sub"]', '? What about the changes we did ? And the color of the button ?')
+  assert.equal(asked.question, true)
+  assert.equal(asked.note, 'What about the changes we did ? And the color of the button ?')
+
+  const doubled = await sent('[data-testid="hero-title"]', '?? why is this big?')
+  assert.equal(doubled.question, true)
+  assert.equal(doubled.note, '? why is this big?')
+
+  // A question mark anywhere but the start changes nothing: it is an ordinary request.
+  const plain = await sent('[data-testid="cta-primary"]', 'Can this button be larger? And the colour too?')
+  assert.notEqual(plain.question, true)
+  assert.equal(plain.note, 'Can this button be larger? And the colour too?')
+})
+
+test('a marker at the start changes the composer at once, with or without a space after it', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await page.evaluate(() => window.scrollTo(0, 0))
+  await host('.mode').click()
+  const box = await page.locator('[data-testid="hero-sub"]').boundingBox()
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+  const area = host('.card textarea')
+  const card = host('.card')
+  await area.waitFor()
+  await host('.card input[type=checkbox]').first().uncheck().catch(() => {})
+  const add = host('.card button.primary')
+  const kind = () => card.getAttribute('data-kind')
+
+  // Nothing special yet: a plain note, and a line that says what the markers do.
+  assert.equal(await kind(), '')
+  assert.match(await host('.card .intent').innerText(), /asks a question.*adds to the backlog/)
+
+  // The marker alone already switches the mode, and asks for something after it.
+  await area.fill('?')
+  assert.equal(await kind(), 'question')
+  assert.match(await host('.card .intent').innerText(), /You are asking a question/)
+  assert.equal((await add.innerText()).trim(), 'Ask')
+  assert.equal(await add.isDisabled(), true, 'a bare ? should not be sendable')
+
+  // No space needed.
+  await area.fill('?why is this grey')
+  assert.equal(await kind(), 'question')
+  assert.equal(await add.isDisabled(), false)
+
+  await area.fill('!')
+  assert.equal(await kind(), 'backlog')
+  assert.match(await host('.card .intent').innerText(), /You are adding to the backlog/)
+  assert.equal((await add.innerText()).trim(), 'Backlog')
+  assert.equal(await add.isDisabled(), true)
+
+  await area.fill('!tidy this up later')
+  assert.equal(await kind(), 'backlog')
+  assert.equal(await add.isDisabled(), false)
+
+  // Only the start counts.
+  await area.fill('why is this grey?')
+  assert.equal(await kind(), '')
+
+  // And it travels as a question, without the marker.
+  await area.fill('?why is this grey')
+  const before = bridge.dispatched.length
+  await add.click()
+  await page.keyboard.press('Escape')
+  await host('button.primary', { hasText: 'Dispatch' }).first().click()
+  const until = Date.now() + 8000
+  while (bridge.dispatched.length === before && Date.now() < until) await new Promise(r => setTimeout(r, 50))
+  const sent = bridge.dispatched.at(-1).comments[0]
+  assert.equal(sent.question, true)
+  assert.equal(sent.note, 'why is this grey')
+})
+
+test('an answer goes to the tab that asked, not to another copy of the same page', { skip: !browser.ok, timeout: 90000 }, async () => {
+  const url = `http://localhost:${demo.port}/`
+  await page.goto(url)
+  await host('.bar').waitFor({ timeout: 15000 })
+
+  // A second copy of the page, with its own toolbar, in another tab.
+  const other = await context.newPage()
+  await other.goto(url)
+  await other.bringToFront()
+  await worker.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+    await chrome.tabs.sendMessage(tab.id, { type: 'toggle' })
+  })
+  await other.locator('#pinpoint-host .bar').waitFor({ timeout: 15000 })
+  await page.bringToFront()
+
+  // Ask from the first tab.
+  await host('.mode').click()
+  const box = await page.locator('[data-testid="cta-secondary"]').boundingBox()
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+  await host('.card textarea').fill('? which tab asked')
+  await host('.card input[type=checkbox]').first().uncheck().catch(() => {})
+  await host('.card button.primary').click()
+  await page.keyboard.press('Escape')
+  const before = bridge.dispatched.length
+  await host('button.primary', { hasText: 'Dispatch' }).first().click()
+  const until = Date.now() + 8000
+  while (bridge.dispatched.length === before && Date.now() < until) await new Promise(r => setTimeout(r, 50))
+  const sentBatch = bridge.dispatched.at(-1)
+  assert.ok(Number.isInteger(sentBatch.source?.tabId), 'the dispatch did not name its tab')
+  await page.waitForTimeout(500)
+
+  // Claude answers; the bridge aims the event at the tab that sent the comment, as the real one does.
+  bridge.emit({
+    type: 'reply', id: `e2e-000${bridge.dispatched.length}#1`, text: 'Only the asking tab should show this.',
+    target: sentBatch.source,
+  })
+  await host('.card .answer').filter({ hasText: 'Only the asking tab' }).waitFor({ timeout: 8000 })
+
+  await other.waitForTimeout(800)
+  const seenThere = await other.locator('#pinpoint-host .answer, #pinpoint-host .toast.show').filter({ hasText: 'Only the asking tab' }).count()
+  assert.equal(seenThere, 0, 'the other copy of the page showed an answer meant for the first tab')
+  await other.close()
+  await page.keyboard.press('Escape')
+})
+
+test('a capture waits for its turn before the overlay hides', { skip: !browser.ok, timeout: 60000 }, async () => {
+  const welcome = await context.newPage()
+  await welcome.goto(`chrome-extension://${new URL(worker.url()).host}/welcome.html`)
+  try {
+    const res = await welcome.evaluate(() => chrome.runtime.sendMessage({ type: 'capture-wait' }))
+    assert.equal(res.ok, true)
+  } finally {
+    await welcome.close()
+  }
+})
+
 test('a page left open across an extension reload says so, instead of throwing', { skip: !browser.ok, timeout: 60000 }, async () => {
   const errors = []
   page.on('pageerror', e => errors.push(String(e)))
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()) })
   await page.goto(`http://localhost:${demo.port}/`)
-  await host('.bar').waitFor({ state: 'attached', timeout: 15000 })
-  await iconClick()
   await host('.bar').waitFor({ timeout: 15000 })
 
   // The worker goes away and comes back as a new copy; this page keeps the old script.

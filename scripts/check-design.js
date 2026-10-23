@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const EXT = join(ROOT, 'extension')
-const TOKENS = 'tokens.css'
+const THEME_FILE = 'tokens.css'
 
 const COLOUR = /#[0-9a-fA-F]{3,8}(?![0-9a-zA-Z_-])|\b(?:rgba?|hsla?)\([^)]*\)?/g
 const LENGTH_PROPS = /(?:^|[^a-z-])(font-size|line-height|letter-spacing|padding(?:-[a-z]+)?|margin(?:-[a-z]+)?|gap|row-gap|column-gap|border(?:-[a-z]+)*-radius|box-shadow)\s*:\s*([^;{}'"`]*)/g
@@ -175,7 +175,7 @@ export function check(dir = EXT) {
   const out = []
   for (const name of readdirSync(dir).sort()) {
     const kind = name.endsWith('.css') ? 'css' : name.endsWith('.js') ? 'js' : null
-    if (!kind || name === TOKENS) continue
+    if (!kind || name === THEME_FILE) continue
     const path = join(dir, name)
     for (const f of scan(readFileSync(path, 'utf8'), kind)) out.push(`${relative(ROOT, path)}:${f.line} ${f.value}`)
   }
@@ -186,8 +186,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const found = check()
   if (found.length) {
     console.error(found.join('\n'))
-    console.error(`\ncheck:design: ${found.length} raw value(s) outside extension/${TOKENS}. Use a var(--pp-*) token, or add /* design-ok: reason */ on the line.`)
+    console.error(`\ncheck:design: ${found.length} raw value(s) outside extension/${THEME_FILE}. Use a var(--pp-*) token, or add /* design-ok: reason */ on the line.`)
     process.exit(1)
   }
-  console.log(`check:design: no raw values outside extension/${TOKENS}`)
+  console.log(`check:design: no raw values outside extension/${THEME_FILE}`)
 }

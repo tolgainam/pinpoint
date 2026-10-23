@@ -451,7 +451,7 @@ extension's service worker whenever it feels like it.
 **`extension/`** — MV3, overlay mounted in a Shadow DOM so page CSS can't reach it and
 its own CSS can't leak. `probe.js` runs in the page's own world at `document_start` —
 the only place that can see framework internals and console output — and wraps `fetch`
-and `XMLHttpRequest`. Both wrappers delegate to the original and pass its result or its
+and XHR. Both wrappers delegate to the original and pass its result or its
 error through untouched; the buffer is a side effect, never a change in behaviour. Selectors are built preferring `[data-testid]`, then `#id`, then a
 stable class chain, then an `:nth-of-type` path. React component names come from a
 `_debugOwner` fiber walk where available.

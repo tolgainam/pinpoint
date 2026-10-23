@@ -862,7 +862,7 @@
 </div>
 
 <header class="hero">
-  <div class="kicker">versions 0.2 and 0.3</div>
+  <div class="kicker">versions 0.2 to 0.5</div>
   <h1 class="tagline">Stop describing the fix.<br><em>Hand it over.</em></h1>
 
   <p class="lede">
@@ -870,7 +870,9 @@
     project's own vocabulary, whether the comment is a request or a question, the state
     that only existed while a menu was open — and what the page logged while you were
     looking at it. 0.3 makes it easy to start and easy to trust: a welcome page, a pill
-    that says where comments go, and a doctor for when they do not arrive.
+    that says where comments go, and a doctor for when they do not arrive. 0.4 and 0.5 make
+    it hold up: answers that survive a restart, a design system that stays current while
+    the model edits it, and project files that two sessions can write at once.
   </p>
 
   <pre class="ascii flow" aria-hidden="true">  <b>◈</b> <i>pick a value</i>  ──▶  <b>dispatch</b>  ──▶  <i>watch it work</i>  ──▶  <b>✓</b> <i>verified against a fresh crop</i></pre>
@@ -944,6 +946,36 @@
 </section>
 
 <!-- ---------------------------------------------------------------- values -->
+
+<section id="steady">
+  <div class="kicker">new in 0.4 and 0.5</div>
+  <h2>It keeps working when things change</h2>
+  <div class="prose">
+    <p>
+      <strong>Answers survive.</strong> A reply, a resolved comment and a progress line are
+      saved with the batch. The page asks the bridge for them when it loads, when the tab
+      gets focus, when the bridge comes back and every 30 seconds. A restart of the bridge,
+      a sleeping extension worker or a missed event no longer loses an answer.
+    </p>
+    <p>
+      <strong>The right session.</strong> When two sessions share a project, a dispatch goes
+      to the one that started last. <code>/pinpoint:setup</code> and
+      <code>/pinpoint:doctor</code> report what the browser really has installed.
+    </p>
+    <p>
+      <strong>A design system that stays current.</strong> The bridge fingerprints the config
+      and theme files it read. When the model edits one, the next pick uses the new scale
+      after a background refresh. <strong>Refresh design system</strong> in the pill's popover
+      does it on demand, and the composer says when the data may be out of date.
+    </p>
+    <p>
+      <strong>Safe writes.</strong> Screenshots are written without blocking the bridge, and a
+      failed write leaves no half batch. The backlog and the history take a lock and replace
+      the file in one step, so two sessions can write them together.
+      <code>npm run check</code> gates the code for contributors.
+    </p>
+  </div>
+</section>
 
 <section id="say">
   <div class="kicker">picked values</div>
@@ -1029,6 +1061,7 @@
     </p>
   </div>
 
+  <div class="table-scroll">
   <table>
     <thead><tr><th>You type</th><th>Button</th><th>What happens</th></tr></thead>
     <tbody>
@@ -1049,6 +1082,7 @@
       </tr>
     </tbody>
   </table>
+  </div>
 
   <figure class="ui">
     <div class="shots">
@@ -1204,6 +1238,7 @@
   <div class="kicker">session tools</div>
   <h2>What Claude can call</h2>
 
+  <div class="table-scroll">
   <table>
     <thead><tr><th>Tool</th><th>Does</th></tr></thead>
     <tbody>
@@ -1215,6 +1250,7 @@
       <tr><td><code>start_backlog_item</code> · <code>finish_backlog_item</code></td><td>Work a parked item without hand-editing the file.</td></tr>
     </tbody>
   </table>
+  </div>
 </section>
 
 <section>
@@ -1236,7 +1272,7 @@
 </section>
 
 <footer>
-  <span>Pinpoint 0.3 · source available</span>
+  <span>Pinpoint · source available</span>
   <span><a href="https://github.com/tolgainam/pinpoint">github.com/tolgainam/pinpoint</a></span>
 </footer>
 

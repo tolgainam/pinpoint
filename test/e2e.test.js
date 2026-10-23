@@ -132,6 +132,31 @@ function cardsPage(q) {
   </main><script>${owners}${held}</script></body></html>`
 }
 
+/**
+ * A single-page app that draws itself from the URL and never reloads: a hash router
+ * (#/users, #/projects), a state hash on /spa/london, and /spa/users?id=N where the
+ * title and the action are the same on every user and the profile line is not.
+ */
+function spaPage() {
+  return `<!doctype html><html><head><meta charset="utf-8"><title>SPA</title><style>
+    body { font-family: sans-serif; color: black; margin: 0; padding: 16px }
+    h2, p, button { margin: 8px 0; padding: 4px }
+  </style></head><body><main id="app"></main><script>
+    function draw() {
+      const h = location.hash, p = location.pathname, id = new URLSearchParams(location.search).get('id')
+      let html = '<h2 data-testid="other-title">Somewhere else</h2>'
+      if (h.startsWith('#/users')) html = '<h2 data-testid="users-title">Users</h2><button data-testid="invite">Invite</button>'
+      else if (h.startsWith('#/projects')) html = '<h2 data-testid="projects-title">Projects</h2><button data-testid="create">Create</button>'
+      else if (p === '/spa/london') html = '<h2 data-testid="london-title">London</h2><p>' + h + '</p>'
+      else if (p === '/spa/users') html = '<h2 class="user-title">User page</h2><button class="act">Send message</button><p class="who">Profile of ' + (id === '1' ? 'Ann' : 'Bob') + '</p>'
+      document.getElementById('app').innerHTML = html
+    }
+    addEventListener('hashchange', draw)
+    addEventListener('popstate', draw)
+    draw()
+  </script></body></html>`
+}
+
 let context, page, worker, demo, bridge, profile, ext, bridgeServer, cards, cardsPort
 
 before(async () => {
@@ -143,7 +168,7 @@ before(async () => {
   demo = await startDemo()
   cards = createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(cardsPage(url.searchParams))
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(url.pathname.startsWith('/spa') ? spaPage() : cardsPage(url.searchParams))
   })
   cardsPort = await listen(cards)
   ext = await extensionCopy(bridgePort)
@@ -212,7 +237,7 @@ test('a comment on an element is dispatched with its selector, note and page', {
 
 test('a pin survives a reload', { skip: !browser.ok, timeout: 60000 }, async () => {
   // Saving is debounced, so wait for the page's key to reach storage before reloading it.
-  const key = `pinpoint:http://localhost:${demo.port}/`
+  const key = `pinpoint:v2:http://localhost:${demo.port}/`
   const until = Date.now() + 5000
   while (Date.now() < until && !(await worker.evaluate(async k => (await chrome.storage.local.get(k))[k], key))) {
     await new Promise(r => setTimeout(r, 50))
@@ -564,7 +589,20 @@ test('a capture waits for its turn before the overlay hides', { skip: !browser.o
  *   many=N     N more plain h3s, to pass the 200 cap
  */
 
-const KEY = () => `pinpoint:http://localhost:${cardsPort}/cards`
+const KEY = () => `pinpoint:v2:http://localhost:${cardsPort}/cards`
+
+/**
+ * Show the toolbar unless the tab already reopens it. The tab's remembered state arrives a
+ * moment after the overlay mounts; a toggle sent before it would hide what it then shows.
+ */
+async function ensureShown() {
+  try {
+    await host('.bar').waitFor({ state: 'visible', timeout: 1500 })
+  } catch {
+    await iconClick()
+    await host('.bar').waitFor({ state: 'visible', timeout: 5000 })
+  }
+}
 
 /** Load the cards page with these flags, toolbar showing, storage for it empty. */
 async function loadCards(query = '') {
@@ -572,12 +610,7 @@ async function loadCards(query = '') {
   await worker.evaluate(k => chrome.storage.local.remove(k), KEY())
   await page.goto(`http://localhost:${cardsPort}/cards${query}`)
   await host('.bar').waitFor({ state: 'attached', timeout: 15000 })
-  if (!(await host('.bar').isVisible())) {
-    await worker.evaluate(async () => {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-      await chrome.tabs.sendMessage(tab.id, { type: 'toggle' })
-    })
-  }
+  await ensureShown()
   await host('.pill-label').filter({ hasText: PROJECT.name }).waitFor({ timeout: 15000 })
   await page.evaluate(() => window.scrollTo(0, 0))
 }
@@ -1004,6 +1037,180 @@ test('a group chosen before the bridge lost comment-scope-v1 is refused at Add, 
   } finally {
     bridge.state.scope = true
     await closeAll()
+  }
+})
+
+// ---------------------------------------------------------------- routes
+
+/*
+ * Pins follow the route of a single-page app. The SPA page above changes its URL with
+ * the history API and the hash and never reloads.
+ */
+
+const spa = path => `http://localhost:${cardsPort}${path}`
+const v2 = path => `pinpoint:v2:http://localhost:${cardsPort}${path}`
+
+/** Every pin in the overlay, shown or not, with its name and classes. */
+const pinList = (p = page) => p.evaluate(() =>
+  [...(document.getElementById('pinpoint-host')?.shadowRoot.querySelectorAll('.pin') ?? [])]
+    .map(n => ({ name: n.getAttribute('aria-label'), cls: n.className, title: n.title })))
+
+async function pinsAre(want, p = page, timeout = 5000) {
+  const until = Date.now() + timeout
+  let got = []
+  while (Date.now() < until) {
+    got = (await pinList(p)).map(x => x.name)
+    if (JSON.stringify(got) === JSON.stringify(want)) return got
+    await p.waitForTimeout(50)
+  }
+  assert.deepEqual(got, want)
+}
+
+async function storedAt(key, n) {
+  const until = Date.now() + 5000
+  let list = []
+  while (Date.now() < until) {
+    list = await worker.evaluate(async k => (await chrome.storage.local.get(k))[k]?.comments ?? [], key)
+    if (list.length === n) return list
+    await page.waitForTimeout(50)
+  }
+  return list
+}
+
+/** Open the SPA at `path` with these buckets cleared, toolbar showing. */
+async function loadSpa(path, clear = []) {
+  await worker.evaluate(keys => chrome.storage.local.remove(keys), clear)
+  await page.goto(spa(path))
+  await host('.bar').waitFor({ state: 'attached', timeout: 15000 })
+  await ensureShown()
+  await host('.pill-label').filter({ hasText: PROJECT.name }).waitFor({ timeout: 15000 })
+}
+
+/** The name of pin 1 when it was written on another URL state of the same route. */
+const marked = note => `Pin 1, change request, pending, created on another URL state: ${note}`
+
+async function addComment(selector, note) {
+  await compose(selector)
+  await host('.card textarea').fill(note)
+  await host('.card button.primary').click()
+  await host('.card').waitFor({ state: 'detached' })
+  if ((await host('.mode').innerText()).trim() === 'Commenting') await host('.mode').click()
+}
+
+test('a hash router keeps separate pins for #/users and #/projects, and back again', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await loadSpa('/spa#/users', [v2('/spa#/users'), v2('/spa#/projects')])
+  await addComment('[data-testid="users-title"]', 'users note')
+  await pinsAre(['Pin 1, change request, pending: users note'])
+  // No reload: the hash router draws the projects screen.
+  await page.evaluate(() => { location.hash = '#/projects' })
+  await pinsAre([])
+  await addComment('[data-testid="projects-title"]', 'projects note')
+  await pinsAre(['Pin 1, change request, pending: projects note'])
+  await page.evaluate(() => { location.hash = '#/users' })
+  await pinsAre(['Pin 1, change request, pending: users note'])
+  // The query inside a hash route is state: same bucket, the pin proven and marked.
+  await page.evaluate(() => { location.hash = '#/users?tab=activity' })
+  await pinsAre([marked('users note')])
+  assert.equal((await storedAt(v2('/spa#/users'), 1))[0].note, 'users note')
+  const projects = await storedAt(v2('/spa#/projects'), 1)
+  assert.equal(projects[0].note, 'projects note')
+  assert.equal(projects[0].createdHref, spa('/spa#/projects'))
+  assert.equal(typeof projects[0].id, 'string')
+  assert.equal(projects[0].evidence.test.value, 'projects-title')
+})
+
+test('a state-only hash change keeps the pins; pushState to a new path swaps buckets without a reload', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await loadSpa('/spa/london', [v2('/spa/london'), v2('/spa/elsewhere')])
+  await addComment('[data-testid="london-title"]', 'london note')
+  const pinned = ['Pin 1, change request, pending: london note']
+  await pinsAre(pinned)
+  // The London sequence: the same bucket throughout. The element is proven by its text, so
+  // the pin stays attached, marked as written on another URL state.
+  for (const h of ['#by=line&play=week', '#by=bus&play=week&wk=20260824', '#by=bus&play=month&wk=20260831']) {
+    await page.evaluate(x => { location.hash = x }, h)
+    await page.waitForTimeout(350)
+    await pinsAre([marked('london note')])
+    assert.doesNotMatch((await pinList())[0].cls, /\bdetached\b/)
+  }
+  // The same history functions as before Pinpoint mounted: never wrapped.
+  assert.equal(await page.evaluate(() => /\[native code\]/.test(String(history.pushState)) && /\[native code\]/.test(String(history.replaceState))), true)
+  // A pushState the page itself does not announce: the Navigation API or the poll sees it.
+  await page.evaluate(() => history.pushState(null, '', '/spa/elsewhere'))
+  await pinsAre([])
+  await page.evaluate(() => history.replaceState(null, '', '/spa/london'))
+  await pinsAre(pinned)
+  await page.goBack()
+  await pinsAre([marked('london note')])
+})
+
+test('/users?id=1 to ?id=2: a proven element attaches and is marked, the other is dimmed and detached', { skip: !browser.ok, timeout: 60000 }, async () => {
+  const href = spa('/spa/users?id=1')
+  const seed = [
+    { id: 'act', n: 1, note: 'shared action', status: 'pending', selector: '.act', tag: 'button', text: 'Send message', createdHref: href,
+      evidence: { tag: 'button', text: 'Send message', classes: ['act'] }, docX: 20, docY: 80, rect: { x: 0, y: 0, w: 10, h: 10 }, updatedAt: 1 },
+    { id: 'who', n: 2, note: 'about Ann', status: 'pending', selector: '.who', tag: 'p', text: 'Profile of Ann', createdHref: href,
+      evidence: { tag: 'p', text: 'Profile of Ann', classes: ['who'] }, docX: 20, docY: 120, rect: { x: 0, y: 0, w: 10, h: 10 }, updatedAt: 1 },
+  ]
+  await worker.evaluate(([k, comments]) => chrome.storage.local.set({ [k]: { v: 2, seq: 2, comments, removed: [] } }), [v2('/spa/users'), seed])
+  await page.goto(spa('/spa/users?id=1'))
+  await host('.pin').first().waitFor({ state: 'attached', timeout: 15000 })
+  await pinsAre(['Pin 1, change request, pending: shared action', 'Pin 2, change request, pending: about Ann'])
+  assert.ok((await pinList()).every(p => !/detached|elsewhere/.test(p.cls)))
+
+  await page.goto(spa('/spa/users?id=2'))
+  await host('.pin').first().waitFor({ state: 'attached', timeout: 15000 })
+  await pinsAre([
+    'Pin 1, change request, pending, created on another URL state: shared action',
+    'Pin 2, change request, pending, detached, element not found here: about Ann',
+  ])
+  const [act, who] = await pinList()
+  assert.match(act.cls, /\belsewhere\b/)
+  assert.doesNotMatch(act.cls, /\bdetached\b/)
+  assert.match(act.title, /^created on another URL state/)
+  assert.match(who.cls, /\bdetached\b/)
+  // The card says why, in words, with the URL state the comment was written on.
+  await ensureShown()
+  await host('.pin').first().click()
+  assert.equal((await host('.card .kind.elsewhere').innerText()).trim(), 'created on another URL state: /spa/users?id=1')
+  await page.keyboard.press('Escape')
+})
+
+test('pins under the old origin-and-path key move to the route bucket on first load', { skip: !browser.ok, timeout: 60000 }, async () => {
+  const legacy = `pinpoint:http://localhost:${cardsPort}/spa/legacy`
+  await worker.evaluate(([k, v2k]) => chrome.storage.local.remove(v2k).then(() => chrome.storage.local.set({ [k]: {
+    seq: 1, comments: [{ n: 1, note: 'from before', status: 'pending', selector: '[data-testid="other-title"]', docX: 0, docY: 0 }],
+  } })), [legacy, v2('/spa/legacy')])
+  await page.goto(spa('/spa/legacy'))
+  await host('.pin').first().waitFor({ state: 'attached', timeout: 15000 })
+  await pinsAre(['Pin 1, change request, pending: from before'])
+  const [moved] = await storedAt(v2('/spa/legacy'), 1)
+  assert.equal(moved.note, 'from before')
+  assert.match(moved.id, /^legacy-1-/)
+  assert.equal(await worker.evaluate(async k => k in (await chrome.storage.local.get(k)), legacy), false)
+  // A second load finds nothing to move and the same single pin.
+  await page.reload()
+  await host('.pin').first().waitFor({ state: 'attached', timeout: 15000 })
+  await pinsAre(['Pin 1, change request, pending: from before'])
+  assert.equal((await storedAt(v2('/spa/legacy'), 1)).length, 1)
+})
+
+test('two pages on one route converge through the storage change event', { skip: !browser.ok, timeout: 90000 }, async () => {
+  await loadSpa('/spa/london', [v2('/spa/london')])
+  const other = await context.newPage()
+  try {
+    await other.goto(spa('/spa/london#by=line'))
+    await other.locator('#pinpoint-host').waitFor({ state: 'attached', timeout: 15000 })
+    await page.bringToFront()
+    await addComment('[data-testid="london-title"]', 'seen in both')
+    await pinsAre([marked('seen in both')], other)
+    // Removed in the first page: gone from the second as well, and not written back by it.
+    await host('.pin').first().click()
+    await host('.card button.danger').filter({ hasText: 'Remove' }).click()
+    await pinsAre([], other)
+    await page.waitForTimeout(400)
+    assert.equal((await storedAt(v2('/spa/london'), 0)).length, 0)
+  } finally {
+    await other.close()
   }
 })
 

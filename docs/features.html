@@ -1061,6 +1061,47 @@
   </div>
 </section>
 
+<section id="routes">
+  <div class="kicker">new in 0.8</div>
+  <h2>Pins follow the route of a single-page app</h2>
+  <div class="prose">
+    <p>
+      <strong>Each route keeps its own pins.</strong> When an app changes screen without a
+      page load, through the history API or the hash, the pins of the old route leave and the
+      new route's pins appear. Nothing in the app needs changing: Pinpoint never wraps
+      <code>history.pushState</code>, it notices the URL change. An open composer is closed
+      when the route changes, and an unsent note in it is discarded.
+    </p>
+    <p>
+      <strong>What counts as a route.</strong> The path, plus a hash that looks like a path:
+      <code>#/users</code> and <code>#!/users</code> are routes, and any
+      <code>?query</code> inside such a hash is not part of it. The query string
+      (<code>/users?id=1</code>), anchors (<code>#install</code>) and state in the hash
+      (<code>#by=line&amp;play=week</code>) are not routes, so changing them keeps the same
+      pins. Paths are taken as the browser gives them: <code>/users</code> and
+      <code>/users/</code> are two routes.
+    </p>
+    <p>
+      <strong>What the marks mean.</strong> Pins on one route can come from different URL
+      states, such as <code>/users?id=1</code> and <code>/users?id=2</code>, so a pin is only
+      attached when the element it finds is shown to be the same one. On the URL where it
+      was written, the selector and tag are enough. On another URL state the element also
+      needs the same text, or with no text the same id, test attribute or accessible name. A
+      pin that passes there gets a dotted ring and the words <em>created on another URL
+      state</em>. One that does not is <em>detached</em>: dimmed and dashed, left where the
+      element last was. Its card shows the URL it was written on. Screen readers hear both
+      in the pin's name, and the card says them in words.
+    </p>
+    <p>
+      <strong>Two tabs, one route.</strong> Every comment has a stable id. Saving merges by id
+      with what is already stored, so two tabs on the same route keep each other's comments,
+      and a removed comment does not come back from a tab that had not heard about it yet.
+      The other tab updates straight away. Pins saved by an older version are moved to their
+      route the first time the page opens.
+    </p>
+  </div>
+</section>
+
 <section id="say">
   <div class="kicker">picked values</div>
   <h2>Pick the value instead of describing it</h2>

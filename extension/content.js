@@ -50,7 +50,10 @@
   const orphaned = () => { try { return !chrome.runtime?.id } catch { return true } }
   const ORPHANED_NOTE = 'Pinpoint was reloaded or updated. Reload this page to use it again.'
 
-  const KEY = `pinpoint:${location.origin}${location.pathname}`
+  /** Route identity, evidence and the merge live in route.js; this is its handle on the page. */
+  const Route = globalThis.PinpointRoute
+  /** This route's bucket. It changes when a single-page app moves to another route. */
+  let KEY = Route.keyFor(location)
   const BAR_KEY = 'pinpoint:bar'
   const PREFS_KEY = 'pinpoint:prefs'
   const MAX_TEXT = 200
@@ -490,6 +493,27 @@
       docX: Math.round(rect.left + scrollX),
       docY: Math.round(rect.top + scrollY),
     }
+  }
+
+  /** What route.js weighs to decide whether a stored pin still means this element. */
+  function factsOf(node) {
+    const id = node.id && !GENERATED_ID.test(node.id) ? node.id : undefined
+    const test = TEST_ATTRS.map(name => ({ name, value: node.getAttribute?.(name) || '' })).find(t => t.value)
+    return {
+      tag: node.tagName?.toLowerCase(),
+      id,
+      test,
+      role: node.getAttribute?.('role') || undefined,
+      label: node.getAttribute?.('aria-label') || undefined,
+      text: node.innerText || '',
+      classes: Scope.stableClasses(node),
+    }
+  }
+
+  /** Where a stored comment stands on this URL state; see Route.placeOf. */
+  function placeHere(c, live) {
+    if (live === undefined) { try { live = document.querySelector(c.selector) } catch { live = null } }
+    return Route.placeOf(c, location.href, live ? factsOf(live) : null)
   }
 
   // ---------------------------------------------------------------- ancestor chain
@@ -1306,6 +1330,8 @@
         shot = viewport ? await cropTo(viewport, rect) : null
         if (!shot) say(`no screenshot — ${lastShotError}`, true)
       }
+      // The page moved to another route while the picture was taken: the card is gone.
+      if (openCard !== card) return
 
       const { kind, text } = intentOf(note)
 
@@ -1316,6 +1342,12 @@
       const comment = {
         ...captured,
         rect,
+        id: Route.newId(),
+        createdAt: Date.now(),
+        // Which URL state this was written on, and what proves the element on another one.
+        createdHref: location.href,
+        route: KEY,
+        evidence: Route.evidence({ ...factsOf(target), text: captured.text }),
         n: ++seq,
         note: text,
         transient: frame ? true : undefined,
@@ -1360,6 +1392,7 @@
    * than vanishing, because the alternative is losing the comment silently.
    */
   async function sendToBacklog(comment) {
+    const home = KEY
     let res
     if (stranded([comment])) {
       comment.unsaved = true
@@ -1413,6 +1446,7 @@
       comment.unsaved = true
       say(res?.error || 'backlog write failed', true)
     }
+    keepAway(home, [comment])
     save()
     render()
   }
@@ -1516,6 +1550,12 @@
     if (comment.question) sect.append(el('div', 'kind', 'question — no files changed'))
     if (comment.status === 'backlog') sect.append(el('div', 'kind parked', 'parked — not dispatched'))
     if (comment.transient) sect.append(el('div', 'kind frozen', 'pinned from a frozen frame'))
+    // Why the pin is attached on this URL state, or why not. Read as text by screen readers.
+    const place = placeHere(comment)
+    const made = comment.createdHref && comment.createdHref !== location.href ? Route.urlState(comment.createdHref) : ''
+    if (place === 'elsewhere') sect.append(el('div', 'kind elsewhere', `created on another URL state: ${made}`))
+    else if (place === 'detached') sect.append(el('div', 'kind detached', `element not found here${made ? ` · created on ${made}` : ''}`))
+    else if (place === 'changed' && comment.status !== 'resolved') sect.append(el('div', 'kind changed', 'element text changed since this was pinned'))
     sect.append(el('div', 'note', comment.note))
 
     if (comment.deltas?.length) {
@@ -1703,7 +1743,6 @@
       // Reached through the toolbar's Pins item, never by Tab: no stop per pin.
       pin.tabIndex = -1
       pin._key = stackKey(c)
-      pin.setAttribute('aria-label', A11y.pinName(stack, c))
       pin.setAttribute('aria-haspopup', 'dialog')
       pin.classList.toggle('sent', c.status === 'sent')
       pin.classList.toggle('resolved', c.status === 'resolved')
@@ -1714,7 +1753,8 @@
       pin.classList.toggle('stack', stack.length > 1)
       pin.classList.toggle('working', stack.some(x => x.progress?.state === 'working' && x.status !== 'resolved'))
       if (stack.length > 1) pin.dataset.more = String(stack.length - 1)
-      pin.title = stack.map(x => `#${x.n} ${x.note}`).join('\n')
+      // The name and tooltip are set in positionPins, which knows where the pin stands.
+      pin._place = undefined
       pin.addEventListener('click', ev => {
         ev.preventDefault()
         ev.stopPropagation()
@@ -1755,6 +1795,23 @@
     for (const { pin, comment, stack } of pinNodes) {
       let live = null
       try { live = document.querySelector(comment.selector) } catch { /* stale selector */ }
+      // A route bucket holds every URL state of the route, so a resolved selector is not
+      // proof by itself; route.js weighs the evidence. Worked out again only when the node
+      // or the URL changed, not on every scroll frame.
+      if (pin._place === undefined || pin._node !== live || pin._href !== location.href) {
+        const place = placeHere(comment, live)
+        pin._node = live
+        pin._href = location.href
+        if (pin._place !== place) {
+          pin._place = place
+          const where = place === 'elsewhere' || place === 'detached' ? place : undefined
+          pin.setAttribute('aria-label', A11y.pinName(stack, comment, where))
+          const note = A11y.placeNote(where)
+          pin.title = `${note ? `${note}\n` : ''}${stack.map(x => `#${x.n} ${x.note}`).join('\n')}`
+          pin.classList.toggle('elsewhere', place === 'elsewhere')
+        }
+      }
+      if (pin._place === 'detached') live = null
       if (live) {
         const r = live.getBoundingClientRect()
         // Every comment in the stack shares the element, so every one gets the fresh
@@ -2081,6 +2138,7 @@
    */
   async function dispatchComments(outgoing, onStatus = () => {}) {
     if (!outgoing.length) return false
+    const home = KEY
     // A follow-up dispatches from a pin card, not the toolbar, so the toolbar's block has
     // to hold here too, or a dead pick would be sidestepped by replying on a pin.
     if (!status.canDispatch) {
@@ -2162,6 +2220,7 @@
         c.serverN = i + 1
         c.sentTo = res.projectDir
       })
+      keepAway(home, outgoing)
       // With two sessions open on one project, say which one got it: the terminal to look at is the
       // one that started at that time.
       const which = res.sessions > 1 && res.sessionStarted
@@ -2598,8 +2657,31 @@
    * sends to; status.js has the rule.
    */
   function belongsHere(ev) {
-    if (ev.id && (byServerId(ev.id) || comments.some(c => c.backlogId === ev.id))) return true
+    if (ev.id && (byServerId(ev.id) || comments.some(c => c.backlogId === ev.id) || awayHome(ev.id))) return true
     return PinpointStatus.eventFor(status, ev.projectDir)
+  }
+
+  /**
+   * The bucket of another route of this page that holds the comment an event names, when
+   * this tab saved it there and now shows a different route; otherwise null.
+   */
+  function awayHome(id) {
+    if (!id || byServerId(id) || comments.some(c => c.backlogId === id)) return null
+    const s = String(id)
+    const k = homes.get(s) ?? (s.includes('#') ? homes.get(s.slice(0, s.lastIndexOf('#'))) : undefined)
+    return k && k !== KEY ? k : null
+  }
+
+  /** An event about a pin of another route goes into that route's bucket, never onto this page. */
+  function storeAway(key, ev) {
+    if (ev.type === 'recapture') { sendRecapture(ev.id, null, 'the tab now shows another route of the page'); return }
+    store.update(key, list => {
+      const c = list.find(x => Route.names(x, ev.id))
+      if (!c || !Route.applyEvent(c, ev)) return false
+      c.updatedAt = Date.now()
+      return true
+    }).catch(() => {})
+    if (ev.type === 'reply' && String(ev.text ?? '').trim()) say(`Answer on a pin of another route: ${ev.text}`.slice(0, 600), false, 9000)
   }
 
   /**
@@ -2637,6 +2719,9 @@
 
     // The tab this answer was meant for is gone: another page of the project says so.
     if (ev.type === 'undelivered') { if (ev.text) say(String(ev.text).slice(0, 180)); return }
+
+    const away = awayHome(ev.id)
+    if (away) { storeAway(away, ev); return }
 
     // An addressed reply is the answer to a question pin, so it lands on the card and
     // stays there. An unaddressed one is a status line, and a toast is all it deserves.
@@ -2746,30 +2831,107 @@
 
   // ---------------------------------------------------------------- storage
 
-  let saveTimer
+  /*
+   * One bucket per route (route.js has the key rules). A save reads the stored record
+   * first and merges by comment id, so a second tab on the same route, or a stale one,
+   * cannot undo what this one did; `onBucket` takes the other tab's writes in.
+   */
+  const store = Route.store(chrome.storage.local)
+  const track = Route.tracker()
+  /** Which bucket each batch or backlog item was saved in, for events about another route. */
+  const homes = new Map()
+  const noteHomes = (key, list) => {
+    for (const c of list) {
+      if (c.batch) homes.set(c.batch, key)
+      if (c.backlogId) homes.set(c.backlogId, key)
+    }
+  }
+
+  /** Take a stored record in, keeping the comment objects already on the page. */
+  function take(record) {
+    if (!record) return false
+    const got = track.absorb(record, comments, seq)
+    comments = got.comments
+    seq = got.seq
+    noteHomes(KEY, comments)
+    return got.changed
+  }
+
+  let saveTimer = null
   function save() {
     if (orphaned()) return
     clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => {
-      chrome.storage.local.set({ [KEY]: { seq, comments } }).catch(() => {
-        // Over quota. Screenshots are the bulky part and the least costly to lose —
-        // keeping the notes and their selectors matters far more.
-        const lean = comments.map(({ shot, ...rest }) => rest)
-        chrome.storage.local.set({ [KEY]: { seq, comments: lean } }).catch(() => {})
-      })
-    }, 150)
+    saveTimer = setTimeout(flush, 150)
+  }
+
+  function flush() {
+    clearTimeout(saveTimer)
+    saveTimer = null
+    if (orphaned()) return
+    const key = KEY
+    store.save(key, track.local(comments, seq))
+      .then(record => { if (key === KEY && take(record)) { render(); openCard?.refresh?.() } })
+      .catch(() => {})
+  }
+
+  /** Another tab wrote this route's bucket. */
+  function onBucket(changes, area) {
+    if (area !== 'local' || !changes[KEY]?.newValue) return
+    if (take(changes[KEY].newValue)) { render(); openCard?.refresh?.() }
+  }
+  chrome.storage.onChanged.addListener(onBucket)
+
+  /**
+   * Comments that changed after the page moved to another route (a dispatch or a backlog
+   * write still in flight) are written to the bucket they came from, not to this one.
+   */
+  function keepAway(home, list) {
+    noteHomes(home, list)
+    if (home === KEY) return
+    const now = Date.now()
+    store.update(home, stored => {
+      for (const c of list) {
+        const s = stored.find(x => x.id === c.id)
+        if (s) Route.adopt(s, { ...c, updatedAt: now })
+      }
+      return true
+    }).catch(() => {})
+  }
+
+  /**
+   * The page changed its URL without loading. A state-only change keeps the bucket and
+   * weighs the evidence again; a new route closes any card (an open composer is discarded,
+   * its previews put back), writes what is unsaved to the old bucket, and mounts the new
+   * route's pins. Pins are numbered per bucket, as before.
+   */
+  let routeTurn = 0
+  async function onRoute() {
+    const loc = { origin: location.origin, pathname: location.pathname, hash: location.hash }
+    const next = Route.keyFor(loc)
+    if (next === KEY) { schedulePins(); openCard?.refresh?.(); return }
+    const turn = ++routeTurn
+    closeCard()
+    if (saveTimer) flush()
+    await store.idle()
+    if (turn !== routeTurn) return
+    KEY = next
+    track.reset()
+    comments = []
+    seq = 0
+    render()
+    const record = await store.load(next, Route.legacyKeyFor(loc)).catch(() => null)
+    if (turn !== routeTurn) return
+    take(record)
+    render()
+    syncState()
   }
 
   async function load() {
-    const got = await chrome.storage.local.get([KEY, BAR_KEY, PREFS_KEY])
+    const got = await chrome.storage.local.get([BAR_KEY, PREFS_KEY])
     const prefs = got[PREFS_KEY]
     if (prefs && typeof prefs.wantShot === 'boolean') wantShot = prefs.wantShot
     if (prefs && typeof prefs.wantDebug === 'boolean') wantDebug = prefs.wantDebug
-    const saved = got[KEY]
-    if (saved) {
-      comments = Array.isArray(saved.comments) ? saved.comments : []
-      seq = Number(saved.seq) || comments.length
-    }
+    take(await store.load(KEY, Route.legacyKeyFor(location)).catch(() => null))
     savedPos = got[BAR_KEY] || null
     // Shown before storage answered: it was centred as a stand-in, so move it now.
     if (!hidden) placeBar()
@@ -2849,12 +3011,17 @@
     removeEventListener('keydown', onKeydown, true)
     removeEventListener('pointerdown', onOutside, true)
     try { chrome.storage.onChanged.removeListener(onStorage) } catch { /* runtime already gone */ }
+    try { chrome.storage.onChanged.removeListener(onBucket) } catch { /* runtime already gone */ }
+    urlWatch?.stop()
     // An open composer may be previewing picks on the page; put them back before going.
     try { closeCard() } catch { /* going away either way */ }
     host.remove()
   }
 
+  /** Single-page route changes; never by wrapping history, see Route.watch. */
+  let urlWatch = null
   await load()
+  urlWatch = Route.watch({ win: window, doc: document, onChange: () => { onRoute().catch(() => {}) } })
   await tipLoaded
   // Whatever was answered while this page was not here.
   syncState()

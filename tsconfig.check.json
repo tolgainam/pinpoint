@@ -12,6 +12,7 @@
   },
   "files": [
     "extension/scope.js",
+    "extension/route.js",
     "server/project-files.js",
     "server/scope.js",
     "server/version.js",

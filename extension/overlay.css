@@ -125,6 +125,9 @@ button.pin:focus-visible:not(:disabled) { background: var(--pin-fill); }
    version of this was indistinguishable from the grey "dispatched" state. */
 .pin.resolved { --pin-fill: var(--pp-resolved); border-color: var(--pp-resolved-ring); opacity: 1; }
 .pin.detached { opacity: 0.4; border-style: dashed; }
+/* Attached, but written on another URL state of this route: a ring in the warning colour,
+   and the words in the pin's name, tooltip and card. */
+.pin.elsewhere { border-style: dotted; border-color: var(--pp-warn-fg); }
 /* A question never changes code, so it must never read like a fix request waiting to
    land. Violet across pending, dispatched, and answered — the colour says "intent",
    the fill says "how far along". */
@@ -313,6 +316,19 @@ button.pin:focus-visible:not(:disabled) { background: var(--pin-fill); }
 .card .kind.parked {
   background: var(--pp-backlog-wash);
   color: var(--pp-backlog-fg);
+}
+
+/* How the pin stands on this URL state of the route (route.js). Text, not colour alone. */
+.card .kind.elsewhere,
+.card .kind.changed {
+  background: var(--pp-warn-wash);
+  color: var(--pp-warn-fg);
+}
+
+.card .kind.detached {
+  background: var(--pp-wash);
+  color: var(--pp-dim);
+  border: 1px dashed var(--pp-line);
 }
 
 /* ---------------------------------------------------------------- progress */
@@ -1172,6 +1188,7 @@ button:focus-visible,
   .pin.backlog { border-style: dashed; }
   .pin.backlog.unsaved { border-color: Mark; }
   .pin.detached { border-style: dotted; }
+  .pin.elsewhere { border-style: dashed; border-color: Mark; }
   .pin.stack::after { forced-color-adjust: none; background: CanvasText; color: Canvas; border-color: Canvas; }
   .pin.working { animation: none; outline: var(--pp-focus-width) solid CanvasText; outline-offset: var(--pp-focus-offset); }
   .pin:focus-visible { box-shadow: none; }

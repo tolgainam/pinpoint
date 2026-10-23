@@ -406,6 +406,30 @@ the list stays hidden and picks apply to the one element, because an older plugi
 drop the group without saying so; a comment that already has a group is held back with a
 message rather than sent as Only this.
 
+### Pins follow the route of a single-page app
+
+Each route keeps its own pins. When an app changes screen without a page load, through the
+history API or the hash, the old route's pins leave and the new route's pins appear;
+Pinpoint notices the URL change and never wraps `history.pushState`. An open composer is
+closed on a route change and its unsent note is discarded.
+
+A route is the path plus a hash that looks like a path: `#/users` and `#!/users` are
+routes, without any `?query` inside the hash. The query string (`/users?id=1`), anchors
+(`#install`) and state in the hash (`#by=line&play=week`) are not, so changing them keeps
+the same pins. Paths are used as the browser gives them, so `/users` and `/users/` differ.
+
+Because `/users?id=1` and `/users?id=2` share pins, a pin attaches only when the element
+it finds is shown to be the same one. On the URL it was written on, selector and tag are
+enough. On another URL state the element also needs the same text, or with no text the
+same id, test attribute or accessible name; such a pin gets a dotted ring and reads
+*created on another URL state*. Otherwise it is *detached*: dimmed and dashed at the
+element's last position, with the URL it was written on in its card. Both are in the pin's
+accessible name and in the card text.
+
+Every comment has a stable id, and a save merges by id with what is stored, so two tabs on
+one route keep each other's comments and a removed one does not come back from a stale tab.
+Pins saved by older versions move to their route the first time the page opens.
+
 ### What rides along with a comment
 
 Every comment carries the element's curated computed styles — box model, layout,

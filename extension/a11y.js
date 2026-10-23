@@ -50,19 +50,31 @@
    *   stack:  "Pin 3, 4 comments: 1 working, 1 answered, 1 resolved, 1 backlog. Increase the card padding"
    * The number is the lead comment's, which is the one the pin shows. The note is the lead's
    * when it is unresolved, otherwise the newest comment's. Selectors and URLs stay out.
+   *
+   * `where` is how the pin stands on this URL state (route.js): 'elsewhere' or 'detached'
+   * adds its words after the state, so a pin that is only shown, not attached, says so:
+   *   "Pin 3, change request, pending, created on another URL state: Increase the padding"
+   * Without it the name is exactly as above.
    */
-  function pinName(stack, lead) {
+  const PLACE_NOTE = {
+    elsewhere: 'created on another URL state',
+    detached: 'detached, element not found here',
+  }
+  const placeNote = where => PLACE_NOTE[where] ?? ''
+
+  function pinName(stack, lead, where) {
     const list = Array.isArray(stack) && stack.length ? stack : [lead]
     const head = lead ?? list[0]
     const newest = list.reduce((a, b) => (Number(b.n) > Number(a.n) ? b : a), list[0])
     const note = shortNote((head.status !== 'resolved' ? head : newest).note)
+    const place = placeNote(where) ? `, ${placeNote(where)}` : ''
     if (list.length === 1) {
-      return `Pin ${head.n}, ${kindWord(head)}, ${stateWord(head)}${note ? `: ${note}` : ''}`
+      return `Pin ${head.n}, ${kindWord(head)}, ${stateWord(head)}${place}${note ? `: ${note}` : ''}`
     }
     const tally = new Map()
     for (const c of list) tally.set(stateWord(c), (tally.get(stateWord(c)) ?? 0) + 1)
     const parts = STATE_ORDER.filter(s => tally.has(s)).map(s => `${tally.get(s)} ${s}`)
-    return `Pin ${head.n}, ${list.length} comments: ${parts.join(', ')}.${note ? ` ${note}` : ''}`
+    return `Pin ${head.n}, ${list.length} comments${place}: ${parts.join(', ')}.${note ? ` ${note}` : ''}`
   }
 
   /** Document position, top then left, then pin number: the order pins are walked in. */
@@ -229,7 +241,7 @@
   }
 
   globalThis.PinpointA11y = {
-    pinName, shortNote, stateWord, kindWord, byPosition, pinsLabel, MAX_NOTE,
+    pinName, placeNote, shortNote, stateWord, kindWord, byPosition, pinsLabel, MAX_NOTE,
     toolbar, pinNav, focusPin, liveRegion, returnFocus,
   }
 })()

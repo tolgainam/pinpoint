@@ -33,7 +33,7 @@
     },
     {
       "matches": ["http://localhost/*", "http://127.0.0.1/*"],
-      "js": ["status.js", "a11y.js", "scope.js", "content.js"],
+      "js": ["status.js", "a11y.js", "scope.js", "route.js", "content.js"],
       "run_at": "document_idle",
       "all_frames": false
     }

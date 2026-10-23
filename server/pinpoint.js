@@ -698,7 +698,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
     c.status = 'resolved'
     if (args.resolution) c.resolution = args.resolution
     writeBatch(b)
-    tell({ type: 'resolved', id: args.id, resolution: args.resolution ?? '' })
+    const shown = await tell({ type: 'resolved', id: args.id, resolution: args.resolution ?? '' })
     appendHistory([`- ${clock()} · ✓ ${args.id}${args.resolution ? ` — ${String(args.resolution).split('\n')[0].slice(0, 200)}` : ''}`])
 
     // Ask the page for a fresh crop of the same rect, so the edit can be looked at rather
@@ -708,7 +708,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
     const verdict = after.shot
       ? `\n\nA fresh crop of the same element is at ${after.shot} — read it and check the change actually landed. If it did not, say so rather than leaving this resolved.`
       : `\n\nNo after-shot: ${after.error}. The fix is unverified.`
-    return { content: [{ type: 'text', text: `Resolved ${args.id}${verdict}` }] }
+    return { content: [{ type: 'text', text: `Resolved ${args.id}${verdict}${undelivered(shown)}` }] }
   }
 
   if (req.params.name === 'report_progress') {
@@ -733,8 +733,8 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
   }
 
   if (req.params.name === 'reply') {
-    tell({ type: 'reply', text: String(args.text ?? ''), id: args.id ? String(args.id) : undefined })
-    return { content: [{ type: 'text', text: args.id ? `answered ${args.id}` : 'sent' }] }
+    const shown = await tell({ type: 'reply', text: String(args.text ?? ''), id: args.id ? String(args.id) : undefined })
+    return { content: [{ type: 'text', text: `${args.id ? `answered ${args.id}` : 'sent'}${undelivered(shown)}` }] }
   }
 
   if (req.params.name === 'list_backlog') {
@@ -785,6 +785,27 @@ const recent = []
 const MAX_RECENT = 200
 let evSeq = 0
 
+/** What the extension said about an event that named a tab: seq → {ok, reason?}. */
+const deliveries = new Map()
+const deliveryWaiters = new Map()
+
+function reportDelivery(seq, result) {
+  deliveries.set(seq, result)
+  if (deliveries.size > MAX_RECENT) deliveries.delete(deliveries.keys().next().value)
+  deliveryWaiters.get(seq)?.(result)
+}
+
+/** Resolves with the report, or null when the extension did not answer in time. */
+function awaitDelivery(seq, ms) {
+  if (deliveries.has(seq)) return Promise.resolve(deliveries.get(seq))
+  return new Promise(done => {
+    const t = setTimeout(() => { deliveryWaiters.delete(seq); done(null) }, ms)
+    deliveryWaiters.set(seq, r => { clearTimeout(t); deliveryWaiters.delete(seq); done(r) })
+  })
+}
+
+const DELIVERY_WAIT = 2500
+
 function broadcast(payload) {
   const seq = ++evSeq
   const chunk = `id: ${seq}\ndata: ${JSON.stringify({ ...payload, seq })}\n\n`
@@ -793,6 +814,7 @@ function broadcast(payload) {
   for (const emit of listeners) {
     try { emit(chunk) } catch { /* client vanished mid-write */ }
   }
+  return seq
 }
 
 /**
@@ -1199,8 +1221,9 @@ async function handlePeer(req, res, url) {
 
   if (url.pathname === '/peer/event') {
     if (!payload || typeof payload.type !== 'string') return send(res, 400, {}, 'no event')
-    broadcast(payload)
-    return sendJson(res, 200, {}, { ok: true })
+    const seq = broadcast(payload)
+    const delivery = payload.target ? await awaitDelivery(seq, DELIVERY_WAIT) : null
+    return sendJson(res, 200, {}, { ok: true, delivery })
   }
 
   if (url.pathname === '/peer/ack') {
@@ -1291,13 +1314,39 @@ function peerPost(path, body, ms) {
  * listening on it, so it hands the event to the bridge. Stamped with the project so a
  * toolbar can tell its own events from another project's.
  */
-async function tell(payload) {
-  const event = { ...payload, projectDir: PROJECT_DIR }
-  if (server.listening) return broadcast(event)
-  try { await peerPost('/peer/event', event, 2000) } catch (err) {
-    console.error('[pinpoint] could not reach the bridge:', err?.message ?? err)
-  }
+/**
+ * The tab an event answers. An id names a batch and the batch remembers its tab. A status
+ * line has no id, so it goes to the tab that dispatched last to this project.
+ */
+function targetOf(id) {
+  const fromBatch = id ? readBatch(String(id).split('#')[0])?.source : undefined
+  if (fromBatch) return fromBatch
+  if (id) return undefined
+  const mine = canon(PROJECT_DIR)
+  const last = pendingBatches().filter(b => forProject(b, mine) && b.source).pop()
+  return last?.source
 }
+
+async function tell(payload) {
+  const target = targetOf(payload.id)
+  const event = { ...payload, projectDir: PROJECT_DIR, ...(target ? { target } : {}) }
+  let delivery = null
+  if (server.listening) {
+    const seq = broadcast(event)
+    if (event.target) delivery = await awaitDelivery(seq, DELIVERY_WAIT)
+  } else {
+    try { delivery = (await peerPost('/peer/event', event, DELIVERY_WAIT + 2000))?.delivery ?? null } catch (err) {
+      console.error('[pinpoint] could not reach the bridge:', err?.message ?? err)
+    }
+  }
+  if (delivery && delivery.ok === false) console.error(`[pinpoint] not delivered: ${delivery.reason}`)
+  return delivery
+}
+
+/** A line for the end of a tool result when the browser could not take the event. */
+const undelivered = d => (d && d.ok === false
+  ? `\n\nNot shown in the browser: ${d.reason}. The user has been warned in Pinpoint. Tell the user.`
+  : '')
 
 /** Recapture runs where the page is listening, which is the bridge. */
 async function recapture(id, comment) {
@@ -1547,6 +1596,15 @@ async function gate(req, res) {
   }
 }
 
+function sanitiseSource(s) {
+  if (!s || !Number.isInteger(s.tabId)) return undefined
+  return {
+    tabId: s.tabId,
+    windowId: Number.isInteger(s.windowId) ? s.windowId : undefined,
+    url: typeof s.url === 'string' ? s.url.slice(0, 500) : undefined,
+  }
+}
+
 async function handleDispatch(req, res) {
   const got = await gate(req, res)
   if (!got) return
@@ -1614,6 +1672,8 @@ async function handleDispatch(req, res) {
     designSystem: sanitiseRuntimeDesign(payload.designSystem),
     debug: sanitiseDebug(payload.debug),
     pageShot,
+    // The tab that sent this, so answers go back to it and not to a page of another project.
+    source: sanitiseSource(payload.source),
     projectDir: route.projectDir,
     // What list_comments matches on, exactly; projectDir is kept for display.
     projectKey: canon(route.projectDir),
@@ -1850,6 +1910,16 @@ const server = createServer((req, res) => {
 
     listeners.add(emit)
     req.on('close', () => listeners.delete(emit))
+    return
+  }
+
+  if (url.pathname === '/delivery' && req.method === 'POST') {
+    gate(req, res).then(got => {
+      if (!got) return
+      const { seq, ok, reason } = got.payload ?? {}
+      if (Number.isInteger(seq)) reportDelivery(seq, { ok: ok !== false, ...(reason ? { reason: String(reason).slice(0, 200) } : {}) })
+      sendJson(res, 200, got.headers, { ok: true })
+    }).catch(() => { if (!res.headersSent) send(res, 500, {}, 'error') })
     return
   }
 

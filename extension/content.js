@@ -1481,9 +1481,20 @@
    * rather than by coordinates keeps the key honest: same element, same stack, even while
    * the page reflows underneath.
    */
+  /**
+   * Pins are stored per origin and path, and two projects can use the same dev-server port
+   * one after the other. A pin sent to another project than the one this page auto-routes
+   * to belongs to that project's page, so it stays out of sight here. A manual pick is
+   * deliberate, so nothing is hidden then.
+   */
+  function foreign(c) {
+    return status.state === 'auto' && !!c.sentTo && !PinpointStatus.same(c.sentTo, status.sendsTo)
+  }
+
   function stacks() {
     const byEl = new Map()
     for (const c of comments) {
+      if (foreign(c)) continue
       const key = stackKey(c)
       const got = byEl.get(key)
       if (got) got.push(c)
@@ -1893,6 +1904,7 @@
         c.status = 'sent'
         c.batch = res.batch
         c.serverN = i + 1
+        c.sentTo = res.projectDir
       })
       say(`Dispatched ${outgoing.length} to Claude Code`)
       rememberLast(res.projectDir)
@@ -2245,6 +2257,9 @@
     if (!ev) return
     if (!belongsHere(ev)) return
 
+    // The tab this answer was meant for is gone: another page of the project says so.
+    if (ev.type === 'undelivered') { if (ev.text) say(String(ev.text).slice(0, 180)); return }
+
     // An addressed reply is the answer to a question pin, so it lands on the card and
     // stays there. An unaddressed one is a status line, and a toast is all it deserves.
     if (ev.type === 'reply') {
@@ -2391,7 +2406,7 @@
       respond({ ok: true })
       return false
     }
-    if (msg?.type === 'bridge-event') { onBridgeEvent(msg.event); respond({ ok: true }); return false }
+    if (msg?.type === 'bridge-event') { respond({ ok: true, handled: !!msg.event && belongsHere(msg.event) }); onBridgeEvent(msg.event); return false }
     return false
   })
 

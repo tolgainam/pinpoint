@@ -38,8 +38,18 @@ function pageOf(sender) {
   try { return new URL(sender.tab?.url ?? '').origin } catch { return undefined }
 }
 
+/**
+ * Which tab a request came from. The bridge keeps it on the batch, and every answer about
+ * that batch carries it back, so a reply reaches the window that asked and no other.
+ */
+function sourceOf(sender) {
+  const t = sender.tab
+  return t?.id == null ? undefined : { tabId: t.id, windowId: t.windowId, url: t.url }
+}
+
 function routed(payload, sender, pick) {
-  return { ...payload, page: pageOf(sender), ...(pick ? { pick } : {}) }
+  const source = sourceOf(sender)
+  return { ...payload, page: pageOf(sender), ...(source ? { source } : {}), ...(pick ? { pick } : {}) }
 }
 
 async function health(page, pick) {
@@ -155,15 +165,47 @@ let seqLoaded = false
 let retry = null
 let backoff = 1000
 
+/**
+ * An event that names its tab goes to that tab and to no other. There is no fallback to
+ * "every tab": a closed or moved tab means the answer has nowhere to go, and that is told
+ * to the user instead of being shown on a page of another project. Returns what happened,
+ * for events with a target; the bridge passes it on to Claude Code.
+ */
 async function fanOut(event) {
   let tabs = []
   try {
     tabs = await chrome.tabs.query({ url: WEB_TABS })
-  } catch { return }
-  for (const t of tabs) {
-    if (!t.id) continue
-    chrome.tabs.sendMessage(t.id, { type: 'bridge-event', event }).catch(() => { /* no overlay there */ })
+  } catch { return undefined }
+
+  const want = event.target?.tabId
+  if (want == null) {
+    for (const t of tabs) {
+      if (!t.id) continue
+      chrome.tabs.sendMessage(t.id, { type: 'bridge-event', event }).catch(() => { /* no overlay there */ })
+    }
+    return undefined
   }
+
+  const tab = tabs.find(t => t.id === want)
+  let reason = 'the tab that sent this comment is closed'
+  if (tab) {
+    try {
+      const got = await chrome.tabs.sendMessage(tab.id, { type: 'bridge-event', event })
+      if (got?.handled) return { ok: true }
+      reason = 'the tab that sent this comment now shows a different page'
+    } catch {
+      reason = 'the tab that sent this comment has no Pinpoint overlay (reload it)'
+    }
+  }
+
+  // Tell the Pinpoint toolbars that are still open for this project. Each page checks the
+  // project itself, so a page of another project stays quiet.
+  const text = `Claude Code answered, but ${reason}. Open the page again to see it.`
+  for (const t of tabs) {
+    if (!t.id || t.id === want) continue
+    chrome.tabs.sendMessage(t.id, { type: 'bridge-event', event: { type: 'undelivered', projectDir: event.projectDir, text } }).catch(() => {})
+  }
+  return { ok: false, reason }
 }
 
 async function readStream() {
@@ -197,7 +239,8 @@ async function readStream() {
         lastSeq = event.seq
         chrome.storage.session?.set({ lastSeq }).catch(() => {})
       }
-      await fanOut(event)
+      const delivery = await fanOut(event)
+      if (delivery && event.seq) post('/delivery', { seq: event.seq, ...delivery }).catch(() => {})
     }
   }
 }

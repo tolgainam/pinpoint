@@ -18,7 +18,7 @@ import { homedir, tmpdir } from 'node:os'
 import { spawn, spawnSync } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { ROOT, STABLE_DIR, pluginVersion, stableVersion, runChecks, format } from './doctor.js'
+import { ROOT, STABLE_DIR, PORT, pluginVersion, stableVersion, runChecks, format, getHealth, checkBrowserExtension } from './doctor.js'
 import { buildFirefox } from './firefox.js'
 
 /** Firefox gets its own folder: its manifest is not the one Chrome loads. */
@@ -132,6 +132,7 @@ async function mainFirefox() {
     rmSync(work, { recursive: true, force: true })
   }
 
+  const seen = checkBrowserExtension({ health: await getHealth(PORT), copyVersion: version })
   const copiedWith = copy(join(FIREFOX_DIR, 'manifest.json'))
   const opened = openBrowser('about:debugging#/runtime/this-firefox', 'firefox')
 
@@ -139,6 +140,8 @@ async function mainFirefox() {
   Pinpoint extension for Firefox ${version} (needs Firefox 128 or newer)
   ${FIREFOX_DIR}
   ${copiedWith ? 'manifest.json path copied to your clipboard' : 'the file to pick is manifest.json in that folder'}
+
+  Your browser: ${seen.detail}${seen.fix ? `\n  ${seen.fix}` : ''}
 
   In Firefox:
     1. ${opened ? 'about:debugging just opened' : 'go to about:debugging#/runtime/this-firefox'}
@@ -173,21 +176,21 @@ async function main() {
     process.exit(1)
   }
 
-  const copiedWith = copy(STABLE_DIR)
-  const opened = openBrowser('chrome://extensions')
+  // What happened to the folder, and nothing about the browser: a folder says nothing about
+  // whether a browser has the extension. The bridge knows, so ask it.
   const status = !before
-    ? `Copied version ${version} here.`
+    ? `Copied version ${version} to this folder.`
     : before === version
-      ? `Refreshed version ${version}.`
-      : `Updated from ${before} to ${version}. Press Reload on the Pinpoint card in chrome://extensions.`
+      ? `The folder already held ${version}; refreshed it.`
+      : `Updated the folder from ${before} to ${version}.`
+  const browser = checkBrowserExtension({ health: await getHealth(PORT), copyVersion: version })
+  const current = browser.ok === true
+  // A browser that already runs this version needs neither the page opened nor the clipboard.
+  const copiedWith = current ? null : copy(STABLE_DIR)
+  const opened = current ? false : openBrowser('chrome://extensions')
 
-  console.log(`
-  Pinpoint extension
-  ${STABLE_DIR}
-  ${copiedWith ? '(copied to your clipboard)' : '(copy the path above)'}
-  ${status}
-
-${storeBlock()}
+  // Nothing to load when the browser already has this version.
+  const steps = current ? '' : `${storeBlock()}
   Chrome runs the extension straight from that folder: don't move or delete it.
   After a Pinpoint update, run /pinpoint:setup again, then press Reload on its card.
 
@@ -198,7 +201,16 @@ ${storeBlock()}
        Already loaded from another folder? Remove that card first.
     4. pin the icon: click the puzzle piece in Chrome's toolbar, then the pin next to Pinpoint
 
-  Then open your dev app on localhost and click the Pinpoint icon.
+`
+  console.log(`
+  Pinpoint extension
+  ${STABLE_DIR}
+  ${current ? '' : copiedWith ? '(copied to your clipboard)' : '(copy the path above)'}
+  ${status}
+
+  Your browser: ${browser.detail}${browser.fix ? `\n  ${browser.fix}` : ''}
+
+${steps}  Then open your dev app on localhost and click the Pinpoint icon.
   The toolbar starts hidden in a new tab; the icon shows it, and it then stays open. That click also lets
   Pinpoint take screenshots of that tab.
 

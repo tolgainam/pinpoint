@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.3
+
+- `/pinpoint:setup` and `/pinpoint:doctor` now say what your browser really has. The extension names
+  its version to the bridge on every call, so the checks can tell "not installed", "installed but
+  older, press Reload" and "connected" apart. Before, setup said to press Reload on a card that
+  was not there after you removed the extension.
+
 ## 0.4.2
 
 - Typing `?` or `!` at the start of a note now says what it will do at once: a line above the

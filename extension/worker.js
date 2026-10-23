@@ -7,6 +7,9 @@
  * which is unavailable to content scripts.
  */
 const BRIDGE = 'http://127.0.0.1:8788'
+/** Said to the bridge on every call, so setup and the doctor can see which version is loaded. */
+const EXT_VERSION = chrome.runtime.getManifest().version
+const IDENTITY = { 'X-Pinpoint-Extension': EXT_VERSION }
 const TIMEOUT = 4000
 const ACCENT = '#d97757' /* design-ok: the badge API takes a literal; mirrors --pp-accent in tokens.css */
 const LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/
@@ -19,7 +22,7 @@ async function call(path, init = {}) {
   const ctl = new AbortController()
   const timer = setTimeout(() => ctl.abort(), TIMEOUT)
   try {
-    const res = await fetch(BRIDGE + path, { ...init, signal: ctl.signal })
+    const res = await fetch(BRIDGE + path, { ...init, headers: { ...(init.headers ?? {}), ...IDENTITY }, signal: ctl.signal })
     const body = await res.text()
     let json
     try { json = JSON.parse(body) } catch { json = null }
@@ -216,7 +219,7 @@ async function fanOut(event) {
 }
 
 async function readStream() {
-  const res = await fetch(`${BRIDGE}/events?since=${lastSeq}`)
+  const res = await fetch(`${BRIDGE}/events?since=${lastSeq}`, { headers: IDENTITY })
   if (!res.ok || !res.body) throw new Error(`events ${res.status}`)
   backoff = 1000
 

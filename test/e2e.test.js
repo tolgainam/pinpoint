@@ -28,6 +28,8 @@ if (!browser.ok) console.log(`e2e skipped: ${browser.why}`)
 /** A bridge that answers /health as one running session and keeps every dispatch it gets. */
 function recordingBridge(version) {
   const dispatched = []
+  /** What the extension said about itself on each call: its version header and its origin. */
+  const identities = []
   const streams = new Set()
   let seq = 0
   /** Claude's side: an event on the stream the extension is listening to. */
@@ -39,6 +41,7 @@ function recordingBridge(version) {
   const state = { token: '' }
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
+    identities.push({ path: url.pathname, version: req.headers['x-pinpoint-extension'], origin: req.headers.origin })
     const json = (code, body) => res.writeHead(code, { 'Content-Type': 'application/json' }).end(JSON.stringify(body))
     if (url.pathname === '/health') {
       return json(200, {
@@ -67,7 +70,7 @@ function recordingBridge(version) {
     json(404, { ok: false })
   })
   server.keepAliveTimeout = 0
-  return { server, dispatched, state, emit }
+  return { server, dispatched, state, emit, identities }
 }
 
 let context, page, worker, demo, bridge, profile, ext, bridgeServer
@@ -441,6 +444,18 @@ test('an answer goes to the tab that asked, not to another copy of the same page
   assert.equal(seenThere, 0, 'the other copy of the page showed an answer meant for the first tab')
   await other.close()
   await page.keyboard.press('Escape')
+})
+
+test('the extension tells the bridge its version on every call', { skip: !browser.ok, timeout: 60000 }, async () => {
+  const { version } = JSON.parse(await readFile(join(ROOT, 'extension', 'manifest.json'), 'utf8'))
+  await page.goto(`http://localhost:${demo.port}/`)
+  await host('.bar').waitFor({ timeout: 15000 })
+  await host('.pill-label').filter({ hasText: PROJECT.name }).waitFor({ timeout: 15000 })
+  const health = bridge.identities.filter(i => i.path === '/health')
+  assert.ok(health.length, 'the bridge was never asked for its health')
+  assert.ok(health.every(i => i.version === version), `a call carried no version: ${JSON.stringify(health.slice(-2))}`)
+  // The worker's own GET calls carry no Origin; none may carry a page's.
+  assert.ok(health.every(i => !i.origin || /^chrome-extension:\/\//.test(i.origin)), `a call carried a page origin: ${JSON.stringify(health.slice(-2))}`)
 })
 
 test('a capture waits for its turn before the overlay hides', { skip: !browser.ok, timeout: 60000 }, async () => {

@@ -321,3 +321,26 @@ test('what the page logged is stated once for the batch, not once per comment', 
   // note for the terminal, so "above the comments" means above their sections.
   assert.ok(brief.indexOf('404 POST') < brief.indexOf('### [' + res.batch))
 })
+
+test('health says which extension version talked last, and only believes an extension origin', async () => {
+  const health = () => fetch(`${BRIDGE}/health`, { headers: { Origin: 'http://localhost:3000' } }).then(r => r.json())
+  // A web page claiming to be the extension is not believed.
+  await fetch(`${BRIDGE}/health`, { headers: { Origin: 'http://localhost:3000', 'X-Pinpoint-Extension': '9.9.9' } })
+  assert.notEqual((await health()).extension?.version, '9.9.9')
+
+  // The extension itself is.
+  await fetch(`${BRIDGE}/health`, { headers: { Origin: 'chrome-extension://abcdefghijklmnop', 'X-Pinpoint-Extension': '0.4.2' } })
+  const seen = (await health()).extension
+  assert.equal(seen.version, '0.4.2')
+  assert.equal(seen.browser, 'chromium')
+  assert.ok(seen.secondsAgo < 5)
+
+  await fetch(`${BRIDGE}/health`, { headers: { Origin: 'moz-extension://11111111-2222-3333-4444-555555555555', 'X-Pinpoint-Extension': '0.4.2' } })
+  assert.equal((await health()).extension.browser, 'firefox')
+
+  // The worker's GET calls carry no Origin. The browser is then read from its user agent.
+  await fetch(`${BRIDGE}/health`, { headers: { 'X-Pinpoint-Extension': '0.4.3', 'User-Agent': 'Mozilla/5.0 (Macintosh) AppleWebKit/537.36 Chrome/138.0 Safari/537.36 OPR/120.0' } })
+  const opera = (await health()).extension
+  assert.equal(opera.version, '0.4.3')
+  assert.equal(opera.browser, 'opera')
+})

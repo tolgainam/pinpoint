@@ -63,7 +63,7 @@ const MAX_BODY = 48 * 1024 * 1024
  * Keep in step with package.json and the manifests. PINPOINT_VERSION exists for the yield
  * test, which needs an older and a newer bridge built from the same file.
  */
-const VERSION = process.env.PINPOINT_VERSION ?? '0.4.2'
+const VERSION = process.env.PINPOINT_VERSION ?? '0.4.3'
 
 mkdirSync(QUEUE, { recursive: true })
 
@@ -1516,7 +1516,7 @@ function originAllowed(origin) {
 function cors(origin) {
   return {
     'Access-Control-Allow-Origin': origin && originAllowed(origin) ? origin : 'null',
-    'Access-Control-Allow-Headers': 'content-type, x-pinpoint-token',
+    'Access-Control-Allow-Headers': 'content-type, x-pinpoint-token, x-pinpoint-extension',
     'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
     'Access-Control-Max-Age': '86400',
   }
@@ -1899,9 +1899,41 @@ async function handleBacklog(req, res) {
 
 // ---------------------------------------------------------------- serve
 
+/**
+ * The newest sign of the browser extension: its version, which browser family, and when. The
+ * extension says so itself in a header on every call it makes. It is believed only on an
+ * extension Origin, which a web page cannot send, and it is what lets setup and the doctor tell
+ * "not installed" from "installed and old" from "connected" instead of guessing from a folder.
+ */
+let extensionSeen = null
+
+/** The browser family, from the origin when there is one and from the user agent when not. */
+function browserOf(origin, ua) {
+  if (/^moz-/i.test(origin)) return 'firefox'
+  if (/^safari-/i.test(origin)) return 'safari'
+  const agent = String(ua ?? '')
+  if (/Firefox\//.test(agent)) return 'firefox'
+  if (/OPR\//.test(agent)) return 'opera'
+  if (/Edg\//.test(agent)) return 'edge'
+  // chrome-extension:// is every Chromium browser's scheme, so it is Chromium even when the agent says nothing.
+  if (/Chrome\//.test(agent) || /^chrome-extension:/i.test(origin)) return 'chromium'
+  return 'unknown'
+}
+
+function noteExtension(req) {
+  const version = req.headers['x-pinpoint-extension']
+  const origin = req.headers.origin ?? ''
+  // The worker's own GET calls carry no Origin at all, and a page's calls always do, so the rule
+  // is the one the rest of the gate uses: no Origin or an extension one is local, anything else
+  // (a page on localhost saying it is the extension) is not believed.
+  if (typeof version !== 'string' || (origin && !EXTENSION.test(origin))) return
+  extensionSeen = { version: version.slice(0, 20), browser: browserOf(origin, req.headers['user-agent']), at: Date.now() }
+}
+
 const server = createServer((req, res) => {
   const url = new URL(req.url ?? '/', `http://127.0.0.1:${PORT}`)
   const origin = req.headers.origin ?? null
+  noteExtension(req)
 
   if (req.method === 'OPTIONS') return send(res, 204, cors(origin))
 
@@ -1919,6 +1951,9 @@ const server = createServer((req, res) => {
         pending: pendingBatches().filter(b => forProject(b, key)).length,
         backlog: dir ? listOpen(backlogFile(dir)).length : 0,
         sessions: sessionList(), route: { ...shown, ...(error ? { error } : {}) },
+        extension: extensionSeen
+          ? { version: extensionSeen.version, browser: extensionSeen.browser, secondsAgo: Math.round((Date.now() - extensionSeen.at) / 1000) }
+          : null,
       })
     }).catch(err => {
       console.error('[pinpoint] health failed:', err)

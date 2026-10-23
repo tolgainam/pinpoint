@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url'
 import { compareVersions } from '../server/version.js'
 import {
   checkNode, checkBridge, checkSessions, findDuplicates, checkDuplicates, checkChannels,
-  stableVersion, checkExtension, stopCommand, pluginVersion, format,
+  stableVersion, checkExtension, checkBrowserExtension, stopCommand, pluginVersion, format,
 } from '../scripts/doctor.js'
 import { installStable } from '../scripts/setup.js'
 
@@ -186,4 +186,37 @@ test('format: one line per check, a fix under each failure, and the count', () =
   assert.match(out, /Fix: Install Node 20/)
   assert.match(out, /1 to fix/)
   assert.doesNotMatch(out, /\u2014/)
+})
+
+test('the browser extension is read from what it told the bridge, not from the folder', () => {
+  // No bridge: nothing can be said, and it is not a failure.
+  const down = checkBrowserExtension({ health: null, copyVersion: '0.4.2' })
+  assert.equal(down.ok, null)
+
+  // An older bridge has no such field. That is not "not installed".
+  const older = checkBrowserExtension({ health: { version: '0.4.1' }, copyVersion: '0.4.2' })
+  assert.equal(older.ok, null)
+  assert.match(older.detail, /older than this plugin/)
+  assert.doesNotMatch(older.detail, /not installed/)
+
+  // Never heard from: not installed (or no page open). Not a failure either, but it says what to do.
+  const none = checkBrowserExtension({ health: { extension: null }, copyVersion: '0.4.2' })
+  assert.equal(none.ok, null)
+  assert.match(none.detail, /not installed/)
+  assert.match(none.fix, /store|folder/)
+
+  // An older one is the one case where "press Reload" is true.
+  const old = checkBrowserExtension({ health: { extension: { version: '0.4.1', browser: 'chromium', secondsAgo: 5 } }, copyVersion: '0.4.2' })
+  assert.equal(old.ok, false)
+  assert.match(old.detail, /0\.4\.1.*older than 0\.4\.2/)
+  assert.match(old.fix, /Reload/)
+
+  // Current: nothing to do, and it says which browser family.
+  const ok = checkBrowserExtension({ health: { extension: { version: '0.4.2', browser: 'firefox', secondsAgo: 5 } }, copyVersion: '0.4.2' })
+  assert.equal(ok.ok, true)
+  assert.match(ok.detail, /Firefox.*connected now/)
+
+  // Long ago is still current, and says how long.
+  const quiet = checkBrowserExtension({ health: { extension: { version: '0.4.2', browser: 'chromium', secondsAgo: 600 } }, copyVersion: '0.4.2' })
+  assert.match(quiet.detail, /10 min ago/)
 })

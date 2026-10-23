@@ -215,9 +215,50 @@ export function checkExtension({ stable, version, dir = STABLE_DIR }) {
   return { name, ok: true, detail: `${stable} at ${where} (load this folder in Chrome)` }
 }
 
+/**
+ * What the bridge has heard from the extension in the browser, which is the only honest way to
+ * know. The folder copy says what was put on disk; it says nothing about whether a browser has
+ * loaded it, still has an old one, or had it removed. The extension names its own version on
+ * every call, so this can tell the three cases apart.
+ */
+export function checkBrowserExtension({ health, copyVersion }) {
+  const name = 'Browser extension'
+  if (!health) {
+    return { name, ok: null, detail: 'the bridge is not running, so Pinpoint cannot see your browser' }
+  }
+  // A bridge from before this check has no such field at all, which is not the same as null.
+  // It would read as "not installed", which is exactly the wrong thing to tell someone.
+  if (!('extension' in health)) {
+    return {
+      name, ok: null,
+      detail: 'the running bridge is older than this plugin and cannot see your browser',
+      fix: 'Reconnect it: run /mcp, pick the Pinpoint plugin, choose Reconnect. Then run this again.',
+    }
+  }
+  const seen = health.extension
+  if (!seen) {
+    return {
+      name, ok: null,
+      detail: 'no extension has contacted the bridge since it started. It is not installed in your browser yet, or no page is open on localhost.',
+      fix: 'Not installed: add it from your browser\'s store, or load the folder shown below. Already installed: open a localhost page and click the Pinpoint icon, then check again.',
+    }
+  }
+  const ago = seen.secondsAgo ?? 0
+  const when = ago < 90 ? 'connected now' : `last heard ${Math.max(1, Math.round(ago / 60))} min ago`
+  const where = { firefox: 'Firefox', safari: 'Safari', opera: 'Opera', edge: 'Edge' }[seen.browser] ?? 'a Chrome-family browser'
+  if (compareVersions(seen.version, copyVersion) < 0) {
+    return {
+      name, ok: false,
+      detail: `your browser runs extension ${seen.version}, older than ${copyVersion} (${where}, ${when})`,
+      fix: 'Press Reload on the Pinpoint card in your browser\'s extensions page, then reload your localhost pages.',
+    }
+  }
+  return { name, ok: true, detail: `${seen.version} in ${where}, ${when}` }
+}
+
 // ---------------------------------------------------------------- gathering
 
-async function getHealth(port) {
+export async function getHealth(port) {
   try {
     const res = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(2000) })
     return res.headers.get('content-type')?.includes('json') ? await res.json() : null
@@ -279,6 +320,7 @@ export async function runChecks({ projectDir = sessionDir(), port = PORT } = {})
       checkDuplicates(findDuplicates({ projectDir })),
       checkChannels({ ancestors: ancestors() }),
       checkExtension({ stable: stableVersion(), version }),
+      checkBrowserExtension({ health, copyVersion: version }),
     ],
   }
 }

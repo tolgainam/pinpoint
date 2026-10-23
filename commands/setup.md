@@ -31,6 +31,15 @@ You cannot restart their session for them.
 If a store link is printed at the top of the output, tell the user to install from it, and that
 the folder steps below it are the fallback for developers.
 
+The output has a line that starts with "Your browser:". It comes from the extension itself, which
+tells the bridge its version, so it is the only thing to believe about the browser. Say it as it
+is. Do not say to press Reload unless that line says the browser runs an older version, because
+the user may have removed the extension altogether, and then the folder steps are an install.
+- "no extension has contacted the bridge": it is not installed (or no localhost page is open).
+  Walk them through loading the folder, or the store link if one is printed.
+- "runs extension X, older than Y": press Reload on the Pinpoint card, then reload the pages.
+- "connected": nothing to do in the browser.
+
 The install is done when, on their dev page, clicking the Pinpoint icon shows the
 toolbar and the pill on it shows their project name. The toolbar starts hidden in a new tab, so a
 page with no toolbar before that click is normal. After that it stays open in the tab.

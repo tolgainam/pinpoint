@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4.1
+
+- Answers go back to the tab that asked. Before, the bridge sent every reply, resolve and
+  progress event to every open tab, so two projects on one dev-server port could show each
+  other's answers. Now an event goes to the tab that sent the comment. If that tab is gone, or
+  now shows another page, the toolbar and the terminal both say so.
+- A pin sent to another project is hidden on a page that routes to this one. A manual pick
+  hides nothing.
+- Claude Code's one-line view of a dispatch now starts with a short label:
+  `[Pinpoint localhost:3000/pricing] 3 comments · "Make this button larger" +2 more`.
+- Dependencies are current: the MCP SDK is 1.32.1 and `npm audit` reports no vulnerabilities.
+- Code scanning findings fixed: CI runs with read-only permissions, and the screenshot
+  callback is checked before it is called.
+- The clone's own server definition moved from `.mcp.json` to `dev/mcp.json`, so the plugin has
+  one server definition and not two. From a clone, start with `claude --mcp-config dev/mcp.json`.
+- The README says where Pinpoint works (Claude Code on your own computer) and how to report a
+  security problem.
+- The npm package is `pinpoint-dev`.
+
 ## 0.4.0
 
 - Firefox 128 and newer, and Opera, load the extension. `/pinpoint:setup --firefox` builds the

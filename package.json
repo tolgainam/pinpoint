@@ -1,6 +1,6 @@
 {
   "name": "pinpoint-dev",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "type": "module",
   "description": "Pin comments to elements on a localhost page and dispatch them into a running Claude Code session",
   "license": "MIT",
@@ -34,7 +34,7 @@
     "prepublishOnly": "npm test"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0"
+    "@modelcontextprotocol/sdk": "^1.32.1"
   },
   "devDependencies": {
     "pixelmatch": "^8.0.0",

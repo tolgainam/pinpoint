@@ -131,7 +131,7 @@ export function checkSessions({ health, projectDir }) {
 
 /**
  * A second server called "pinpoint", besides the plugin's. The usual one is a clone of
- * this repo, whose .mcp.json defines it for development, but a user or local scope entry
+ * a project whose .mcp.json defines it for development, but a user or local scope entry
  * left from a manual install counts too. Both start, both show in /mcp, and nobody can
  * tell which is live. A project entry the user turned off is no clash.
  */

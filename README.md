@@ -13,6 +13,11 @@ element, the page state, and a screenshot of exactly what you saw.
 
 </div>
 
+**Where it works:** in Claude Code, on your own computer (terminal, IDE extension or the
+desktop app's Code tab). It needs a local bridge and a browser on the same machine, so it does
+not run in claude.ai chat or in the Claude mobile apps. Browsers: Chrome and other Chromium
+browsers, Firefox 128+, Opera.
+
 ---
 
 Reviewing a running app and getting fixes made is a lossy loop. You spot something wrong
@@ -139,9 +144,11 @@ If you'd rather not use the plugin marketplace (testing, hacking on it, or you j
 everything in one place), the whole thing runs from a clone. Nothing here needs the plugin
 installed.
 
-> **Have the plugin installed too?** The clone's own `.mcp.json` defines a `pinpoint`
-> server, and so does the plugin, so a session in the clone starts both and `/mcp` shows
-> two. Turn one off (or rename the clone's to `pinpoint-dev`). `/pinpoint:doctor` flags it.
+> **Have the plugin installed too?** The clone has its own server definition in
+> `dev/mcp.json`, which a session only loads when you ask for it with `--mcp-config` (see
+> below). A normal `claude` session in the clone does not load it, so the plugin's server is
+> the only one. If you start the session with both, `/mcp` shows two `pinpoint` servers.
+> Drop one, or rename the clone's to `pinpoint-dev`. `/pinpoint:doctor` flags it.
 
 **1. Get it and install the one dependency**
 
@@ -197,11 +204,11 @@ the same checks as `/pinpoint:doctor`.
 <details>
 <summary>Just want to try it without wiring up a project?</summary>
 
-Run the session from the clone instead. It ships its own `.mcp.json`, so the bridge starts
-automatically:
+Run the session from the clone instead. It ships its own server definition in
+`dev/mcp.json`, so the bridge starts when you point Claude Code at it:
 
 ```bash
-cd pinpoint && claude
+cd pinpoint && claude --mcp-config dev/mcp.json
 npm run demo    # serves the demo page on localhost:3000
 ```
 
@@ -224,7 +231,7 @@ prints the fix for each problem.
 | Hovering highlights nothing | Pinpoint only attaches to `http://localhost/*` and `http://127.0.0.1/*`, by design | Check the address bar: `0.0.0.0`, a LAN IP, `.local` or https:// do nothing |
 | Comments arrive without screenshots | Chrome allows a screenshot only after an icon click, and forgets it on every page load | Click the icon once after each load. Comments still send without one |
 | Dispatch works, nothing appears in the session | Channels are off for this session, so comments wait in the queue | Run `/pinpoint:comments`, or restart with the flag in [Two ways to receive comments](#two-ways-to-receive-comments) |
-| Two `pinpoint` servers in `/mcp` | A `.mcp.json` (often a clone of this repo) defines one besides the plugin's | Turn one off. `/pinpoint:doctor` names the file |
+| Two `pinpoint` servers in `/mcp` | A `.mcp.json`, or `--mcp-config dev/mcp.json` from a clone of this repo, defines one besides the plugin's | Turn one off. `/pinpoint:doctor` names the file |
 | Odd behaviour after an update, or a **!** on the pill | The extension, the plugin or an open session is on an older version | Follow [Updating](#updating). `/pinpoint:doctor` says which one is behind |
 
 ## Use
@@ -411,7 +418,7 @@ all. A comment parked with `!` carries the buffer on its own, since it has no ba
 claude --dangerously-load-development-channels plugin:pinpoint@pinpoint-marketplace
 ```
 
-From a clone with the repo's `.mcp.json`, the last part is `server:pinpoint` instead.
+From a clone started with `--mcp-config dev/mcp.json`, the last part is `server:pinpoint` instead.
 `/pinpoint:doctor` says whether the session you are in has it on.
 
 [Channels](https://code.claude.com/docs/en/channels-reference) are a research preview, and
@@ -582,6 +589,10 @@ change on their side can break this tool without warning.
 ## Support
 
 Bugs and questions: [github.com/tolgainam/pinpoint/issues](https://github.com/tolgainam/pinpoint/issues).
+
+Security problems: please do not open a public issue. Use GitHub's private report on the
+repository's Security tab ("Report a vulnerability"), and say what you found and how to
+reproduce it.
 
 Pinpoint is free to use and it stays that way. If it saves you time and you
 want to say thanks, a sponsorship link will live here.

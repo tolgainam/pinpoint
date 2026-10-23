@@ -9,10 +9,15 @@
     {
       "name": "pinpoint",
       "source": "./",
-      "description": "Pin comments to elements on a localhost page and dispatch them — with screenshots — into this session",
-      "version": "0.4.0",
+      "description": "Pin comments to elements on a localhost page and dispatch them, with screenshots, into a running Claude Code session on your computer.",
+      "version": "0.4.1",
       "category": "development",
-      "tags": ["browser", "frontend", "screenshots", "devtools"],
+      "tags": [
+        "browser",
+        "frontend",
+        "screenshots",
+        "devtools"
+      ],
       "author": {
         "name": "Tolga Inam",
         "url": "https://github.com/tolgainam"

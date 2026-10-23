@@ -140,6 +140,9 @@ test('a dispatched batch reaches list_comments and the history file', async () =
   const brief = textOf(await call('list_comments'))
   assert.match(brief, /too tight/)
   assert.match(brief, /this is a question/)
+  // Claude Code shows one line per channel event, taken from the start of the content.
+  // It has to say where the comments are from and how many, in plain text.
+  assert.match(brief.split('\n')[0], /^\[Pinpoint localhost:3000\] 2 comments · “too tight” \+1 more$/)
 
   const log = history()
   assert.match(log, new RegExp(res.batch))
@@ -284,6 +287,7 @@ test('what the page logged is stated once for the batch, not once per comment', 
   // Once. Repeating it under each comment is what made it read as evidence about the
   // element, which is the whole reason it moved off the comment in the first place.
   assert.equal(brief.match(/404 POST \/api\/waitlist/g).length, 1)
-  // And it is above the comments, not buried among them.
-  assert.ok(brief.indexOf('404 POST') < brief.indexOf('padding is off the scale'))
+  // And it is above the comments, not buried among them. The opening line quotes the first
+  // note for the terminal, so "above the comments" means above their sections.
+  assert.ok(brief.indexOf('404 POST') < brief.indexOf('### [' + res.batch))
 })

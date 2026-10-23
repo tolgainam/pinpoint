@@ -6,9 +6,9 @@ screenshots are in `store/screenshots`, made by `npm run store:shots`.
 
 ## Package
 
-- File: `dist/store/pinpoint-0.4.0.zip` (the contents of `extension/`, with `manifest.json`
+- File: `dist/store/pinpoint-0.4.1.zip` (the contents of `extension/`, with `manifest.json`
   at the top of the zip).
-- Version: `0.4.0`.
+- Version: `0.4.1`.
 - Icon: `extension/icons/icon-128.png`. A larger square PNG is at `.claude-plugin/icon.png`
   (1024 x 1024).
 - Screenshots (800 x 500, scaled from the Chrome set; the site allows up to 800 x 600), in this

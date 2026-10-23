@@ -35,7 +35,7 @@ test('every place the version lives says the same thing', () => {
   assert.equal(json('.claude-plugin/plugin.json').version, v)
   assert.equal(json('.claude-plugin/marketplace.json').plugins[0].version, v)
   assert.equal(json('extension/manifest.json').version, v)
-  assert.match(readFileSync(join(ROOT, 'server/pinpoint.js'), 'utf8'), new RegExp(`const VERSION = .*'${v.replace(/\./g, '\\.')}'`))
+  assert.match(readFileSync(join(ROOT, 'server/pinpoint.js'), 'utf8'), new RegExp(`const VERSION = .*'${v.replace(/[.\\]/g, '\\$&')}'`))
   assert.equal(pluginVersion(), v)
 })
 

@@ -63,7 +63,7 @@ const MAX_BODY = 48 * 1024 * 1024
  * Keep in step with package.json and the manifests. PINPOINT_VERSION exists for the yield
  * test, which needs an older and a newer bridge built from the same file.
  */
-const VERSION = process.env.PINPOINT_VERSION ?? '0.4.0'
+const VERSION = process.env.PINPOINT_VERSION ?? '0.4.1'
 
 mkdirSync(QUEUE, { recursive: true })
 
@@ -481,6 +481,23 @@ function followUpFact(c) {
  *
  * @param {Batch} b
  */
+/**
+ * The line Claude Code shows for a channel event. It renders one line per event, from the
+ * start of the content, as `← pinpoint: …`, and the rest is for the model. So the content
+ * opens with a short label that reads well there: which page, how many, and the first note.
+ * It is plain text, because the terminal line is not markdown.
+ */
+function terminalLine(b) {
+  const open = b.comments.filter(c => c.status !== 'resolved')
+  let where = b.url ?? b.origin ?? ''
+  try { const u = new URL(where); where = u.host + (u.pathname === '/' ? '' : u.pathname) } catch { /* keep it as given */ }
+  if (where.length > 40) where = where.slice(0, 39) + '…'
+  const first = open[0]
+  const note = first ? String(first.note ?? '').replace(/\s+/g, ' ').trim() : ''
+  const quoted = note ? ` · ${first.question ? '? ' : ''}“${note.length > 60 ? note.slice(0, 59) + '…' : note}”${open.length > 1 ? ` +${open.length - 1} more` : ''}` : ''
+  return `[Pinpoint ${where}] ${open.length} comment${open.length === 1 ? '' : 's'}${quoted}`
+}
+
 function renderBatch(b) {
   const open = b.comments.filter(c => c.status !== 'resolved')
   const head = [
@@ -540,7 +557,7 @@ function renderBatch(b) {
     return `\n### [${b.id}#${c.n}]${c.question ? ' ❓' : ''} ${c.note}\n${facts}${debug}`
   }).join('\n')
 
-  return `${head}${page}${system}${logged}\n${body}`
+  return `${terminalLine(b)}\n\n${head}${page}${system}${logged}\n${body}`
 }
 
 prune()
@@ -883,7 +900,9 @@ async function handleRecapture(req, res) {
   const { headers, payload } = got
   const id = String(payload?.id ?? '')
   const waiting = awaitingShot.get(id)
-  if (!waiting) return sendJson(res, 200, headers, { ok: true, ignored: 'nothing was waiting' })
+  // Only a function this server stored can be here, but the key came from a request, so say
+  // so rather than rely on it.
+  if (typeof waiting !== 'function') return sendJson(res, 200, headers, { ok: true, ignored: 'nothing was waiting' })
 
   const [batchId, nRaw] = id.split('#')
   const b = readBatch(batchId)

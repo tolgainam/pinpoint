@@ -189,7 +189,7 @@
     return {
       ...common, state: 'choose', dot: false, pin: false, label: 'Choose',
       canDispatch: false, project: null,
-      heading: 'Which project is this page?', lines: [`Pick one; it is kept for :${port}.`],
+      heading: 'Which project is this page?', lines: [`Pick one; it is kept for ${/^\d+$/.test(port) ? ':' : ''}${port}.`],
       sendsTo: null,
     }
   }
@@ -219,8 +219,13 @@
    */
   const dispatchPick = v => v.sendsTo ?? undefined
 
-  /** localhost:5173 and 127.0.0.1:5173 are the same dev server, so they share a key. */
+  /**
+   * localhost:5173 and 127.0.0.1:5173 are the same dev server, so they share a key. Any
+   * other site is keyed by its host: every https site is port 443, and a pick made for
+   * one must not follow the user to the next.
+   */
   function portOf(loc) {
+    if (loc.hostname && !/^(localhost|127\.0\.0\.1)$/.test(loc.hostname)) return String(loc.host || loc.hostname)
     return String(loc.port || (loc.protocol === 'https:' ? '443' : '80'))
   }
 

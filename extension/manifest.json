@@ -1,10 +1,11 @@
 {
   "manifest_version": 3,
   "name": "Pinpoint",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Pin comments to elements on a local dev page and dispatch them into a running Claude Code session.",
   "permissions": ["storage", "tabs", "scripting", "activeTab"],
   "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"],
+  "optional_host_permissions": ["<all_urls>", "http://*/*", "https://*/*"],
   "background": { "service_worker": "worker.js" },
   "options_page": "welcome.html",
   "icons": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" },
@@ -36,7 +37,7 @@
   "web_accessible_resources": [
     {
       "resources": ["tokens.css", "overlay.css", "icons/icon-48.png"],
-      "matches": ["http://localhost/*", "http://127.0.0.1/*"]
+      "matches": ["http://localhost/*", "http://127.0.0.1/*", "http://*/*", "https://*/*"]
     }
   ]
 }

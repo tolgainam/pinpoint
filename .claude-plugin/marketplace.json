@@ -10,7 +10,7 @@
       "name": "pinpoint",
       "source": "./",
       "description": "Pin comments to elements on a localhost page and dispatch them — with screenshots — into this session",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "category": "development",
       "tags": ["browser", "frontend", "screenshots", "devtools"],
       "author": {
@@ -19,7 +19,7 @@
       },
       "homepage": "https://tolgainam.github.io/pinpoint/",
       "repository": "https://github.com/tolgainam/pinpoint",
-      "license": "SEE LICENSE IN LICENSE"
+      "license": "MIT"
     }
   ]
 }

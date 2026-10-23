@@ -38,6 +38,16 @@
     </section>
 
     <section>
+      <h2>Bridge token</h2>
+      <p>Only if you start the bridge with <code>PINPOINT_TOKEN</code>. Enter the same value here. It stays in this browser and goes only to the bridge on 127.0.0.1.</p>
+      <div class="token">
+        <input id="token" type="password" autocomplete="off" spellcheck="false" aria-label="Bridge token">
+        <button id="token-save">Save</button>
+        <span id="token-state" role="status"></span>
+      </div>
+    </section>
+
+    <section>
       <h2>The pill on the toolbar</h2>
       <dl class="pills">
         <dt><span class="pill"><span class="dot on"></span>my-app</span></dt>
@@ -55,7 +65,12 @@
 
     <section>
       <h2>Screenshots</h2>
-      <p>Chrome only allows a screenshot after you click the Pinpoint icon. Do it once each time the page loads. Comments still send without one.</p>
+      <p>By default Chrome allows a screenshot only after you click the Pinpoint icon, and forgets it each time the page loads. Comments still send without one.</p>
+      <p>To skip that click, let Pinpoint take screenshots on every page. Your browser words this as "read and change your data on all websites". Pinpoint uses it only to take the picture when you add a comment. You can turn it off here at any time.</p>
+      <div class="row">
+        <button id="shots-allow">Allow screenshots without clicking</button>
+        <span id="shots-state" role="status"></span>
+      </div>
     </section>
   </main>
   <script src="status.js"></script>

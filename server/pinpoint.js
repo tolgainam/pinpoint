@@ -63,7 +63,7 @@ const MAX_BODY = 48 * 1024 * 1024
  * Keep in step with package.json and the manifests. PINPOINT_VERSION exists for the yield
  * test, which needs an older and a newer bridge built from the same file.
  */
-const VERSION = process.env.PINPOINT_VERSION ?? '0.3.0'
+const VERSION = process.env.PINPOINT_VERSION ?? '0.4.0'
 
 mkdirSync(QUEUE, { recursive: true })
 
@@ -585,11 +585,13 @@ const mcp = new Server(
 const TOOLS = [
   {
     name: 'list_comments',
+    annotations: { title: 'List pending comments', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description: 'List pending web page comments dispatched from the browser toolbar, with element context and screenshot paths.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
     name: 'resolve_comment',
+    annotations: { title: 'Resolve a comment', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description: 'Mark one comment as handled. Clears its pin in the browser. Id looks like "<batch_id>#<n>".',
     inputSchema: {
       type: 'object',
@@ -603,6 +605,7 @@ const TOOLS = [
   },
   {
     name: 'reply',
+    annotations: { title: 'Reply in the browser', readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     description: 'Send a short line back to the browser. With an id it lands on that comment\'s pin card and is how a ❓ question gets answered; without one it is a passing status toast.',
     inputSchema: {
       type: 'object',
@@ -616,6 +619,7 @@ const TOOLS = [
   },
   {
     name: 'report_progress',
+    annotations: { title: 'Report progress on a comment', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description: "Show progress on one comment while you work on it, on its pin in the browser. Use 'working' when you start and 'edited' once files have changed. Optional — resolve_comment is what closes a comment.",
     inputSchema: {
       type: 'object',
@@ -635,11 +639,13 @@ const TOOLS = [
   },
   {
     name: 'list_backlog',
+    annotations: { title: 'List the backlog', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description: 'List open items in the project backlog (.pinpoint/backlog.md) — comments the user pinned and parked instead of dispatching, plus anything written there by hand. Items have no expiry.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
     name: 'start_backlog_item',
+    annotations: { title: 'Start a backlog item', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description: 'Pull one backlog item to work on. Returns its full context and marks it in progress in the file.',
     inputSchema: {
       type: 'object',
@@ -652,6 +658,7 @@ const TOOLS = [
   },
   {
     name: 'finish_backlog_item',
+    annotations: { title: 'Finish a backlog item', readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     description: 'Move a backlog item to Done with a line on what changed. Clears its pin in the browser if the page is still open.',
     inputSchema: {
       type: 'object',
@@ -1394,9 +1401,9 @@ function deliver(peer, batchId) {
 // ---------------------------------------------------------------- http gate
 
 /**
- * A page you merely visit can fetch() a localhost port, so the gate matters.
+ * A page you merely visit can send requests to a localhost port, so the gate matters.
  *
- * Browsers set Origin on every cross-origin fetch and scripts cannot forge it, so a
+ * Browsers set Origin on every cross-origin request and scripts cannot forge it, so a
  * web origin we don't recognise is rejected outright. Requests with no Origin, or an
  * extension origin, can only come from an extension or another local process — never
  * from a drive-by page. Requiring JSON content-type closes the remaining hole: an

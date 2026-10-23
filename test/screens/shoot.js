@@ -8,7 +8,7 @@
  * The extension is copied to a temp folder with its bridge port rewritten, so the stub
  * never fights a real bridge on 8788 and the shipped worker needs no test-only hook.
  *
- * Baselines are per platform (`toolbar.darwin.png`, `toolbar.linux.png`): text renders
+ * Baselines are per platform (one reference picture per screen and OS): text renders
  * differently on each, and no tolerance small enough to catch a real change also hides
  * a different font rasteriser.
  */
@@ -71,7 +71,7 @@ export async function compare(actual, expected) {
 
 // ---------------------------------------------------------------- servers
 
-const listen = server => new Promise(resolve => server.listen(0, '127.0.0.1', () => resolve(server.address().port)))
+export const listen = server => new Promise(resolve => server.listen(0, '127.0.0.1', () => resolve(server.address().port)))
 
 /**
  * Just enough bridge for the toolbar: /health with two sessions, or a 503 when offline,
@@ -109,7 +109,7 @@ function stubBridge(version) {
 }
 
 /** The demo page, on a free port so a demo you already have running is left alone. */
-async function startDemo() {
+export async function startDemo() {
   const probe = createServer()
   const port = await listen(probe)
   await new Promise(r => probe.close(r))
@@ -124,7 +124,7 @@ async function startDemo() {
 }
 
 /** The extension as shipped, except for the one line naming the bridge. */
-async function extensionCopy(bridgePort) {
+export async function extensionCopy(bridgePort) {
   const dir = await mkdtemp(join(tmpdir(), 'pinpoint-ext-'))
   await cp(join(ROOT, 'extension'), dir, { recursive: true })
   const worker = join(dir, 'worker.js')

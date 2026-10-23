@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://tolgainam.github.io/pinpoint/sitemap.xml

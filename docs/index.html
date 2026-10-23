@@ -5,9 +5,36 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pinpoint — comment on the page, fix it in the terminal</title>
 <meta name="description" content="Pin comments to elements on your localhost app. Claude Code receives the element, the page state, and a screenshot of exactly what you saw.">
-<meta property="og:title" content="Pinpoint">
-<meta property="og:description" content="Comment on the page. Fix it in the terminal.">
+<meta name="keywords" content="Claude Code plugin, browser extension, UI feedback, element comments, screenshot to code, localhost, frontend review, MCP server">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#ffffff">
+<link rel="canonical" href="https://tolgainam.github.io/pinpoint/">
+<meta property="og:site_name" content="Pinpoint">
+<meta property="og:title" content="Pinpoint — comment on the page, fix it in the terminal">
+<meta property="og:description" content="Pin comments to elements on your localhost app. Your coding agent gets the selector, the page state and a screenshot of what you saw.">
 <meta property="og:type" content="website">
+<meta property="og:url" content="https://tolgainam.github.io/pinpoint/">
+<meta property="og:image" content="https://tolgainam.github.io/pinpoint/img/hero.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Pinpoint — comment on the page, fix it in the terminal">
+<meta name="twitter:description" content="Pin comments to elements on your localhost app. Your coding agent gets the selector, the page state and a screenshot of what you saw.">
+<meta name="twitter:image" content="https://tolgainam.github.io/pinpoint/img/hero.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Pinpoint",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "macOS, Windows, Linux",
+  "description": "Pin comments to elements on a localhost page and dispatch them, with a screenshot, into a running Claude Code session.",
+  "url": "https://tolgainam.github.io/pinpoint/",
+  "image": "https://tolgainam.github.io/pinpoint/img/hero.png",
+  "license": "https://opensource.org/licenses/MIT",
+  "codeRepository": "https://github.com/tolgainam/pinpoint",
+  "author": { "@type": "Person", "name": "Tolga Inam", "url": "https://github.com/tolgainam" },
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
 <link rel="icon" type="image/svg+xml" href="./pinpoint-logo.svg">
 <style>
   /*
@@ -727,9 +754,9 @@
 
   <div class="badges">
     <span class="badge">Claude Code plugin</span>
-    <span class="badge">Chrome MV3</span>
+    <span class="badge">Chrome · Firefox</span>
     <span class="badge">Node 20+</span>
-    <span class="badge">source available</span>
+    <span class="badge">MIT</span>
     <span class="badge">no build step</span>
   </div>
 </header>
@@ -793,6 +820,23 @@
     </div>
 
     <div class="step">
+      <h3>Start Claude Code with channels on</h3>
+      <p class="note">
+        To get comments in your session on their own, start Claude Code with the flag
+        below. Channels are a research preview and custom ones are not on Anthropic's
+        allowlist yet, so the flag is required, and Claude Code shows a full-screen warning
+        at startup: choose <em>I am using this for local development</em>. Skip this step
+        and nothing breaks: comments wait in the queue until you run
+        <code>/pinpoint:comments</code>.
+      </p>
+      <div class="cmd">
+        <span class="prompt">$</span>
+        <code>claude --dangerously-load-development-channels plugin:pinpoint@pinpoint-marketplace</code>
+        <button data-copy="claude --dangerously-load-development-channels plugin:pinpoint@pinpoint-marketplace">copy</button>
+      </div>
+    </div>
+
+    <div class="step">
       <h3>Load the browser extension</h3>
       <p class="note">
         This copies the extension to <code>~/.claude/pinpoint/extension</code>, puts the path
@@ -800,6 +844,13 @@
         click Load unpacked, paste the path, then pin the icon. Chrome runs an unpacked
         extension straight from that folder, so leave it where it is. Setup ends by checking
         that everything is connected.
+      </p>
+      <p class="note">
+        <strong>Edge, Brave, Opera, Vivaldi, Arc:</strong> the same steps on the browser's
+        own extensions page.
+        <strong>Firefox 128+:</strong> run <code>/pinpoint:setup --firefox</code> instead, open
+        <code>about:debugging</code>, choose Load Temporary Add-on and pick
+        <code>manifest.json</code>. Firefox removes a temporary add-on when it quits.
       </p>
       <div class="cmd">
         <span class="prompt">&gt;</span>
@@ -812,9 +863,11 @@
     <div class="step">
       <h3>Open your app and click the icon</h3>
       <p class="note">
-        Pinpoint activates on <code>localhost</code> and <code>127.0.0.1</code> only.
+        Pinpoint is always on for <code>localhost</code> and <code>127.0.0.1</code>. On any
+        other site, such as a staging server, clicking the icon asks your browser for
+        that one site; you can say no and it still works for that page.
         The toolbar starts hidden on every page load. Clicking the icon shows or hides
-        it, and grants screenshot permission for that tab. The pill on the toolbar shows
+        it, and grants screenshot permission for that tab (or turn on lasting screenshot access once, on the welcome page). The pill on the toolbar shows
         where comments go: your project's name, or Choose when you have several sessions open.
       </p>
       <p class="note">
@@ -944,8 +997,8 @@ whole page: ~/.claude/pinpoint/queue/20260822-023835-z0fp/page.png
   <h2>What it can't do</h2>
   <ul class="ticks">
     <li><strong>No <code>file:line</code>.</strong> React 19 removed <code>_debugSource</code> from fibers, so mapping a clicked element to <code>Header.tsx:42</code> isn't reliably possible. Pinpoint captures strong identifiers instead and lets Claude grep for them — which works well and depends on no fragile internals.</li>
-    <li><strong>Chrome only</strong>, and <code>localhost</code> / <code>127.0.0.1</code> only. By design.</li>
-    <li><strong>Screenshot permission is per-tab and per-navigation.</strong> Chrome grants <code>activeTab</code> when you click the icon and revokes it on the next navigation. A failed capture tells you why in a toast rather than going quiet.</li>
+    <li><strong>Chrome-family browsers and Firefox 128+.</strong> No Safari yet. <code>localhost</code> is always on; any other site is opt-in, one site at a time, through your browser's permission prompt.</li>
+    <li><strong>Screenshots need one click per page load, unless you opt in.</strong> Chrome grants <code>activeTab</code> when you click the icon and revokes it on the next navigation. The welcome page has a button that asks the browser for lasting screenshot access once; it is off by default because it is a wide permission. A failed capture tells you why in a toast rather than going quiet.</li>
   </ul>
 </section>
 
@@ -955,10 +1008,10 @@ whole page: ~/.claude/pinpoint/queue/20260822-023835-z0fp/page.png
 
   <div class="two about">
     <div class="panel">
-      <h3>Source available</h3>
+      <h3>MIT licensed</h3>
       <p>
-        Read it, and run it for your own non-commercial use. Copying, modifying or
-        redistributing it needs written permission — usually given for the asking.
+        Free to use, copy, modify and share, for personal or commercial work. Keep the
+        copyright notice.
       </p>
       <p class="fine">Copyright © 2026 Tolga Inam. <a href="https://github.com/tolgainam/pinpoint/blob/main/LICENSE">Full text&nbsp;↗</a></p>
     </div>
@@ -988,7 +1041,7 @@ whole page: ~/.claude/pinpoint/queue/20260822-023835-z0fp/page.png
 <footer>
   <span class="rule">─────────────────────────────────────────────────────────</span>
   <a href="https://github.com/tolgainam/pinpoint">github.com/tolgainam/pinpoint</a>
-  &nbsp;·&nbsp; <a href="https://github.com/tolgainam/pinpoint/blob/main/LICENSE">Licence</a>
+  &nbsp;·&nbsp; <a href="https://github.com/tolgainam/pinpoint/blob/main/LICENSE">MIT licence</a>
 
 </footer>
 

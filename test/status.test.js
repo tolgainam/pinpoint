@@ -141,6 +141,8 @@ test('name clashes show the parent folder', () => {
 test('localhost and 127.0.0.1 on one port share a key', () => {
   assert.equal(portOf({ port: '5173', protocol: 'http:' }), '5173')
   assert.equal(portOf({ port: '', protocol: 'http:' }), '80')
+  assert.equal(portOf({ hostname: 'localhost', port: '3000', protocol: 'http:' }), '3000')
+  assert.equal(portOf({ hostname: 'staging.example.com', host: 'staging.example.com', port: '', protocol: 'https:' }), 'staging.example.com')
 })
 
 test('the pill and popover styles use --pp-* tokens, never raw colours', async () => {

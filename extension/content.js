@@ -34,6 +34,22 @@
   document.getElementById('pinpoint-host')?.remove()
   window.__PINPOINT__ = { alive: () => !!chrome.runtime?.id, unmount: () => {} }
 
+  /**
+   * Every message to the worker goes through here. Once the extension is reloaded or
+   * updated, the copy of this script that is still in an open page loses its runtime, and
+   * chrome.runtime.sendMessage then THROWS ("Extension context invalidated") instead of
+   * returning a rejected promise. A `.catch` on the call never sees a throw, so it was an
+   * uncaught error in the console. Turning the throw into a rejection lets the existing
+   * handlers do their job.
+   */
+  const send = msg => {
+    try { return chrome.runtime.sendMessage(msg) } catch (err) { return Promise.reject(err) }
+  }
+  /** Read once, while the runtime is still there, so a log line can say which copy wrote it. */
+  const LOADED_AS = (() => { try { return chrome.runtime.getManifest().version } catch { return '?' } })()
+  const orphaned = () => { try { return !chrome.runtime?.id } catch { return true } }
+  const ORPHANED_NOTE = 'Pinpoint was reloaded or updated. Reload this page to use it again.'
+
   const KEY = `pinpoint:${location.origin}${location.pathname}`
   const BAR_KEY = 'pinpoint:bar'
   const PREFS_KEY = 'pinpoint:prefs'
@@ -316,7 +332,7 @@
   }
 
   /** Token names are long and the chip row is narrow; the prefix is the least useful part. */
-  const shortToken = name => String(name).replace(/^--/, '')
+  const bareName = name => String(name).replace(/^--/, '')
 
   // ---------------------------------------------------------------- computed style
 
@@ -601,15 +617,15 @@
     host.style.visibility = 'hidden'
     await nextPaint()
     try {
-      const res = await chrome.runtime.sendMessage({ type: 'capture' })
+      const res = await send({ type: 'capture' })
       if (res?.ok && res.dataUrl) return res.dataUrl
       lastShotError = res?.error || 'the worker returned no image'
     } catch (err) {
-      lastShotError = String(err?.message || err)
+      lastShotError = orphaned() ? ORPHANED_NOTE : String(err?.message || err)
     } finally {
       host.style.visibility = ''
     }
-    console.warn('[pinpoint] screenshot failed:', lastShotError)
+    console.warn(`[pinpoint ${LOADED_AS}] screenshot failed:`, lastShotError)
     return null
   }
 
@@ -845,9 +861,9 @@
         deltas.set(entry.prop, {
           prop: entry.prop,
           from: current,
-          fromToken: currentToken ? shortToken(currentToken.name) : undefined,
+          fromToken: currentToken ? bareName(currentToken.name) : undefined,
           to: value,
-          toToken: token ? shortToken(token.name) : undefined,
+          toToken: token ? bareName(token.name) : undefined,
         })
         preview(node, entry.prop, value)
       }
@@ -893,7 +909,7 @@
         for (const t of scale.slice(0, 28)) {
           const swatch = el('button', 'swatch')
           swatch.style.background = t.hex
-          swatch.title = `${shortToken(t.name)} — ${t.value}`
+          swatch.title = `${bareName(t.name)} — ${t.value}`
           swatch.classList.toggle('on', t.hex === String(current).toLowerCase().slice(0, 7))
           swatch.onclick = () => pick(entry, current, currentToken, t.hex, t)
           grid.append(swatch)
@@ -912,7 +928,7 @@
           // Spacing reads as a size, so show it as one. Capped, or one outlier token
           // squashes every other rung flat.
           bar.style.width = `${Math.min(t.px, 64)}px`
-          step.append(bar, el('span', 'name', shortToken(t.name)), el('span', 'val', t.value))
+          step.append(bar, el('span', 'name', bareName(t.name)), el('span', 'val', t.value))
           step.onclick = () => pick(entry, current, currentToken, `${t.px}px`, t)
           ramp.append(step)
         }
@@ -973,14 +989,14 @@
           dot.style.background = String(shown)
           chip.append(dot)
         }
-        chip.append(el('span', 'chip-val', token ? shortToken(token.name) : String(shown)))
+        chip.append(el('span', 'chip-val', token ? bareName(token.name) : String(shown)))
         if (offScale) chip.append(el('span', 'chip-warn', '⚠'))
 
         const pickable = !multi && (entry.group === 'color' ? (data?.color.length ?? 0) > 0 : px != null)
         chip.disabled = !pickable
         chip.title = [
           `${entry.prop}: ${current}`,
-          token ? `matches ${shortToken(token.name)}` : null,
+          token ? `matches ${bareName(token.name)}` : null,
           offScale ? `off the ${data.step}px scale` : null,
           delta ? `will be requested as ${delta.to}` : null,
           pickable ? null : 'no scale to pick from',
@@ -1197,7 +1213,7 @@
   async function sendToBacklog(comment) {
     let res
     try {
-      res = await chrome.runtime.sendMessage({
+      res = await send({
         type: 'backlog',
         pick: status.projectPick ?? undefined,
         payload: {
@@ -1793,7 +1809,7 @@
     if (comments.length && !clearBtn.isConnected) bar.insertBefore(clearBtn, closeBtn)
     if (!comments.length) clearBtn.remove()
     // Mirror the count onto the toolbar icon, so a tab you scrolled away from still shows it.
-    chrome.runtime.sendMessage({ type: 'count', n: pending }).catch(() => {})
+    send({ type: 'count', n: pending }).catch(() => {})
   }
 
   // ---------------------------------------------------------------- dispatch
@@ -1865,7 +1881,7 @@
 
     let res
     try {
-      res = await chrome.runtime.sendMessage({ type: 'dispatch', payload, pick: PinpointStatus.dispatchPick(status) })
+      res = await send({ type: 'dispatch', payload, pick: PinpointStatus.dispatchPick(status) })
     } catch (err) {
       res = { ok: false, error: String(err) }
     }
@@ -1961,7 +1977,7 @@
    */
   const popHow = el('button', 'pop-row pop-how')
   popHow.append(el('span', 'pop-name', 'How it works'), el('span', 'pop-path', '›'))
-  popHow.onclick = () => { chrome.runtime.sendMessage({ type: 'open-welcome' }).catch(() => {}); closePop() }
+  popHow.onclick = () => { send({ type: 'open-welcome' }).catch(() => {}); closePop() }
   pop.append(popHead, popLines, popList, popFoot, popVersion, popHow)
   bar.append(pop)
 
@@ -2078,13 +2094,21 @@
    * counts, or one asked for the previous pick could land last and undo the new one.
    */
   let pingSeq = 0
+  let beat = null
 
   async function ping() {
+    // A page whose extension was reloaded cannot reach the worker again. Say so once,
+    // stop the beat, and leave the fix where it is: a page reload.
+    if (orphaned()) {
+      clearInterval(beat)
+      say(ORPHANED_NOTE, true)
+      return
+    }
     await routeLoaded
     const mine = ++pingSeq
     let res
     try {
-      res = await chrome.runtime.sendMessage({ type: 'ping', pick: chosen?.projectDir })
+      res = await send({ type: 'ping', pick: chosen?.projectDir })
     } catch {
       res = null
     }
@@ -2280,7 +2304,7 @@
   // ---------------------------------------------------------------- re-capture
 
   function sendRecapture(id, shot, error) {
-    chrome.runtime.sendMessage({ type: 'recapture', payload: { id, shot, error } }).catch(() => {})
+    send({ type: 'recapture', payload: { id, shot, error } }).catch(() => {})
   }
 
   async function recapture(ev) {
@@ -2318,6 +2342,7 @@
 
   let saveTimer
   function save() {
+    if (orphaned()) return
     clearTimeout(saveTimer)
     saveTimer = setTimeout(() => {
       chrome.storage.local.set({ [KEY]: { seq, comments } }).catch(() => {
@@ -2403,5 +2428,5 @@
   refreshDebug()
   // Same beat as the health ping. The ring only changes when the page does something,
   // and five seconds is soon enough for a button you are about to go and click.
-  setInterval(() => { ping(); refreshDebug() }, 5000)
+  beat = setInterval(() => { ping(); refreshDebug() }, 5000)
 })()

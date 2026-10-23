@@ -107,6 +107,18 @@ p { margin: 0; }
 .bridge-version[hidden], .bridge-line[hidden] { display: none; }
 .bridge-version .mark { flex: none; font-weight: var(--pp-weight-bold); }
 
+.token, .row { display: flex; align-items: center; gap: var(--pp-space-10); margin-top: var(--pp-space-10); }
+.token input {
+  flex: 1;
+  font: inherit;
+  font-size: var(--pp-text-md);
+  padding: var(--pp-space-5) var(--pp-space-10);
+  border-radius: var(--pp-radius-7);
+  border: 1px solid var(--pp-line);
+  background: transparent;
+  color: var(--pp-fg);
+}
+
 .bridge-foot { display: flex; justify-content: flex-end; margin-top: var(--pp-space-10); }
 
 button {

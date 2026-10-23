@@ -33,7 +33,8 @@ browser overlay ──POST /dispatch──▶ bridge ──▶ queue on disk (js
 
 ## Install
 
-Two pieces: a Claude Code plugin, and a Chrome extension. Requires Node 20+ and Chrome.
+Two pieces: a Claude Code plugin, and a browser extension. Requires Node 20+ and Chrome, a
+Chromium browser or Firefox 128+.
 Nothing else: dependencies install themselves with the plugin.
 
 1. **Add the marketplace and install the plugin**, in any Claude Code session:
@@ -43,7 +44,19 @@ Nothing else: dependencies install themselves with the plugin.
    /plugin install pinpoint@pinpoint-marketplace
    ```
 
-2. **Run setup:**
+2. **Start Claude Code with channels on** (restart the session you were in):
+
+   ```bash
+   claude --dangerously-load-development-channels plugin:pinpoint@pinpoint-marketplace
+   ```
+
+   This is what lets a dispatched comment appear in your session on its own. Channels are
+   a research preview and custom ones are not on Anthropic's allowlist yet, so the flag is
+   required and Claude Code shows a full-screen warning at startup: choose **I am using
+   this for local development**. Skip it and nothing breaks: comments wait in the queue
+   until you run `/pinpoint:comments`.
+
+3. **Run setup:**
 
    ```
    /pinpoint:setup
@@ -52,20 +65,36 @@ Nothing else: dependencies install themselves with the plugin.
    It copies the extension to `~/.claude/pinpoint/extension`, puts that path on your
    clipboard and opens `chrome://extensions`.
 
-3. **Load it in Chrome.** Turn on **Developer mode** (top right), click **Load
+4. **Load it in Chrome.** Turn on **Developer mode** (top right), click **Load
    unpacked**, paste the path and select the folder. "Unpacked" means Chrome runs the
    extension straight from that folder, so don't move or delete it.
 
-4. **Pin the icon:** the puzzle piece in Chrome's toolbar, then the pin next to Pinpoint.
+5. **Pin the icon:** the puzzle piece in Chrome's toolbar, then the pin next to Pinpoint.
    A welcome tab opens once on install with the same steps.
 
-5. **Open your dev app on `localhost` and click the Pinpoint icon.** The toolbar starts
-   hidden on every page; the icon shows and hides it.
+6. **Open your dev app on `localhost` and click the Pinpoint icon.** The toolbar starts
+   hidden on every page; the icon shows and hides it. On any other site, such as a staging
+   server, the same click asks your browser for that one site.
 
 Setup ends with the same checks as `/pinpoint:doctor`, each failure with its fix.
 
 **You're done when:** the icon is pinned, clicking it on your dev page shows the toolbar,
 and the pill shows your project name.
+
+### Other browsers
+
+The extension is Manifest V3 and uses no Chrome-only API, so it runs in any Chromium
+browser and in Firefox.
+
+| Browser | How to load it | Notes |
+|---|---|---|
+| Chrome, Edge, Brave, Opera, Vivaldi, Arc | Same steps as above. Open the browser's own extensions page (`edge://extensions`, `brave://extensions`, ...) | `/pinpoint:setup` opens Chrome; open the other page yourself and paste the same path |
+| Firefox 128+ | `/pinpoint:setup --firefox`, then `about:debugging#/runtime/this-firefox`, **Load Temporary Add-on**, pick `manifest.json` | Firefox removes a temporary add-on when it quits. Allow localhost access under `about:addons` > Pinpoint > Permissions |
+| Safari | Not supported yet | Needs `xcrun safari-web-extension-converter` and an Xcode build |
+
+Firefox runs the same files as Chrome. `npm run build:firefox` writes the Firefox copy to
+`dist/firefox`; the only differences are four manifest keys (event page instead of a
+service worker, `options_ui`, an add-on id and a minimum version).
 
 ### Updating
 
@@ -367,6 +396,12 @@ that is what `captureVisibleTab` needs. Chrome revokes it on every navigation, s
 one icon click per page load. Comments still send without one. If a capture fails you get
 the reason in a toast, not silence.
 
+**To skip the click for good**, open the welcome page (right-click the icon, then Options)
+and press **Allow screenshots without clicking**. Your browser asks once for access to all
+sites, which it words as "read and change your data on all websites". Pinpoint uses it
+only to take the picture when you add a comment. The button turns it off again. It is off
+by default, because it is a wide permission.
+
 The overlay hides itself before every capture, so pins and the toolbar never appear in
 the image. One viewport capture per action gets cropped per comment, because
 `captureVisibleTab` is rate-limited.
@@ -407,6 +442,29 @@ untrusted input in the channel instructions, since anything reaching the session
 model-visible.
 
 Set `PINPOINT_TOKEN` to also require an `X-Pinpoint-Token` header.
+
+### What it runs, writes and sends
+
+Nothing leaves your machine. Pinpoint has no server of its own, no analytics and no
+account. Here is everything it does:
+
+- **Runs** one local Node process, `server/pinpoint.js`, started by Claude Code as an MCP
+  server. It listens on `127.0.0.1:8788` only. To find which project a page belongs to it
+  runs `lsof` to ask which process holds the page's port and reads that process's working
+  directory. `/pinpoint:setup` also copies files, puts a path on your clipboard and opens
+  your browser's extensions page.
+- **Writes** comment batches and screenshots to `~/.claude/pinpoint/queue`, the extension
+  copy to `~/.claude/pinpoint/extension`, a peer key to `~/.claude/pinpoint/peer.key`, and
+  the backlog and history to `<project>/.pinpoint/` when you park or dispatch a comment.
+- **Sends** each comment you dispatch to the Claude Code session that runs in your
+  project, and nowhere else. The browser extension talks only to `127.0.0.1:8788`.
+- **Reads** the page you click on: the element, its text, its computed styles, the page's
+  console errors and failed requests, and a cropped screenshot. It reads them when you
+  add a comment, and sends them only when you press Dispatch.
+- **Browser permissions:** the extension is always on for `localhost` and `127.0.0.1`. On
+  any other site it asks you once, for that site only, when you click its icon.
+
+See [PRIVACY.md](./PRIVACY.md).
 
 ### Configuration
 
@@ -470,7 +528,9 @@ Pinpoint captures strong *identifiers* instead — component name, `data-testid`
 text, classes — and lets Claude grep for them. That works well and depends on no fragile
 internals.
 
-Chrome only. `localhost` and `127.0.0.1` only, by design.
+Pinpoint runs on `localhost` and `127.0.0.1` without asking. Any other site needs one
+click on the icon and a yes in the browser's permission prompt, and it is per site.
+Chrome-family browsers and Firefox 128+ are supported; Safari is not.
 
 ## Not affiliated with Anthropic
 
@@ -482,7 +542,16 @@ Pinpoint talks to Claude Code through its documented plugin, MCP, and channel
 interfaces. Those interfaces — channels especially — are Anthropic's to change, and a
 change on their side can break this tool without warning.
 
+## Examples
+
+- "Make the Start free button larger" — pin the button, type the note, press Dispatch.
+- "Why is this card's spacing different from the others?" — mark the note as a question
+  and Claude answers on the pin without editing a file.
+- "Fix these three spacing problems" — pin three elements, then dispatch them as one batch.
+
 ## Support
+
+Bugs and questions: [github.com/tolgainam/pinpoint/issues](https://github.com/tolgainam/pinpoint/issues).
 
 Pinpoint is free to use and it stays that way. If it saves you time and you
 want to say thanks, a sponsorship link will live here.
@@ -496,8 +565,4 @@ something breaks, or tell someone who reviews a lot of UI.
 
 ## License
 
-Source-available, non-commercial. See [LICENSE](./LICENSE). © 2026 Tolga Inam
-
-Not open source: you may read it and run it for your own non-commercial use. Copying,
-modifying, or redistributing it needs written permission — which is usually given for the
-asking, so ask.
+[MIT](./LICENSE). © 2026 Tolga Inam

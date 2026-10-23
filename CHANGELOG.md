@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.4.0
+
+- Firefox 128 and newer, and Opera, load the extension. `/pinpoint:setup --firefox` builds the
+  Firefox copy (`npm run build:firefox` does the same into `dist/firefox`). Firefox removes
+  a temporary add-on when it quits, so load it again after a restart. Safari is not supported.
+- Other sites, one at a time. `localhost` stays always on. On any other site, clicking the
+  icon asks the browser for that one site; say no and it still works for that page. A yes
+  keeps Pinpoint on that site.
+- Screenshots without the icon click, if you want them. The welcome page has a button that
+  asks the browser once for lasting screenshot access. It is off by default.
+- Screenshots no longer fail with Chrome's per-second quota when several are asked for at
+  once. They are queued, and a quota error is retried after a second.
+- A page left open while the extension reloads now says "Reload this page" instead of
+  throwing "Extension context invalidated".
+- Bridge token: if the bridge runs with `PINPOINT_TOKEN`, the extension now sends it. Enter
+  it on the welcome page. Before this, every dispatch from the extension got a 401.
+- `/pinpoint:setup` and the README now say how to start Claude Code with channels on, so
+  comments appear in the session on their own (`claude --dangerously-load-development-channels
+  plugin:pinpoint@pinpoint-marketplace`). Without it comments wait for `/pinpoint:comments`.
+- MIT licence, replacing the source-available one.
+- Ready for the Claude plugin directory: a plugin icon, `PRIVACY.md`, a README section that
+  lists what Pinpoint runs, writes and sends, and annotations on every MCP tool.
+- The project website has search and sharing tags, a sitemap and `robots.txt`.
+- Tests: end-to-end tests that load the extension in Chromium, a Firefox manifest test, and a
+  fix for bridge tests that failed whenever something else listened on port 3000.
+
 ## 0.3.0
 
 - The toolbar starts hidden. Clicking the Pinpoint icon shows it.

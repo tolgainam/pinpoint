@@ -89,6 +89,9 @@ before(async () => {
       PINPOINT_PORT: String(PORT),
       PINPOINT_QUEUE: queueDir,
       PINPOINT_PROJECT_DIR: projectDir,
+      // Routing is covered by routing.test.js. Here, a dev server that happens to be on
+      // :3000 must not decide where the batch goes, so lsof finds nothing.
+      PINPOINT_LSOF: '/usr/bin/false',
       // Long enough that a slow machine does not fail the handshake, short enough that a
       // genuinely missing answer does not stall the suite.
       PINPOINT_RECAPTURE_MS: '3000',

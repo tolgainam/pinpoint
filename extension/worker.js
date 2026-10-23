@@ -10,6 +10,8 @@ const BRIDGE = 'http://127.0.0.1:8788'
 const TIMEOUT = 4000
 const ACCENT = '#d97757' /* design-ok: the badge API takes a literal; mirrors --pp-accent in tokens.css */
 const LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/
+const WEB = /^https?:\/\//
+const WEB_TABS = ['http://*/*', 'https://*/*']
 
 // ---------------------------------------------------------------- bridge
 
@@ -52,13 +54,26 @@ async function health(page, pick) {
   }
 }
 
+/**
+ * The shared secret is optional: only a bridge started with PINPOINT_TOKEN asks for it.
+ * It is kept in this browser's extension storage, set on the welcome page, and goes to
+ * the bridge on 127.0.0.1 and nowhere else.
+ */
+const TOKEN_KEY = 'pinpoint:token'
+
+async function bridgeToken() {
+  try { return String((await chrome.storage.local.get(TOKEN_KEY))[TOKEN_KEY] ?? '').trim() } catch { return '' }
+}
+
 async function post(path, payload) {
   try {
+    const token = await bridgeToken()
     const r = await call(path, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(token ? { 'X-Pinpoint-Token': token } : {}) },
       body: JSON.stringify(payload),
     })
+    if (r.status === 401) return { ok: false, error: 'the bridge wants a token — enter PINPOINT_TOKEN on the Pinpoint welcome page (right-click the icon > Options)' }
     if (!r.ok) return { ok: false, error: `bridge returned ${r.status}: ${r.body.slice(0, 200)}` }
     return { ok: true, ...(r.json ?? {}) }
   } catch (err) {
@@ -74,11 +89,22 @@ async function post(path, payload) {
 // ---------------------------------------------------------------- capture
 
 let lastCapture = 0
+/** Captures run one at a time. See capture(). */
+let captureQueue = Promise.resolve()
+
+/** Chrome's own limit is two a second; this leaves a margin over it. */
+const CAPTURE_GAP = 600
+const QUOTA = /quota|MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND|exceeds/i
 
 /**
  * Content scripts cannot call captureVisibleTab, so every screenshot comes through here.
- * Chrome rate limits this to roughly two calls a second and throws when you exceed it,
- * so pace the calls rather than losing the user's comment to a quota error.
+ * Chrome rate limits this to roughly two calls a second and throws when you exceed it.
+ *
+ * Pacing alone is not enough. A batch of comments, a follow-up and a resolve re-shot can
+ * all ask at once, and each one measured the gap from the same "last call" and fired
+ * together. So the calls are queued: each waits for the one before it, then for the gap.
+ * A quota error that still gets through is retried after a full second, not a fraction of
+ * one, because the window it is counting in is a second wide.
  *
  * The permission model is the trap. captureVisibleTab accepts <all_urls> or activeTab —
  * a host permission for localhost is NOT enough — and activeTab is granted by clicking
@@ -86,11 +112,17 @@ let lastCapture = 0
  * takes screenshots away until the icon is clicked again, and the only decent response
  * is to say so in plain words rather than return an empty image.
  */
-async function capture() {
-  const wait = Math.max(0, 600 - (Date.now() - lastCapture))
+function capture() {
+  const run = captureQueue.then(captureOnce)
+  captureQueue = run.catch(() => {})
+  return run
+}
+
+async function captureOnce() {
+  const wait = Math.max(0, CAPTURE_GAP - (Date.now() - lastCapture))
   if (wait) await new Promise(r => setTimeout(r, wait))
 
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
     try {
       lastCapture = Date.now()
       const dataUrl = await chrome.tabs.captureVisibleTab({ format: 'png' })
@@ -98,10 +130,10 @@ async function capture() {
     } catch (err) {
       const msg = String(err?.message || err)
       if (/permission|activeTab|all_urls|cannot access/i.test(msg)) {
-        return { ok: false, permission: true, error: 'click the Pinpoint icon on this tab to allow screenshots, then add the comment again' }
+        return { ok: false, permission: true, error: 'click the Pinpoint icon on this tab to allow screenshots, then add the comment again (or allow them on every page: right-click the icon > Options)' }
       }
-      if (attempt === 2) return { ok: false, error: msg }
-      await new Promise(r => setTimeout(r, 350 * (attempt + 1)))
+      if (attempt === 3) return { ok: false, error: msg }
+      await new Promise(r => setTimeout(r, QUOTA.test(msg) ? 1100 : 350 * (attempt + 1)))
     }
   }
 }
@@ -126,7 +158,7 @@ let backoff = 1000
 async function fanOut(event) {
   let tabs = []
   try {
-    tabs = await chrome.tabs.query({ url: ['http://localhost/*', 'http://127.0.0.1/*'] })
+    tabs = await chrome.tabs.query({ url: WEB_TABS })
   } catch { return }
   for (const t of tabs) {
     if (!t.id) continue
@@ -277,14 +309,47 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
   return false
 })
 
+/**
+ * Any other http(s) site is opt-in, one site at a time. Localhost is always on. For
+ * anything else the icon click asks Chrome for that one host (a click is the user gesture
+ * the prompt needs). A yes registers the content scripts for it, so the site loads
+ * Pinpoint on every visit; a no still works for this page, because the click itself grants
+ * activeTab. The prompt is the only place a site becomes trusted, never a setting.
+ */
+const sitePattern = url => { const u = new URL(url); return `${u.protocol}//${u.hostname}/*` }
+
+async function keepOnSite(pattern) {
+  const ids = [`${pattern}:probe`, `${pattern}:ui`]
+  const have = await chrome.scripting.getRegisteredContentScripts({ ids })
+  if (have.length === ids.length) return
+  if (have.length) await chrome.scripting.unregisterContentScripts({ ids: have.map(s => s.id) })
+  await chrome.scripting.registerContentScripts([
+    { id: ids[0], matches: [pattern], js: ['probe.js'], world: 'MAIN', runAt: 'document_start', persistAcrossSessions: true },
+    { id: ids[1], matches: [pattern], js: ['status.js', 'content.js'], runAt: 'document_idle', persistAcrossSessions: true },
+  ])
+}
+
+async function allowSite(url) {
+  try {
+    const origins = [sitePattern(url)]
+    const granted = (await chrome.permissions.contains({ origins })) || (await chrome.permissions.request({ origins }))
+    if (granted) await keepOnSite(origins[0])
+  } catch (err) {
+    console.warn('[pinpoint] could not keep Pinpoint on this site', err)
+  }
+}
+
 chrome.action.onClicked.addListener(async tab => {
   if (!tab?.id) return
 
-  if (!LOCAL.test(tab.url ?? '')) {
-    await badge(tab.id, '—', 'Pinpoint only runs on http://localhost and http://127.0.0.1 dev servers')
+  if (!WEB.test(tab.url ?? '')) {
+    await badge(tab.id, '—', 'Pinpoint only runs on http and https pages')
     setTimeout(() => badge(tab.id, ''), 4000)
     return
   }
+
+  // First, before any await that could use up the click.
+  if (!LOCAL.test(tab.url)) await allowSite(tab.url)
 
   if (!(await ensureInjected(tab.id))) {
     await badge(tab.id, '!', 'Pinpoint could not attach to this page — try reloading it')
@@ -307,7 +372,7 @@ chrome.action.onClicked.addListener(async tab => {
  */
 chrome.commands?.onCommand.addListener(async (command, tab) => {
   if (command !== 'freeze' || !tab?.id) return
-  if (!LOCAL.test(tab.url ?? '')) return
+  if (!WEB.test(tab.url ?? '')) return
   if (!(await ensureInjected(tab.id))) return
   chrome.tabs.sendMessage(tab.id, { type: 'freeze' }).catch(() => {})
 })

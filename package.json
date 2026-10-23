@@ -1,9 +1,9 @@
 {
   "name": "pinpoint-claude",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "description": "Pin comments to elements on a localhost page and dispatch them into a running Claude Code session",
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "MIT",
   "repository": "github:tolgainam/pinpoint",
   "keywords": ["claude-code", "claude-code-plugin", "mcp", "chrome-extension", "devtools"],
   "engines": {
@@ -13,6 +13,7 @@
     "server": "node server/pinpoint.js",
     "demo": "node demo/serve.js",
     "test": "node --test test/*.test.js",
+    "build:firefox": "node scripts/firefox.js",
     "check:design": "node scripts/check-design.js",
     "screens:update": "node scripts/screens-update.js"
   },

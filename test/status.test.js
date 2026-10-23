@@ -271,3 +271,13 @@ test('version: the extension copy of compareVersions agrees with server/version.
     }
   }
 })
+
+test('Apply to is offered only by a connected bridge that advertises comment-scope-v1', () => {
+  const { canCarryScope } = globalThis.PinpointStatus
+  assert.equal(canCarryScope({ connected: true, capabilities: { 'comment-scope-v1': true } }), true)
+  // A bridge from before 0.7 sends no capabilities; it would drop the scope.
+  assert.equal(canCarryScope({ connected: true, version: '0.6.0' }), false)
+  assert.equal(canCarryScope({ connected: true, capabilities: { 'comment-scope-v1': 'yes' } }), false)
+  assert.equal(canCarryScope({ connected: false, capabilities: { 'comment-scope-v1': true } }), false)
+  assert.equal(canCarryScope(null), false)
+})

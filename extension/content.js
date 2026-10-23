@@ -901,6 +901,7 @@
       selectorOf: buildSelector,
       announce: text => live.announce(text),
       focused: () => root.activeElement,
+      enabled: () => scopeCarried(),
     })
 
     const cancel = el('button', '', 'Cancel')
@@ -911,6 +912,8 @@
     openCard = card
     card.cleanup = () => { restorePreviews(); scopeCtl.destroy() }
     card.reposition = scopeCtl.reposition
+    // Whether the bridge can carry a scope can change with the 5s ping too.
+    card.recheckScope = () => scopeCtl.recheck()
     // Whether Park is possible changes with the 5s ping, so the toolbar repaints this.
     card.repaintIntent = () => paintIntent()
     placeCard(card, x + 12, y + 12, () => (snapRect && depth === 0 ? snapRect : target.getBoundingClientRect()))
@@ -1317,8 +1320,7 @@
         note: text,
         transient: frame ? true : undefined,
         deltas: picks.length ? picks : undefined,
-        // Kept with the comment, on this page only for now: the dispatch and backlog
-        // payloads leave it out until the bridge says it can carry it.
+        // Which elements the picks are for. Only set when the bridge said it can carry one.
         scope: picks.length ? scoped.scope : undefined,
         debug: debug.length ? debug : undefined,
         shot: shot || undefined,
@@ -1359,6 +1361,13 @@
    */
   async function sendToBacklog(comment) {
     let res
+    if (stranded([comment])) {
+      comment.unsaved = true
+      say(SCOPE_STRANDED, true)
+      save()
+      render()
+      return
+    }
     try {
       res = await send({
         type: 'backlog',
@@ -1384,6 +1393,7 @@
             parents: comment.parents,
             transient: comment.transient,
             deltas: comment.deltas,
+            scope: outgoingScope(comment),
             debug: comment.debug,
             component: comment.component,
             question: comment.question,
@@ -2058,6 +2068,12 @@
       openPop()
       return false
     }
+    // A group chosen while the bridge could carry it, and the bridge cannot now. Sending
+    // would quietly turn it into Only this, so nothing is sent and the comments wait.
+    if (stranded(outgoing)) {
+      say(SCOPE_STRANDED, true)
+      return false
+    }
 
     // One uncropped shot for layout context — but only when this batch has crops at all.
     // If you turned screenshots off, you meant off.
@@ -2102,6 +2118,7 @@
         followUpOf: c.followUpOf,
         round: c.round,
         deltas: c.deltas,
+        scope: outgoingScope(c),
         debug: c.debug,
         component: c.component,
         question: c.question,
@@ -2170,6 +2187,23 @@
   let chosen = null
   let lastDir = null
   let lastHealth = null
+
+  /**
+   * "Apply to" needs a bridge that says it carries comment-scope-v1. An older one would take
+   * the comment and drop the scope without a word, and the scope is the request. Without the
+   * flag the control stays hidden and no scope is sent; with no bridge at all (Offline) the
+   * answer is no as well, since nothing has been promised yet.
+   */
+  const scopeCarried = () => PinpointStatus.canCarryScope(lastHealth)
+  let scopeWas = false
+
+  /** The scope a payload carries: none for a bridge that cannot take one. */
+  const outgoingScope = c => (c.scope && scopeCarried() ? c.scope : undefined)
+
+  const SCOPE_STRANDED = 'A comment applies to a group, and the connected Pinpoint plugin cannot carry that. Update the plugin and reconnect, then send again.'
+
+  /** Whether any of these would lose a group scope on the way to this bridge. */
+  const stranded = list => !scopeCarried() && list.some(c => c.scope && c.scope.kind !== 'element')
   // Until the first ping answers nothing is known, and Offline would be a claim. Waiting
   // is the honest state, and it keeps Dispatch blocked for the half second it lasts.
   let status = PinpointStatus.view({ connected: true, route: { how: 'reconnecting' } }, null, PORT, null)
@@ -2326,6 +2360,10 @@
     // Only its second line depends on the status, and only Offline or not.
     if (status.state !== tipState) paintTip()
     openCard?.repaintIntent?.()
+    if (scopeCarried() !== scopeWas) {
+      scopeWas = scopeCarried()
+      openCard?.recheckScope?.()
+    }
   }
 
   /**

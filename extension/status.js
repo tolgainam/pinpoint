@@ -229,6 +229,12 @@
     return String(loc.port || (loc.protocol === 'https:' ? '443' : '80'))
   }
 
+  /**
+   * Whether this bridge carries a comment's "Apply to" scope. Only a bridge that says so in
+   * /health does; one from before 0.7 answers without `capabilities` and would drop it.
+   */
+  const canCarryScope = health => !!health?.connected && health?.capabilities?.['comment-scope-v1'] === true
+
   // ---------------------------------------------------------------- versions
 
   /**
@@ -314,6 +320,6 @@
 
   globalThis.PinpointStatus = {
     view, portOf, tilde, displayNames, same, eventFor, dispatchPick,
-    compareVersions, versionNote, bridgeSummary, tipLine, TIP_KEY,
+    compareVersions, versionNote, bridgeSummary, tipLine, TIP_KEY, canCarryScope,
   }
 })()

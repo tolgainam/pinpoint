@@ -32,6 +32,7 @@ import { real, canon, inside, nowhere } from './paths.js'
 import {
   sectionRange, parseItems, appendOpen, startItem, finishItem, appendHistory, ProjectBusyError,
 } from './project-files.js'
+import { sanitiseScope, scopeFacts, SCOPE_CAPABILITY } from './scope.js'
 
 const PORT = Number(process.env.PINPOINT_PORT ?? 8788)
 /**
@@ -546,6 +547,8 @@ function renderBatch(b) {
       ...(c.deltas?.length
         ? [`**requested change${c.deltas.length > 1 ? 's' : ''}** — ${c.deltas.map(deltaLine).filter(Boolean).join(' · ')}`]
         : []),
+      // Its own lines, under the values it applies to. Nothing at all for Only this.
+      ...scopeFacts(c.scope, { earlierRound: !!c.followUpOf && !c.deltas?.length }),
       followUpFact(c),
       c.answer ? `**already answered** — your reply was "${String(c.answer).replace(/\s+/g, ' ').slice(0, 200)}". Only answer again if the user has asked more.` : null,
       c.component ? `component: \`${c.component}\`` : null,
@@ -1764,6 +1767,8 @@ async function handleDispatch(req, res) {
       shot = `shot-${String(n).padStart(2, '0')}.png`
       shots.push([shot, c.shot])
     }
+    const deltas = sanitiseDeltas(c.deltas)
+    const followUpOf = typeof c.followUpOf === 'string' ? c.followUpOf.slice(0, 60) : undefined
     return {
       n,
       note: String(c.note ?? '').slice(0, 2000),
@@ -1775,9 +1780,13 @@ async function handleDispatch(req, res) {
       styles: c.styles && typeof c.styles === 'object' ? c.styles : undefined,
       parents: Array.isArray(c.parents) ? c.parents.slice(0, 6) : undefined,
       transient: c.transient === true || undefined,
-      followUpOf: typeof c.followUpOf === 'string' ? c.followUpOf.slice(0, 60) : undefined,
+      followUpOf,
       round: Number(c.round) > 1 ? Math.min(Number(c.round), 9) : undefined,
-      deltas: sanitiseDeltas(c.deltas),
+      deltas,
+      // Kept on the comment record, so list_comments and a follow-up read the same group.
+      // One that is not a version 1 scope is dropped and the comment reads as Only this.
+      // A scope covers picked values, so it rides only with picks, or on a follow-up of them.
+      scope: deltas || followUpOf ? sanitiseScope(c.scope) : undefined,
       debug: sanitiseDebug(c.debug),
       question: c.question === true || undefined,
       shot,
@@ -2016,6 +2025,10 @@ async function handleBacklog(req, res) {
   const deltas = sanitiseDeltas(c.deltas)
   if (deltas) {
     block.push(`  - requested: ${deltas.map(d => `${d.prop} ${d.fromToken ?? d.from} → ${d.toToken ?? d.to}`).join('; ')}`)
+    // The group the values were for, worded as in a dispatched brief, so start_backlog_item
+    // hands the same instructions over weeks later. One line each, all indented: the item
+    // keeps owning them when it moves to Done.
+    for (const fact of scopeFacts(sanitiseScope(c.scope))) block.push(`  - ${fact}`)
   }
   // Computed styles are deliberately not written here. A backlog item is read weeks
   // later, and stale layout numbers read as current fact — the screenshot is at least
@@ -2115,6 +2128,9 @@ const server = createServer((req, res) => {
         pending: pendingBatches().filter(b => forProject(b, key)).length,
         backlog: dir ? listOpen(backlogFile(dir)).length : 0,
         sessions: sessionList(), route: { ...shown, ...(error ? { error } : {}) },
+        // What this bridge can carry. The extension offers group scope only when it sees
+        // its flag here: an older bridge would drop the scope and still accept the comment.
+        capabilities: { [SCOPE_CAPABILITY]: true },
         extension: extensionSeen
           ? { version: extensionSeen.version, browser: extensionSeen.browser, secondsAgo: Math.round((Date.now() - extensionSeen.at) / 1000) }
           : null,

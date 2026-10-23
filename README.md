@@ -393,8 +393,18 @@ Hovering a choice or reaching it with the keyboard outlines its elements, and ch
 previews the picks on all of them; Cancel, Escape and Add put the page back. If some of
 them use another value today, the composer says how many. Counts are for the current page,
 with hidden elements counted apart, and stop at **200+**, which can be chosen but is not
-previewed. A frozen frame offers only Only this. The choice is stored with the comment;
-it is not sent to the session yet.
+previewed. A frozen frame offers only Only this.
+
+The session gets the group with the comment: the choice, its selector hint, the count and
+any values that differ inside it, plus the instruction that this is a set of elements seen
+on the page, not a rule in your code. It has to find the class, component or rule that
+draws them, change it once at the source rather than per element, and say so if it can't.
+Only this adds nothing to the comment. Parked comments and follow-ups keep their group.
+
+Apply to needs the plugin and the extension from the same release. With an older plugin
+the list stays hidden and picks apply to the one element, because an older plugin would
+drop the group without saying so; a comment that already has a group is held back with a
+message rather than sent as Only this.
 
 ### What rides along with a comment
 

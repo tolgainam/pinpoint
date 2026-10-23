@@ -13,6 +13,7 @@
   "files": [
     "extension/scope.js",
     "server/project-files.js",
+    "server/scope.js",
     "server/version.js",
     "server/paths.js",
     "scripts/check-rules.js",

@@ -39,8 +39,11 @@ function recordingBridge(version) {
     const frame = `data: ${JSON.stringify({ seq: ++seq, projectDir: PROJECT.projectDir, ...event })}\n\n`
     for (const res of streams) res.write(frame)
   }
-  /** A bridge started with PINPOINT_TOKEN asks every POST for it. Empty means it does not. */
-  const state = { token: '', palette: null }
+  /**
+   * A bridge started with PINPOINT_TOKEN asks every POST for it. Empty means it does not.
+   * `scope` false answers /health like a bridge from before comment-scope-v1.
+   */
+  const state = { token: '', palette: null, scope: true }
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
     identities.push({ path: url.pathname, version: req.headers['x-pinpoint-extension'], origin: req.headers.origin })
@@ -49,6 +52,7 @@ function recordingBridge(version) {
       return json(200, {
         ok: true, version, projectDir: PROJECT.projectDir, pending: 0, backlog: 0, sessions: [PROJECT],
         route: { how: 'auto', projectDir: PROJECT.projectDir, detected: PROJECT.projectDir, detectedName: PROJECT.name },
+        ...(state.scope ? { capabilities: { 'comment-scope-v1': true } } : {}),
       })
     }
     if (url.pathname === '/events') {
@@ -682,7 +686,7 @@ test('choosing a group previews it on every member, warns about the one that dif
   await closeAll()
 })
 
-test('Add stores the scope with the comment, Dispatch leaves it out for now, and the next comment starts at Only this', { skip: !browser.ok, timeout: 60000 }, async () => {
+test('Add stores the scope with the comment, Dispatch sends it, and the next comment starts at Only this', { skip: !browser.ok, timeout: 60000 }, async () => {
   await compose('[data-n="1"]')
   await pickColour()
   await host('.scope-opt[data-kind="classes"]').click()
@@ -709,7 +713,7 @@ test('Add stores the scope with the comment, Dispatch leaves it out for now, and
   assert.ok(bridge.dispatched.length > before, 'nothing was dispatched')
   const sent = bridge.dispatched.at(-1).comments[0]
   assert.equal(sent.deltas.length, 1)
-  assert.equal('scope' in sent, false, 'scope went to the bridge before it can carry it')
+  assert.deepEqual(sent.scope, c.scope, 'the bridge did not get the scope that was stored')
 
   // A fresh composer is back at Only this.
   await compose('[data-n="2"]')
@@ -873,6 +877,71 @@ test('a frozen frame offers only Only this', { skip: !browser.ok, timeout: 60000
   assert.equal(await host('.scope-warn.show').innerText(), 'Frozen frame — only this element can be chosen.')
   await closeAll()
   await page.keyboard.press('Escape')
+})
+
+/** Wait for the toolbar's next /health, which is how it learns what the bridge can carry. */
+async function nextHealth() {
+  const seen = bridge.identities.filter(i => i.path === '/health').length
+  const until = Date.now() + 8000
+  while (bridge.identities.filter(i => i.path === '/health').length === seen && Date.now() < until) await page.waitForTimeout(50)
+  // The answer still has to be painted.
+  await page.waitForTimeout(200)
+}
+
+test('a bridge without comment-scope-v1 gets no Apply to and no scope, only the picks', { skip: !browser.ok, timeout: 60000 }, async () => {
+  bridge.state.scope = false
+  try {
+    await loadCards()
+    await compose('[data-n="1"]')
+    await host('.card .chip').filter({ hasText: 'text' }).click()
+    await host('.card .swatch').first().click()
+    await page.waitForTimeout(400)
+    assert.equal(await host('.scope').isVisible(), false, 'Apply to shows for a bridge that would drop it')
+    // Only this still previews the pick on the element itself.
+    assert.deepEqual(await inline(), { c1: 'rebeccapurple', c2: '', c3: '', promo: '', plain: '' })
+    await host('.card button.primary').click()
+    await host('.card').waitFor({ state: 'detached' })
+    const [c] = await stored(1)
+    assert.equal(c.deltas.length, 1)
+    assert.equal(c.scope, undefined, 'a scope was stored for a bridge that cannot carry it')
+
+    const before = bridge.dispatched.length
+    await host('.bar button.primary').filter({ hasText: 'Dispatch' }).click()
+    const until = Date.now() + 8000
+    while (bridge.dispatched.length === before && Date.now() < until) await page.waitForTimeout(50)
+    const sent = bridge.dispatched.at(-1).comments[0]
+    assert.equal(sent.deltas.length, 1)
+    assert.equal('scope' in sent, false)
+  } finally {
+    bridge.state.scope = true
+    await closeAll()
+  }
+})
+
+test('a group chosen before the bridge lost comment-scope-v1 is refused at Add, never narrowed in silence', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await loadCards()
+  await compose('[data-n="1"]')
+  await pickColour()
+  await host('.scope-opt[data-kind="classes"]').click()
+  bridge.state.scope = false
+  try {
+    await nextHealth()
+    // The chosen group stays on screen, so the refusal has something to point at.
+    assert.equal(await host('.scope').isVisible(), true)
+    await host('.card button.primary').click()
+    await host('.toast.show').filter({ hasText: 'cannot carry "Same classes"' }).waitFor({ timeout: 5000 })
+    assert.equal(await host('.card').count(), 1, 'the composer closed on a refused Add')
+    assert.equal(await host('.scope').isVisible(), false)
+    assert.deepEqual(await stored(0), [])
+    // A second Add is the user choosing Only this, in words they were shown.
+    await host('.card button.primary').click()
+    await host('.card').waitFor({ state: 'detached' })
+    const [c] = await stored(1)
+    assert.equal(c.scope, undefined)
+  } finally {
+    bridge.state.scope = true
+    await closeAll()
+  }
 })
 
 test('a page left open across an extension reload says so, instead of throwing', { skip: !browser.ok, timeout: 60000 }, async () => {

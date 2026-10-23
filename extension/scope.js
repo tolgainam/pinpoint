@@ -471,7 +471,8 @@
    * deps: el(tag, cls, text), doc, exclude (our host), layer (for outlines), visible(node),
    *   read(node, prop) -> normalised computed value, probe(target) -> Promise<answer|null>,
    *   resolve(selector) -> node, selectorOf(node), announce(text), focused() -> the
-   *   overlay's focused element
+   *   overlay's focused element, enabled() -> whether the connected bridge can carry a
+   *   scope (it advertises comment-scope-v1); absent means yes
    */
   function composer(deps) {
     const { el } = deps
@@ -501,6 +502,13 @@
     const saved = new Map()
 
     const ctxOf = () => ({ doc: deps.doc, exclude: deps.exclude, visible: deps.visible, frozen })
+    /**
+     * A bridge without comment-scope-v1 would drop the scope and still take the comment, so
+     * with one the control stays hidden and the comment is Only this, as before scope existed.
+     */
+    const enabled = () => (deps.enabled ? !!deps.enabled() : true)
+    /** The last state sync() was given, so a change of bridge can redraw without one. */
+    let last = null
 
     function restore() {
       for (const [node, props] of saved) {
@@ -693,6 +701,10 @@
      * nothing previewed. A new element: back to Only this and every match asked again.
      */
     function sync(state) {
+      last = state
+      // Hidden for a bridge that cannot carry it, unless a group is already chosen: that one
+      // stays on screen so Add can refuse it in words rather than narrow it in silence.
+      if (!enabled() && chosen === 'element') state = { ...state, deltas: [] }
       const moved = state.target !== target
       deltas = state.deltas
       frozen = !!state.frozen
@@ -728,6 +740,15 @@
      */
     async function finalize() {
       restore()
+      if (!enabled()) {
+        if (chosen === 'element' || !deltas.length) return { ok: true, scope: undefined }
+        // The bridge changed under an open composer. Never fall back to Only this behind the
+        // user's back: refuse, say why, and leave Only this as the choice for the next Add.
+        const label = option(chosen)?.label ?? chosen
+        chosen = 'element'
+        if (last) sync(last)
+        return { ok: false, error: `The connected Pinpoint plugin cannot carry "${label}". Update the plugin and reconnect, or add this as Only this.` }
+      }
       if (!deltas.length || !target) return { ok: true, scope: undefined }
       let opt
       if (chosen === 'component') {
@@ -750,6 +771,8 @@
     return {
       node: box,
       sync,
+      /** After the bridge's capabilities change: shown or hidden to match, nothing else. */
+      recheck() { if (last) sync(last) },
       restore,
       reapply: applyPreview,
       finalize,

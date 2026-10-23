@@ -63,6 +63,7 @@ const bridge = createServer((req, res) => {
     return json(200, {
       ok: true, version, projectDir: PROJECT.projectDir, pending: 0, backlog: 0, sessions: [PROJECT],
       route: { how: 'auto', projectDir: PROJECT.projectDir, detected: PROJECT.projectDir, detectedName: PROJECT.name },
+      capabilities: { 'comment-scope-v1': true },
     })
   }
   if (url.pathname === '/events') {

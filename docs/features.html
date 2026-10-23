@@ -1041,8 +1041,22 @@
     <p>
       <strong>From the keyboard.</strong> The choices are radio buttons: Tab reaches the
       chosen one, the arrows change it, and the new choice is read out with its count and
-      any warning. The choice is saved with the comment; sending it to the session comes in
-      the next step of this release.
+      any warning.
+    </p>
+    <p>
+      <strong>What the session is told.</strong> The comment arrives with the group: which
+      choice, the selector hint, the count, and any values that differ inside it. The session
+      is told that the group is a set of elements seen on this page, not a rule in your code:
+      it has to find the class, component or rule that draws them and change that once,
+      rather than edit each element, and say so if it cannot. Only this adds nothing to the
+      comment. A parked comment keeps its group, and so does a follow-up on it.
+    </p>
+    <p>
+      <strong>Update the plugin too.</strong> Apply to needs the 0.7 plugin as well as the
+      0.7 extension. With an older plugin the list stays hidden and picked values apply to
+      the one element, as before, because an older plugin would quietly drop the group.
+      A comment that already has a group is held back with a message instead of being sent
+      as Only this.
     </p>
   </div>
 </section>

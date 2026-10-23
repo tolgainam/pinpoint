@@ -94,6 +94,7 @@ function stubBridge(version) {
       return json(200, {
         ok: true, version: state.version, projectDir: sessions[0].projectDir, pending: 0, backlog: 0, sessions,
         route: { how: 'auto', projectDir: sessions[0].projectDir, detected: sessions[0].projectDir, detectedName: 'nimbus' },
+        capabilities: { 'comment-scope-v1': true },
       })
     }
     if (url.pathname === '/events') {

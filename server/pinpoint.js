@@ -20,11 +20,11 @@ import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprot
 import { createServer, request as httpRequest } from 'node:http'
 import { execFile } from 'node:child_process'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
-import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync, linkSync, renameSync } from 'node:fs'
-import { join, dirname, basename, resolve, isAbsolute } from 'node:path'
+import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync, linkSync, renameSync, appendFileSync } from 'node:fs'
+import { join, dirname, basename, resolve, isAbsolute, relative } from 'node:path'
 import { homedir } from 'node:os'
 import {
-  probeProject, withRuntime, tokenIndex, annotate, summaryLine, guardrailLine, chipData, deltaLine,
+  probeProject, fingerprintOf, withRuntime, tokenIndex, annotate, summaryLine, guardrailLine, chipData, deltaLine,
 } from './design-system.js'
 import { compareVersions } from './version.js'
 import { real, canon, inside, nowhere } from './paths.js'
@@ -377,26 +377,163 @@ const NO_DESIGN_SYSTEM = {
 }
 
 /**
- * Probed once per project and kept. A project's design system does not change while you
- * are commenting on it, and the walk is by some distance the most expensive thing the
- * bridge does, and paying for it on every batch would put it in the way of the dispatch it
- * decorates. Keyed by directory because the bridge now probes for whichever project a
- * page belongs to, not only its own.
+ * How often a project's known design-system files are statted, at most, and how old the
+ * last full probe may get before a request starts another one in the background. The
+ * second is what finds a config file that did not exist when the project was last read.
+ * Env-overridable so the tests can run them at 0 and at a fraction of a second.
  */
+const DS_CHECK_MS = Number(process.env.PINPOINT_DS_CHECK_MS ?? 2000)
+const DS_TTL_MS = Number(process.env.PINPOINT_DS_TTL_MS ?? 30_000)
+/**
+ * Test seams, both off unless set. PROBE_LOG gets one line per probe that runs, which is
+ * the only honest way to count them from outside; FAIL_IF makes a probe throw while that
+ * file exists, because a real probe almost never does.
+ */
+const DS_PROBE_LOG = process.env.PINPOINT_DS_PROBE_LOG
+const DS_FAIL_IF = process.env.PINPOINT_DS_FAIL_IF
+
+/**
+ * One record per project directory: the last good summary, the files it was read from and
+ * their fingerprint, when they were last statted and last probed, and whether a refresh is
+ * running or last failed.
+ *
+ * The walk is by some distance the most expensive thing the bridge does, and a dispatch
+ * must never wait for it, so only a project's very first probe runs in the request (there
+ * is nothing to serve yet). After that a request is always answered from the record, and
+ * a change it notices is probed again after the answer has gone. The model editing a
+ * theme is the normal outcome of a request, so a change is not an edge case: without this
+ * the next pick offered the old scale until the bridge restarted. Keyed by directory
+ * because the bridge probes for whichever project a page belongs to, not only its own.
+ *
+ * @typedef {{summary: object, fingerprint: string, files: string[], checkedAt: number,
+ *   probedAt: number, refreshing: Promise<void>|null, again: boolean, stale: boolean}} DesignRecord
+ */
+/** @type {Map<string, DesignRecord>} */
 const designSystems = new Map()
-function projectDesignSystem(dir = PROJECT_DIR) {
-  if (designSystems.has(dir)) return designSystems.get(dir)
-  let ds
+
+/** A probe, split into the summary everyone sees and the file list only this side needs. */
+function probeDesign(dir) {
+  if (DS_PROBE_LOG) { try { appendFileSync(DS_PROBE_LOG, `${dir}\n`) } catch { /* test aid only */ } }
+  if (DS_FAIL_IF && existsSync(DS_FAIL_IF)) throw new Error('design-system probe failed (PINPOINT_DS_FAIL_IF)')
+  const { files = [], ...summary } = probeProject(dir)
+  return { summary, files, fingerprint: fingerprintOf(files) }
+}
+
+function keepProbe(rec, probed) {
+  rec.summary = probed.summary
+  rec.files = probed.files
+  rec.fingerprint = probed.fingerprint
+  rec.probedAt = rec.checkedAt = Date.now()
+  rec.stale = false
+}
+
+/** The record for a project seen for the first time, probed now because nothing else can be served. */
+function firstDesignRecord(dir) {
+  const rec = {
+    summary: NO_DESIGN_SYSTEM, fingerprint: '', files: [], checkedAt: 0, probedAt: 0,
+    refreshing: null, again: false, stale: false,
+  }
   try {
-    ds = probeProject(dir)
+    keepProbe(rec, probeDesign(dir))
   } catch (err) {
     // A probe that throws must cost nothing but its own output. The batch it was
-    // decorating is still a perfectly good batch.
+    // decorating is still a perfectly good batch, and the TTL tries again later.
     console.error('[pinpoint] design-system probe failed:', err)
-    ds = NO_DESIGN_SYSTEM
+    rec.probedAt = rec.checkedAt = Date.now()
+    rec.stale = true
   }
-  designSystems.set(dir, ds)
-  return ds
+  return rec
+}
+
+/**
+ * Probe again after the current request has been answered. Single-flight: while one runs,
+ * another ask only notes `again` when it is urgent (a file was reported edited, maybe
+ * after the running probe read it), and that runs once more when this one ends. A failure
+ * keeps the last good summary and marks it stale; the next success clears that.
+ */
+function refreshDesign(dir, rec, urgent = false) {
+  if (rec.refreshing) { if (urgent) rec.again = true; return }
+  rec.refreshing = new Promise(done => setImmediate(() => {
+    try {
+      keepProbe(rec, probeDesign(dir))
+    } catch (err) {
+      console.error('[pinpoint] design-system refresh failed, keeping the last summary:', err)
+      // Counted as a probe for the TTL, so a broken project is retried once per TTL rather
+      // than on every request. The fingerprint is left alone: a further edit retries too.
+      rec.probedAt = rec.checkedAt = Date.now()
+      rec.stale = true
+    }
+    rec.refreshing = null
+    done()
+    if (rec.again) { rec.again = false; refreshDesign(dir, rec) }
+  }))
+}
+
+/**
+ * The record to answer from, starting a background refresh when it looks out of date:
+ * the full probe is older than the TTL, or (at most once per DS_CHECK_MS) a stat of its
+ * known files says one of them moved. Never throws and never waits, past a first probe.
+ */
+function designRecord(dir = PROJECT_DIR) {
+  let rec = designSystems.get(dir)
+  if (!rec) {
+    rec = firstDesignRecord(dir)
+    designSystems.set(dir, rec)
+    return rec
+  }
+  if (rec.refreshing) return rec
+  try {
+    const now = Date.now()
+    if (now - rec.probedAt >= DS_TTL_MS) {
+      refreshDesign(dir, rec)
+    } else if (now - rec.checkedAt >= DS_CHECK_MS) {
+      rec.checkedAt = now
+      if (fingerprintOf(rec.files) !== rec.fingerprint) refreshDesign(dir, rec)
+    }
+  } catch (err) {
+    console.error('[pinpoint] design-system check failed:', err)
+  }
+  return rec
+}
+
+function projectDesignSystem(dir = PROJECT_DIR) {
+  return designRecord(dir).summary
+}
+
+/** Names that are a theme or a config whatever the probe last found, for report_progress. */
+const THEME_LIKE = /(^|[\\/])(tailwind\.config\.[cm]?[jt]s|components\.json|globals\.css|[^\\/]*(theme|tokens)[^\\/]*)$/i
+
+/**
+ * Whether a file named by report_progress can have changed a project's design system: it
+ * is one the last probe read, or it looks like a theme, a config, or a stylesheet. Loose
+ * on purpose and bounded by the record's file list: a needless refresh costs one probe in
+ * the background, a missed one costs a wrong scale on the next pick.
+ */
+function touchesDesign(dir, rec, file) {
+  const name = String(file).trim().replace(/\s+[+-]\d+(\s+[+-]\d+)*\s*$/, '').replace(/\\/g, '/')
+  if (!name) return false
+  const abs = isAbsolute(name) ? name : null
+  if (abs && !inside(canon(abs), canon(dir))) return false
+  if (THEME_LIKE.test(name) || name.toLowerCase().endsWith('.css')) return true
+  for (const known of rec.files.slice(0, 64)) {
+    const rel = relative(dir, known).replace(/\\/g, '/')
+    if (name === known || name === rel || name.endsWith(`/${rel}`)) return true
+  }
+  return false
+}
+
+/** report_progress named files: refresh, now and in the background, any project they belong to. */
+function invalidateDesign(dir, files) {
+  if (!files?.length) return
+  try {
+    const want = canon(dir)
+    for (const [key, rec] of designSystems) {
+      if (canon(key) !== want) continue
+      if (files.some(f => touchesDesign(key, rec, f))) refreshDesign(key, rec, true)
+    }
+  } catch (err) {
+    console.error('[pinpoint] design-system invalidation failed:', err)
+  }
 }
 
 /** The project's system plus whatever this page reported about itself. */
@@ -764,6 +901,9 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
     c.progress = { state, note, files, at: new Date().toISOString() }
     writeBatch(b)
     tell({ type: 'progress', id, state, note, files })
+    // An edited theme or config is the usual result of a request, and the next pick should
+    // offer the new scale, not the one from before the edit.
+    invalidateDesign(b.projectDir ?? PROJECT_DIR, files)
     return { content: [{ type: 'text', text: `${state} · ${id}` }] }
   }
 
@@ -1855,8 +1995,24 @@ async function handleDesignSystem(req, res) {
   // No project, no scales. Falling back to the bridge's own project would hand this page
   // another project's tokens to name its fixes in.
   if (!dir) return sendJson(res, 200, headers, { ok: true, ...chipData(null), summary: null })
-  const merged = withRuntime(projectDesignSystem(dir), runtime)
-  sendJson(res, 200, headers, { ok: true, ...chipData(merged), summary: summaryLine(merged) })
+  if (payload?.refresh === true) {
+    // The manual refresh is the one probe a caller waits for: it asked for this answer.
+    // A failure leaves the old record in place, marked stale, and says why.
+    const fresh = firstDesignRecord(dir)
+    const old = designSystems.get(dir)
+    if (!fresh.stale || !old) designSystems.set(dir, fresh)
+    else old.stale = true
+    const error = fresh.stale ? 'design system not refreshed: the probe failed' : null
+    const rec = designSystems.get(dir)
+    const merged = withRuntime(rec.summary, runtime)
+    return sendJson(res, 200, headers, {
+      ok: true, ...chipData(merged), summary: summaryLine(merged),
+      refreshed: !error, stale: rec.stale, ...(error ? { error } : {}),
+    })
+  }
+  const rec = designRecord(dir)
+  const merged = withRuntime(rec.summary, runtime)
+  sendJson(res, 200, headers, { ok: true, ...chipData(merged), summary: summaryLine(merged), stale: rec.stale })
 }
 
 // ---------------------------------------------------------------- backlog intake

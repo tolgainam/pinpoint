@@ -446,3 +446,51 @@ test('deltaLine ignores a delta with no property', () => {
   assert.equal(deltaLine({ to: '4px' }), null)
   assert.equal(deltaLine(null), null)
 })
+
+// ---------------------------------------------------------------- freshness
+
+import { mkdtempSync, writeFileSync, rmSync, utimesSync, statSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { fingerprintOf } from '../server/design-system.js'
+
+test('probeProject lists every file it read, and the summary and chips leave them out', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pinpoint-ds-files-'))
+  try {
+    writeFileSync(join(dir, 'tailwind.config.js'), "module.exports = { theme: { colors: { brand: '#111111' } } }\n")
+    writeFileSync(join(dir, 'app.css'), ':root { --space-4: 16px; }\n')
+    const r = probeProject(dir)
+    assert.ok(r.files.includes(join(dir, 'tailwind.config.js')), `got ${r.files}`)
+    assert.ok(r.files.includes(join(dir, 'app.css')), `got ${r.files}`)
+    // Listed although absent: one appearing is a change.
+    assert.ok(r.files.includes(join(dir, 'package.json')))
+    assert.equal(JSON.stringify(chipData(r)).includes(dir), false)
+    assert.equal(summaryLine(r).includes(dir), false)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('fingerprintOf moves with a file\'s mtime or size, and names a missing file', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pinpoint-ds-fp-'))
+  try {
+    const file = join(dir, 'theme.css')
+    const gone = join(dir, 'nope.css')
+    writeFileSync(file, 'a')
+    const first = fingerprintOf([file, gone])
+    const st = statSync(file)
+    assert.equal(first, `${file}:${st.mtimeMs}:${st.size}\n${gone}:missing`)
+    assert.equal(fingerprintOf([file, gone]), first)
+
+    utimesSync(file, st.atime, new Date(st.mtimeMs + 5000))
+    const touched = fingerprintOf([file, gone])
+    assert.notEqual(touched, first)
+
+    writeFileSync(file, 'ab')
+    utimesSync(file, st.atime, new Date(st.mtimeMs + 5000))
+    assert.notEqual(fingerprintOf([file, gone]), touched, 'same mtime, new size')
+    assert.equal(fingerprintOf([]), '')
+    assert.equal(fingerprintOf(undefined), '')
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

@@ -28,6 +28,8 @@ if (!browser.ok) console.log(`e2e skipped: ${browser.why}`)
 /** A bridge that answers /health as one running session and keeps every dispatch it gets. */
 function recordingBridge(version) {
   const dispatched = []
+  /** Every /design-system body, so a refresh can be told from an ordinary ask. */
+  const designAsks = []
   /** What the extension said about itself on each call: its version header and its origin. */
   const identities = []
   const streams = new Set()
@@ -56,7 +58,17 @@ function recordingBridge(version) {
       req.on('close', () => streams.delete(res))
       return
     }
-    if (url.pathname === '/design-system') return json(200, { ok: true, detected: false })
+    if (url.pathname === '/design-system') {
+      let body = ''
+      req.on('data', d => { body += d })
+      req.on('end', () => {
+        let asked = {}
+        try { asked = JSON.parse(body || '{}') } catch { /* recorded as empty */ }
+        designAsks.push(asked)
+        json(200, { ok: true, detected: false, stale: false, ...(asked.refresh ? { refreshed: true } : {}) })
+      })
+      return
+    }
     if (url.pathname === '/dispatch' && req.method === 'POST') {
       if (state.token && req.headers['x-pinpoint-token'] !== state.token) return json(401, { ok: false })
       let body = ''
@@ -70,7 +82,7 @@ function recordingBridge(version) {
     json(404, { ok: false })
   })
   server.keepAliveTimeout = 0
-  return { server, dispatched, state, emit, identities }
+  return { server, dispatched, designAsks, state, emit, identities }
 }
 
 let context, page, worker, demo, bridge, profile, ext, bridgeServer
@@ -456,6 +468,22 @@ test('the extension tells the bridge its version on every call', { skip: !browse
   assert.ok(health.every(i => i.version === version), `a call carried no version: ${JSON.stringify(health.slice(-2))}`)
   // The worker's own GET calls carry no Origin; none may carry a page's.
   assert.ok(health.every(i => !i.origin || /^chrome-extension:\/\//.test(i.origin)), `a call carried a page origin: ${JSON.stringify(health.slice(-2))}`)
+})
+
+test('the project popover refreshes the design system on request', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await page.goto(`http://localhost:${demo.port}/`)
+  await host('.bar').waitFor({ timeout: 15000 })
+  await host('.pill-label').filter({ hasText: PROJECT.name }).waitFor({ timeout: 15000 })
+  await host('.pill').click()
+  const refresh = host('.pop button').filter({ hasText: 'Refresh design system' })
+  await refresh.waitFor({ timeout: 15000 })
+  const before = bridge.designAsks.length
+  await refresh.focus()
+  await page.keyboard.press('Enter')
+  await host('.toast.show').filter({ hasText: 'Design system refreshed' }).waitFor({ timeout: 15000 })
+  const asks = bridge.designAsks.slice(before)
+  assert.ok(asks.some(a => a.refresh === true), `no refresh reached the bridge: ${JSON.stringify(asks)}`)
+  await host('.pill').click()
 })
 
 test('a capture waits for its turn before the overlay hides', { skip: !browser.ok, timeout: 60000 }, async () => {

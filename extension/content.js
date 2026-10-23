@@ -280,8 +280,8 @@
 
   /**
    * The project's scales, as the bridge sees them: its config files merged with what this
-   * page reports. Asked for once and kept — the answer cannot change while you are
-   * commenting, and the composer must open at the speed of a click.
+   * page reports. Asked for once and kept, because the composer must open at the speed of
+   * a click; Refresh design system in the popover asks again and replaces it.
    *
    * The bridge does the merging and the normalising. What comes back is already sorted
    * and already in px and hex, so nothing here has to re-implement colour parsing and
@@ -289,15 +289,33 @@
    */
   let scalesPromise = null
   let scalesFor = null
+  /** `stale` survives an empty answer: a project whose probe failed has no scales, and says so. */
+  const toScales = r => (r?.ok && r.detected ? r : r?.stale ? { ...NO_SCALES, stale: true } : NO_SCALES)
   function scales() {
     // Keyed on the project the bridge reads the scales from, which moves with the pick
     // and with what the page's dev server turns out to be.
     if (scalesFor !== status.project) { scalesPromise = null; scalesFor = status.project }
     scalesPromise ??= chrome.runtime
       .sendMessage({ type: 'design-system', pick: status.projectPick ?? undefined, payload: { designSystem: designSystem() } })
-      .then(r => (r?.ok && r.detected ? r : NO_SCALES))
+      .then(toScales)
       .catch(() => NO_SCALES)
     return scalesPromise
+  }
+
+  /**
+   * The popover's Refresh design system: the bridge probes the project again while this
+   * waits, and the answer replaces the kept one. Resolves to the bridge's raw answer, so
+   * the caller can say what happened; a request that never reached the bridge keeps the
+   * scales already held.
+   */
+  function refreshScales() {
+    const asked = chrome.runtime
+      .sendMessage({ type: 'design-system', pick: status.projectPick ?? undefined, payload: { designSystem: designSystem(), refresh: true } })
+      .catch(err => ({ ok: false, error: String(err?.message ?? err) }))
+    return asked.then(r => {
+      if (r?.ok) { scalesFor = status.project; scalesPromise = Promise.resolve(toScales(r)) }
+      return r ?? { ok: false, error: 'no answer from the extension' }
+    })
   }
 
   /** Computed values are always px; anything else is not a length we can put on a scale. */
@@ -838,12 +856,15 @@
     // live on the toolbar, next to Dispatch, where a page-level fact belongs.
 
     const chips = el('div', 'chips')
+    // Under the chips, and only when the bridge says its probe of the project failed last
+    // time: the scale shown may be the one from before an edit. It blocks nothing.
+    const staleNote = el('div', 'chips-note', 'design system may be out of date; refresh from the project menu')
     const picker = el('div', 'picker')
 
     const cancel = el('button', '', 'Cancel')
     const add = el('button', 'primary', 'Add')
     row.append(shotLabel, el('span', 'spacer'), cancel, add)
-    card.append(crumbs, meta, chips, picker, intent, box, hint, row)
+    card.append(crumbs, meta, chips, staleNote, picker, intent, box, hint, row)
     layer.append(card)
     openCard = card
     card.cleanup = restorePreviews
@@ -1056,11 +1077,15 @@
     // The scales arrive after the card does. Chips are painted twice on purpose: raw
     // values immediately, token names a moment later, rather than an empty row while the
     // bridge is asked.
-    scales().then(answer => {
+    const takeScales = answer => {
       if (openCard !== card) return
       data = answer
+      staleNote.classList.toggle('show', !!answer?.stale)
       paintChips()
-    })
+    }
+    scales().then(takeScales)
+    // The popover's refresh hands the new scales to an open composer.
+    card.repaintScales = takeScales
 
     // ------------------------------------------------------------ depth
 
@@ -2084,7 +2109,21 @@
   const popHow = el('button', 'pop-row pop-how')
   popHow.append(el('span', 'pop-name', 'How it works'), el('span', 'pop-path', '›'))
   popHow.onclick = () => { send({ type: 'open-welcome' }).catch(() => {}); closePop() }
-  pop.append(popHead, popLines, popList, popFoot, popVersion, popHow)
+  /**
+   * Probe the project's design system again now, rather than waiting for the bridge to
+   * notice the edit. Shown only with a bridge and a project to ask about.
+   */
+  const popRefresh = el('button', 'pop-row pop-refresh')
+  popRefresh.append(el('span', 'pop-name', 'Refresh design system'))
+  popRefresh.onclick = async () => {
+    popRefresh.disabled = true
+    const answer = await refreshScales()
+    popRefresh.disabled = false
+    if (answer.ok && answer.refreshed) say('Design system refreshed')
+    else say(answer.error ?? 'Design system not refreshed', true)
+    if (answer.ok) openCard?.repaintScales?.(toScales(answer))
+  }
+  pop.append(popHead, popLines, popList, popFoot, popVersion, popRefresh, popHow)
   bar.append(pop)
 
   const popOpen = () => pop.classList.contains('show')
@@ -2120,6 +2159,7 @@
 
   function paintPop() {
     if (!popOpen()) return
+    popRefresh.style.display = lastHealth?.connected && status.project ? '' : 'none'
     // Rebuilding on every ping would drop a click that lands mid-rebuild and lose focus.
     const shown = JSON.stringify([status.heading, status.lines, status.retry, status.rows, versionInfo?.line])
     if (shown === popShown) { placePop(); return }

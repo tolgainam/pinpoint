@@ -363,6 +363,16 @@
 
 .chips.show { display: flex; }
 
+/* The bridge's last probe of the project failed, so the chips may name an old scale. */
+.chips-note {
+  display: none;
+  margin-bottom: var(--pp-space-6);
+  color: var(--pp-dim);
+  font-size: var(--pp-text-sm);
+}
+
+.chips-note.show { display: block; }
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -860,6 +870,12 @@ button.danger:hover { color: var(--pp-danger); }
 }
 
 .pop-version-mark { flex: none; font-weight: var(--pp-weight-bold); }
+
+/* Above "How it works", set apart from the project rows it acts on. */
+.pop button.pop-refresh {
+  margin-top: var(--pp-space-4);
+  border-top: 1px solid var(--pp-line);
+}
 
 /* Last row in every state: back to the welcome page. */
 .pop button.pop-how {

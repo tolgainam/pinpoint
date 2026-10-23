@@ -369,6 +369,10 @@ export function probeProject(dir) {
   const libraries = []
   const tokens = { color: [], spacing: [], type: [], radius: [] }
   const sources = new Set()
+  // Every file this probe looked at, so the bridge can tell later whether any of them
+  // changed without probing again. package.json is listed even when it is absent: one
+  // appearing is a change too.
+  const files = new Set([join(dir, 'package.json'), ...cssFiles])
 
   for (const stack of STACKS) {
     const byDep = stack.dep ? Boolean(deps[stack.dep]) : false
@@ -378,6 +382,7 @@ export function probeProject(dir) {
     if (stack.unless?.({ cssText, deps })) continue
 
     let detail = stack.detail ?? (byFile ? byFile : byDep ? `\`${stack.dep}\` in package.json` : null)
+    if (byFile) files.add(join(dir, byFile))
 
     // Config that is code: read it as text, take the literal, and take nothing on faith.
     if (stack.keys) {
@@ -387,6 +392,7 @@ export function probeProject(dir) {
           ? findFiles(dir, name => THEME_FILE.test(name), 12)
           : []
       for (const path of configs) {
+        files.add(path)
         const text = slurp(path)
         if (!text) continue
         if (stack.literal && !text.includes(stack.literal)) continue
@@ -438,7 +444,29 @@ export function probeProject(dir) {
     tokens,
     spacingStep: step,
     sources: [...sources].filter(Boolean).slice(0, 8),
+    // Not part of the summary. Absolute paths, for the bridge's freshness check only; the
+    // bridge takes them off before the summary goes anywhere, a brief or the extension.
+    files: [...files],
   }
+}
+
+/**
+ * The state of a set of files as one string: `path:mtimeMs:size` each, or `path:missing`.
+ *
+ * Cheap on purpose: a stat per file, no reads, so the bridge can afford it every couple of
+ * seconds and only pay for a whole probe when this string moves. Never throws.
+ */
+export function fingerprintOf(files) {
+  const parts = []
+  for (const path of files ?? []) {
+    try {
+      const st = statSync(path)
+      parts.push(`${path}:${st.mtimeMs}:${st.size}`)
+    } catch {
+      parts.push(`${path}:missing`)
+    }
+  }
+  return parts.join('\n')
 }
 
 /** Whether a value could be the kind of thing its drawer holds. */

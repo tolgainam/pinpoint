@@ -131,6 +131,24 @@
   nav .links { display: flex; gap: 22px; margin-left: auto; }
   nav a { color: var(--ink-2); border: none; }
   nav a:hover { color: var(--ink); }
+  nav .links { align-items: center; }
+  nav a.nav-cta {
+    padding: 7px 16px;
+    border-radius: 4px;
+    background: var(--ink);
+    color: var(--paper);
+    font-weight: 600;
+  }
+  nav a.nav-cta:hover { background: var(--accent); color: var(--paper); }
+  /* Code samples wrap on a phone instead of pushing the page sideways. */
+  @media (max-width: 640px) {
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+    .panel, .two > * { min-width: 0; }
+  }
+  /* On a phone the link row does not fit, and the one link that matters is the last. */
+  @media (max-width: 640px) {
+    nav .links a:not(.nav-cta) { display: none; }
+  }
 
   /* ---------------------------------------------------------------- hero */
 
@@ -148,8 +166,8 @@
   header.hero > .kicker   { order: 1; margin-bottom: 22px; }
   header.hero > .tagline  { order: 2; }
   header.hero > .lede     { order: 3; }
-  header.hero > .flow     { order: 4; }
-  header.hero > .badges   { order: 6; }
+  header.hero > .cta      { order: 4; }
+  header.hero > .get-row  { order: 5; }
   header.hero > .hero-art { order: 7; }
 
   /* The wordmark and the flow diagram are pre elements but must not pick up the
@@ -386,7 +404,7 @@
     font-size: 13.5px;
   }
   .cmd .prompt { color: var(--accent); user-select: none; }
-  .cmd code { flex: 1; overflow-x: auto; white-space: nowrap; }
+  .cmd code { flex: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
   .cmd button {
     font: inherit;
     font-size: 11px;
@@ -401,6 +419,71 @@
   }
   .cmd button:hover { color: var(--accent); border-color: var(--accent); }
   .cmd button.done { color: var(--green); border-color: var(--green); }
+
+  .cta { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin-top: 36px; }
+  .cta-main {
+    display: inline-block;
+    padding: 14px 28px;
+    border-radius: 4px;
+    background: var(--ink);
+    color: var(--paper);
+    font-size: 16px; font-weight: 600;
+    text-decoration: none;
+    border: none;
+  }
+  .cta-main:hover, .cta-main:focus-visible { background: var(--accent); color: var(--paper); }
+  .cta-meta { font-family: var(--sans); font-size: 14px; color: var(--ink-3); }
+  .get-quiet {
+    display: inline-flex; align-items: center; gap: 7px;
+    color: var(--ink-2); font-size: 14px; font-weight: 500;
+    text-decoration: none; border: none;
+  }
+  .get-quiet svg { width: 17px; height: 17px; fill: currentColor; }
+  .get-quiet:hover, .get-quiet:focus-visible { color: var(--accent); }
+  .get-row {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+    margin-top: 22px; gap: 18px;
+  }
+  .get-label { font-family: var(--mono); font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); margin-right: 4px; }
+  .get-btn {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 10px 16px;
+    border: 1px solid var(--ink);
+    border-radius: 4px;
+    background: var(--paper);
+    color: var(--ink);
+    font-size: 15px; font-weight: 600;
+    text-decoration: none;
+  }
+  .get-btn svg { width: 20px; height: 20px; fill: currentColor; }
+  .get-btn:hover, .get-btn:focus-visible { background: var(--ink); color: var(--paper); }
+  .get-or { font-family: var(--sans); font-size: 13px; color: var(--ink-3); }
+  .get-cmd { font-size: 13px; padding: 9px 12px; border: 1px solid var(--rule-2); border-radius: 4px; background: var(--paper-2); }
+
+  details#manual-load { margin-top: 6px; }
+  details#manual-load > summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--ink-2); margin: 4px 0 8px; }
+  details#manual-load > summary .sub { font-weight: 400; color: var(--ink-3); }
+
+  /* ---------------------------------------------------------------- get */
+
+  .prose-note { font-family: var(--sans); font-size: 14px; color: var(--ink-2); margin: 10px 0 14px; max-width: 62ch; }
+  .get { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 18px 0 22px; }
+  .get-card {
+    display: flex; flex-direction: column; gap: 4px;
+    padding: 18px 18px 16px;
+    background: var(--card);
+    border: 1px solid var(--rule-2);
+    border-radius: 4px;
+    color: var(--ink);
+    text-decoration: none;
+    transition: border-color 120ms ease;
+  }
+  .get-card:hover, .get-card:focus-visible { border-color: var(--accent); }
+  .get-card svg { width: 34px; height: 34px; fill: currentColor; margin-bottom: 10px; }
+  .get-name { font-size: 17px; font-weight: 600; letter-spacing: -0.02em; }
+  .get-sub { font-family: var(--sans); font-size: 13px; color: var(--ink-3); }
+  .get-act { margin-top: 10px; font-size: 12px; font-weight: 600; color: var(--accent); }
+  @media (max-width: 640px) { .get { grid-template-columns: 1fr; } }
 
   /* ---------------------------------------------------------------- steps */
 
@@ -709,11 +792,11 @@
   <span class="links">
     <a href="./index.html" aria-current="page">Overview</a>
     <a href="./features.html">Features</a>
-    <a href="#install">Install</a>
     <a href="#arrives">Payload</a>
     <a href="#how">How</a>
     <a href="#about">About</a>
     <a href="https://github.com/tolgainam/pinpoint">GitHub&nbsp;↗</a>
+    <a class="nav-cta" href="#install">Install</a>
   </span>
 </nav>
 
@@ -745,21 +828,151 @@
   <h1 class="tagline">Comment on the page.<br><em>Fix it in the terminal.</em></h1>
 
   <p class="lede">
-    Pin comments to elements on your localhost app and hit Dispatch. Claude Code receives
-    the selector, the component name, the page state — and a cropped screenshot of exactly
-    what you were looking at.
+    Click an element, say what is wrong, and Dispatch. Claude Code gets the selector, the page
+    state and a screenshot of what you saw. Then it answers your questions, keeps your backlog
+    and fixes the code, through a live two-way link back to the page.
   </p>
 
-  <pre class="ascii flow" aria-hidden="true">  <b>◈</b> <i>click the element</i>  ──▶  <i>type what's wrong</i>  ──▶  <b>dispatch</b>  ──▶  <i>it gets fixed</i>  ──▶  <b>✓</b></pre>
-
-  <div class="badges">
-    <span class="badge">Claude Code plugin</span>
-    <span class="badge">Chrome · Firefox</span>
-    <span class="badge">Node 20+</span>
-    <span class="badge">MIT</span>
-    <span class="badge">no build step</span>
+  <div class="cta">
+    <a class="cta-main" href="#install">Install Pinpoint</a>
+    <span class="cta-meta">Free &middot; MIT &middot; no account</span>
   </div>
+
+  <div class="get-row">
+    <span class="get-label">Works in</span>
+    <a class="get-quiet" data-store="chrome" data-name="Chrome" href="#install"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 0C8.21 0 4.831 1.757 2.632 4.501l3.953 6.848A5.454 5.454 0 0 1 12 6.545h10.691A12 12 0 0 0 12 0zM1.931 5.47A11.943 11.943 0 0 0 0 12c0 6.012 4.42 10.991 10.189 11.864l3.953-6.847a5.45 5.45 0 0 1-6.865-2.29zm13.342 2.166a5.446 5.446 0 0 1 1.45 7.09l.002.001h-.002l-5.344 9.257c.206.01.413.016.621.016 6.627 0 12-5.373 12-12 0-1.54-.29-3.011-.818-4.364zM12 16.364a4.364 4.364 0 1 1 0-8.728 4.364 4.364 0 0 1 0 8.728Z"/></svg>Chrome</a>
+    <a class="get-quiet" data-store="firefox" data-name="Firefox" href="#install"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.824 7.287c.008 0 .004 0 0 0zm-2.8-1.4c.006 0 .003 0 0 0zm16.754 2.161c-.505-1.215-1.53-2.528-2.333-2.943.654 1.283 1.033 2.57 1.177 3.53l.002.02c-1.314-3.278-3.544-4.6-5.366-7.477-.091-.147-.184-.292-.273-.446a3.545 3.545 0 01-.13-.24 2.118 2.118 0 01-.172-.46.03.03 0 00-.027-.03.038.038 0 00-.021 0l-.006.001a.037.037 0 00-.01.005L15.624 0c-2.585 1.515-3.657 4.168-3.932 5.856a6.197 6.197 0 00-2.305.587.297.297 0 00-.147.37c.057.162.24.24.396.17a5.622 5.622 0 012.008-.523l.067-.005a5.847 5.847 0 011.957.222l.095.03a5.816 5.816 0 01.616.228c.08.036.16.073.238.112l.107.055a5.835 5.835 0 01.368.211 5.953 5.953 0 012.034 2.104c-.62-.437-1.733-.868-2.803-.681 4.183 2.09 3.06 9.292-2.737 9.02a5.164 5.164 0 01-1.513-.292 4.42 4.42 0 01-.538-.232c-1.42-.735-2.593-2.121-2.74-3.806 0 0 .537-2 3.845-2 .357 0 1.38-.998 1.398-1.287-.005-.095-2.029-.9-2.817-1.677-.422-.416-.622-.616-.8-.767a3.47 3.47 0 00-.301-.227 5.388 5.388 0 01-.032-2.842c-1.195.544-2.124 1.403-2.8 2.163h-.006c-.46-.584-.428-2.51-.402-2.913-.006-.025-.343.176-.389.206-.406.29-.787.616-1.136.974-.397.403-.76.839-1.085 1.303a9.816 9.816 0 00-1.562 3.52c-.003.013-.11.487-.19 1.073-.013.09-.026.181-.037.272a7.8 7.8 0 00-.069.667l-.002.034-.023.387-.001.06C.386 18.795 5.593 24 12.016 24c5.752 0 10.527-4.176 11.463-9.661.02-.149.035-.298.052-.448.232-1.994-.025-4.09-.753-5.844z"/></svg>Firefox</a>
+    <a class="get-quiet" data-store="opera" data-name="Opera" href="#install"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.051 5.238c-1.328 1.566-2.186 3.883-2.246 6.48v.564c.061 2.598.918 4.912 2.246 6.479 1.721 2.236 4.279 3.654 7.139 3.654 1.756 0 3.4-.537 4.807-1.471C17.879 22.846 15.074 24 12 24c-.192 0-.383-.004-.57-.014C5.064 23.689 0 18.436 0 12 0 5.371 5.373 0 12 0h.045c3.055.012 5.84 1.166 7.953 3.055-1.408-.93-3.051-1.471-4.81-1.471-2.858 0-5.417 1.42-7.14 3.654h.003zM24 12c0 3.556-1.545 6.748-4.002 8.945-3.078 1.5-5.946.451-6.896-.205 3.023-.664 5.307-4.32 5.307-8.74 0-4.422-2.283-8.075-5.307-8.74.949-.654 3.818-1.703 6.896-.205C22.455 5.25 24 8.445 24 12z"/></svg>Opera</a>
+    <span class="get-or">or</span>
+    <code class="get-cmd">npx pinpoint-dev install</code>
+  </div>
+
 </header>
+
+<section id="install">
+  <div class="kicker">install</div>
+  <h2>Get Pinpoint</h2>
+  <p class="prose-note">Two pieces: a plugin for Claude Code and a browser extension. Pick your browser, then follow the steps.</p>
+
+  <div class="get" role="list">
+    <a class="get-card" role="listitem" data-store="chrome" data-name="Chrome" href="#install-steps">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 0C8.21 0 4.831 1.757 2.632 4.501l3.953 6.848A5.454 5.454 0 0 1 12 6.545h10.691A12 12 0 0 0 12 0zM1.931 5.47A11.943 11.943 0 0 0 0 12c0 6.012 4.42 10.991 10.189 11.864l3.953-6.847a5.45 5.45 0 0 1-6.865-2.29zm13.342 2.166a5.446 5.446 0 0 1 1.45 7.09l.002.001h-.002l-5.344 9.257c.206.01.413.016.621.016 6.627 0 12-5.373 12-12 0-1.54-.29-3.011-.818-4.364zM12 16.364a4.364 4.364 0 1 1 0-8.728 4.364 4.364 0 0 1 0 8.728Z"/></svg>
+      <span class="get-name">Chrome</span>
+      <span class="get-sub">also Edge, Brave, Arc, Vivaldi</span>
+      <span class="get-act">Install steps &darr;</span>
+    </a>
+    <a class="get-card" role="listitem" data-store="firefox" data-name="Firefox" href="#install-steps">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.824 7.287c.008 0 .004 0 0 0zm-2.8-1.4c.006 0 .003 0 0 0zm16.754 2.161c-.505-1.215-1.53-2.528-2.333-2.943.654 1.283 1.033 2.57 1.177 3.53l.002.02c-1.314-3.278-3.544-4.6-5.366-7.477-.091-.147-.184-.292-.273-.446a3.545 3.545 0 01-.13-.24 2.118 2.118 0 01-.172-.46.03.03 0 00-.027-.03.038.038 0 00-.021 0l-.006.001a.037.037 0 00-.01.005L15.624 0c-2.585 1.515-3.657 4.168-3.932 5.856a6.197 6.197 0 00-2.305.587.297.297 0 00-.147.37c.057.162.24.24.396.17a5.622 5.622 0 012.008-.523l.067-.005a5.847 5.847 0 011.957.222l.095.03a5.816 5.816 0 01.616.228c.08.036.16.073.238.112l.107.055a5.835 5.835 0 01.368.211 5.953 5.953 0 012.034 2.104c-.62-.437-1.733-.868-2.803-.681 4.183 2.09 3.06 9.292-2.737 9.02a5.164 5.164 0 01-1.513-.292 4.42 4.42 0 01-.538-.232c-1.42-.735-2.593-2.121-2.74-3.806 0 0 .537-2 3.845-2 .357 0 1.38-.998 1.398-1.287-.005-.095-2.029-.9-2.817-1.677-.422-.416-.622-.616-.8-.767a3.47 3.47 0 00-.301-.227 5.388 5.388 0 01-.032-2.842c-1.195.544-2.124 1.403-2.8 2.163h-.006c-.46-.584-.428-2.51-.402-2.913-.006-.025-.343.176-.389.206-.406.29-.787.616-1.136.974-.397.403-.76.839-1.085 1.303a9.816 9.816 0 00-1.562 3.52c-.003.013-.11.487-.19 1.073-.013.09-.026.181-.037.272a7.8 7.8 0 00-.069.667l-.002.034-.023.387-.001.06C.386 18.795 5.593 24 12.016 24c5.752 0 10.527-4.176 11.463-9.661.02-.149.035-.298.052-.448.232-1.994-.025-4.09-.753-5.844z"/></svg>
+      <span class="get-name">Firefox</span>
+      <span class="get-sub">Firefox 128 or newer</span>
+      <span class="get-act">Install steps &darr;</span>
+    </a>
+    <a class="get-card" role="listitem" data-store="opera" data-name="Opera" href="#install-steps">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.051 5.238c-1.328 1.566-2.186 3.883-2.246 6.48v.564c.061 2.598.918 4.912 2.246 6.479 1.721 2.236 4.279 3.654 7.139 3.654 1.756 0 3.4-.537 4.807-1.471C17.879 22.846 15.074 24 12 24c-.192 0-.383-.004-.57-.014C5.064 23.689 0 18.436 0 12 0 5.371 5.373 0 12 0h.045c3.055.012 5.84 1.166 7.953 3.055-1.408-.93-3.051-1.471-4.81-1.471-2.858 0-5.417 1.42-7.14 3.654h.003zM24 12c0 3.556-1.545 6.748-4.002 8.945-3.078 1.5-5.946.451-6.896-.205 3.023-.664 5.307-4.32 5.307-8.74 0-4.422-2.283-8.075-5.307-8.74.949-.654 3.818-1.703 6.896-.205C22.455 5.25 24 8.445 24 12z"/></svg>
+      <span class="get-name">Opera</span>
+      <span class="get-sub">Opera add-ons</span>
+      <span class="get-act">Install steps &darr;</span>
+    </a>
+  </div>
+
+  <p class="prose-note">Prefer a terminal? One command adds the plugin to Claude Code
+    (<code>pnpm dlx</code> and <code>yarn dlx</code> work the same):</p>
+  <div class="cmd">
+    <span class="prompt">$</span>
+    <code>npx pinpoint-dev install</code>
+    <button data-copy="npx pinpoint-dev install">copy</button>
+  </div>
+
+
+  <div class="steps" id="install-steps">
+    <div class="step">
+      <h3>Add the marketplace and install the plugin</h3>
+      <p class="note">In any Claude Code session. Dependencies install themselves.</p>
+      <div class="cmd">
+        <span class="prompt">&gt;</span>
+        <code>/plugin marketplace add tolgainam/pinpoint</code>
+        <button data-copy="/plugin marketplace add tolgainam/pinpoint">copy</button>
+      </div>
+      <div class="cmd">
+        <span class="prompt">&gt;</span>
+        <code>/plugin install pinpoint@pinpoint-marketplace</code>
+        <button data-copy="/plugin install pinpoint@pinpoint-marketplace">copy</button>
+      </div>
+    </div>
+
+    <div class="step">
+      <h3>Start Claude Code with channels on</h3>
+      <p class="note">
+        To get comments in your session on their own, start Claude Code with the flag
+        below. Channels are a research preview and custom ones are not on Anthropic's
+        allowlist yet, so the flag is required, and Claude Code shows a full-screen warning
+        at startup: choose <em>I am using this for local development</em>. Skip this step
+        and nothing breaks: comments wait in the queue until you run
+        <code>/pinpoint:comments</code>.
+      </p>
+      <div class="cmd">
+        <span class="prompt">$</span>
+        <code>claude --dangerously-load-development-channels plugin:pinpoint@pinpoint-marketplace</code>
+        <button data-copy="claude --dangerously-load-development-channels plugin:pinpoint@pinpoint-marketplace">copy</button>
+      </div>
+    </div>
+
+    <div class="step">
+      <h3>Add the browser extension</h3>
+      <p class="note" id="store-note" hidden>
+        Use the button for your browser at the top of this page: the Chrome Web Store (Chrome,
+        Edge, Brave, Arc, Vivaldi), Mozilla Add-ons (Firefox 128+) or Opera add-ons. Pin the
+        icon afterwards. Then run <code>/pinpoint:setup</code> in Claude Code; it checks that
+        everything is connected.
+      </p>
+      <p class="note" id="no-store-note">
+        The store listings are on the way. Until they are live, load the extension from a folder.
+      </p>
+      <details id="manual-load" open>
+        <summary>Load it from a folder instead <span class="sub">(developers, or until a listing is live)</span></summary>
+        <p class="note">
+          This copies the extension to <code>~/.claude/pinpoint/extension</code>, puts the path
+          on your clipboard and opens <code>chrome://extensions</code>. Turn on Developer mode,
+          click Load unpacked, paste the path, then pin the icon. Chrome runs an unpacked
+          extension straight from that folder, so leave it where it is. Setup ends by checking
+          that everything is connected.
+        </p>
+        <p class="note">
+          <strong>Edge, Brave, Opera, Vivaldi, Arc:</strong> the same steps on the browser's
+          own extensions page.
+          <strong>Firefox 128+:</strong> run <code>/pinpoint:setup --firefox</code> instead, open
+          <code>about:debugging</code>, choose Load Temporary Add-on and pick
+          <code>manifest.json</code>. Firefox removes a temporary add-on when it quits.
+        </p>
+        <div class="cmd">
+          <span class="prompt">&gt;</span>
+          <code>/pinpoint:setup</code>
+          <button data-copy="/pinpoint:setup">copy</button>
+        </div>
+      </details>
+      <img class="shot-img framed" src="./img/welcome.png" alt="The welcome page the extension opens on first install: four steps to tick off, and a box that reads Connected with the project name." width="640" height="549" style="max-width:min(100%,460px)">
+    </div>
+
+    <div class="step">
+      <h3>Open your app and click the icon</h3>
+      <p class="note">
+        Pinpoint is always on for <code>localhost</code> and <code>127.0.0.1</code>. On any
+        other site, such as a staging server, clicking the icon asks your browser for
+        that one site; you can say no and it still works for that page.
+        The toolbar starts hidden on every page load. Clicking the icon shows or hides
+        it, and grants screenshot permission for that tab (or turn on lasting screenshot access once, on the welcome page). The pill on the toolbar shows
+        where comments go: your project's name, or Choose when you have several sessions open.
+      </p>
+      <p class="note">
+        <strong>You're done when:</strong> the icon is pinned, clicking it on your dev page
+        shows the toolbar, and the pill shows your project name. If not, run
+        <code>/pinpoint:doctor</code>.
+      </p>
+      <img class="shot-img" src="./img/tip.png" alt="The Pinpoint toolbar the first time it is shown, with a tip above it that reads Click Comment, then click any element." width="502" height="208">
+    </div>
+  </div>
+</section>
+
 
 <section>
   <div class="kicker">in use</div>
@@ -799,87 +1012,6 @@
   </div>
 </section>
 
-<section id="install">
-  <div class="kicker">install</div>
-  <h2>Two pieces, about a minute</h2>
-
-  <div class="steps">
-    <div class="step">
-      <h3>Add the marketplace and install the plugin</h3>
-      <p class="note">In any Claude Code session. Dependencies install themselves.</p>
-      <div class="cmd">
-        <span class="prompt">&gt;</span>
-        <code>/plugin marketplace add tolgainam/pinpoint</code>
-        <button data-copy="/plugin marketplace add tolgainam/pinpoint">copy</button>
-      </div>
-      <div class="cmd">
-        <span class="prompt">&gt;</span>
-        <code>/plugin install pinpoint@pinpoint-marketplace</code>
-        <button data-copy="/plugin install pinpoint@pinpoint-marketplace">copy</button>
-      </div>
-    </div>
-
-    <div class="step">
-      <h3>Start Claude Code with channels on</h3>
-      <p class="note">
-        To get comments in your session on their own, start Claude Code with the flag
-        below. Channels are a research preview and custom ones are not on Anthropic's
-        allowlist yet, so the flag is required, and Claude Code shows a full-screen warning
-        at startup: choose <em>I am using this for local development</em>. Skip this step
-        and nothing breaks: comments wait in the queue until you run
-        <code>/pinpoint:comments</code>.
-      </p>
-      <div class="cmd">
-        <span class="prompt">$</span>
-        <code>claude --dangerously-load-development-channels plugin:pinpoint@pinpoint-marketplace</code>
-        <button data-copy="claude --dangerously-load-development-channels plugin:pinpoint@pinpoint-marketplace">copy</button>
-      </div>
-    </div>
-
-    <div class="step">
-      <h3>Load the browser extension</h3>
-      <p class="note">
-        This copies the extension to <code>~/.claude/pinpoint/extension</code>, puts the path
-        on your clipboard and opens <code>chrome://extensions</code>. Turn on Developer mode,
-        click Load unpacked, paste the path, then pin the icon. Chrome runs an unpacked
-        extension straight from that folder, so leave it where it is. Setup ends by checking
-        that everything is connected.
-      </p>
-      <p class="note">
-        <strong>Edge, Brave, Opera, Vivaldi, Arc:</strong> the same steps on the browser's
-        own extensions page.
-        <strong>Firefox 128+:</strong> run <code>/pinpoint:setup --firefox</code> instead, open
-        <code>about:debugging</code>, choose Load Temporary Add-on and pick
-        <code>manifest.json</code>. Firefox removes a temporary add-on when it quits.
-      </p>
-      <div class="cmd">
-        <span class="prompt">&gt;</span>
-        <code>/pinpoint:setup</code>
-        <button data-copy="/pinpoint:setup">copy</button>
-      </div>
-      <img class="shot-img framed" src="./img/welcome.png" alt="The welcome page the extension opens on first install: four steps to tick off, and a box that reads Connected with the project name." width="640" height="549" style="max-width:min(100%,460px)">
-    </div>
-
-    <div class="step">
-      <h3>Open your app and click the icon</h3>
-      <p class="note">
-        Pinpoint is always on for <code>localhost</code> and <code>127.0.0.1</code>. On any
-        other site, such as a staging server, clicking the icon asks your browser for
-        that one site; you can say no and it still works for that page.
-        The toolbar starts hidden on every page load. Clicking the icon shows or hides
-        it, and grants screenshot permission for that tab (or turn on lasting screenshot access once, on the welcome page). The pill on the toolbar shows
-        where comments go: your project's name, or Choose when you have several sessions open.
-      </p>
-      <p class="note">
-        <strong>You're done when:</strong> the icon is pinned, clicking it on your dev page
-        shows the toolbar, and the pill shows your project name. If not, run
-        <code>/pinpoint:doctor</code>.
-      </p>
-      <img class="shot-img" src="./img/tip.png" alt="The Pinpoint toolbar the first time it is shown, with a tip above it that reads Click Comment, then click any element." width="502" height="208">
-    </div>
-  </div>
-</section>
-
 <section id="arrives">
   <div class="kicker">the payload</div>
   <h2>What actually lands in your session</h2>
@@ -915,6 +1047,16 @@ whole page: ~/.claude/pinpoint/queue/20260822-023835-z0fp/page.png
 <section id="how">
   <div class="kicker">architecture</div>
   <h2>How it works</h2>
+  <div class="prose">
+    <p>
+      <strong>Why Claude Code only.</strong> Pinpoint is built on Claude Code's channels, a
+      live link into your running session. That link is what lets an answer, a progress note
+      or a finished fix come back to the pin on the page, not only comments go out. No other
+      coding agent offers it. Channels are a research preview, so you start Claude Code with
+      one extra flag. Without the flag nothing is lost: run <code>/pinpoint:comments</code>
+      in the session and every dispatched comment is there.
+    </p>
+  </div>
 
   <figure>
     <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -1065,5 +1207,28 @@ whole page: ~/.claude/pinpoint/queue/20260822-023835-z0fp/page.png
   }
 </script>
 
+<script>
+  /*
+   * Where each browser's listing lives, once it is live. Fill one in and its card becomes a
+   * store link; leave it empty and the card points at the manual steps below, which work
+   * today. Nothing is guessed: an empty value never produces a link.
+   */
+  const STORES = { chrome: '', firefox: '', opera: '' }
+  document.querySelectorAll('[data-store]').forEach(card => {
+    const url = STORES[card.dataset.store]
+    if (!url) return
+    card.href = url
+    card.target = '_blank'
+    card.rel = 'noopener'
+    const act = card.querySelector('.get-act')
+    if (act) act.textContent = 'Add to ' + card.dataset.name + ' \u2197'
+  })
+  // With a listing live, the store is the way in and the folder is the fallback.
+  if (Object.values(STORES).some(Boolean)) {
+    document.getElementById('store-note').hidden = false
+    document.getElementById('no-store-note').hidden = true
+    document.getElementById('manual-load').open = false
+  }
+</script>
 </body>
 </html>

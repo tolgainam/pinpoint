@@ -28,6 +28,9 @@ restart of the session (Claude Code shows a full-screen warning; they choose "I 
 this for local development"), and that without it comments wait until `/pinpoint:comments`.
 You cannot restart their session for them.
 
+If a store link is printed at the top of the output, tell the user to install from it, and that
+the folder steps below it are the fallback for developers.
+
 The install is done when, on their dev page, clicking the Pinpoint icon shows the
 toolbar and the pill on it shows their project name. The toolbar starts hidden, so a
 page with no toolbar before that click is normal.

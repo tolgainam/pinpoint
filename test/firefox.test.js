@@ -22,6 +22,7 @@ test('Firefox gets an event page, an options_ui and a gecko id', () => {
   assert.deepEqual(ff.options_ui, { page: chrome.options_page, open_in_tab: true })
   assert.equal(ff.browser_specific_settings.gecko.id, GECKO_ID)
   assert.equal(ff.browser_specific_settings.gecko.strict_min_version, MIN_FIREFOX)
+  assert.deepEqual(ff.browser_specific_settings.gecko.data_collection_permissions, { required: ['none'] })
 })
 
 test('nothing else in the manifest changes, and the Chrome one is left alone', () => {

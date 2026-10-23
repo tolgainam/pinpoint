@@ -51,6 +51,24 @@ export function installStable(src, dest, version) {
 }
 
 /**
+ * Where each browser's store listing lives, once it is live. Fill one in and setup leads with
+ * the store; leave it empty and setup shows only how to load the folder. Nothing is guessed:
+ * an empty value never prints a link. The website has the same list (STORES in docs/index.html).
+ */
+export const STORE_LINKS = { chrome: '', firefox: '', opera: '' }
+
+export function storeBlock(links = STORE_LINKS) {
+  const names = { chrome: 'Chrome, Edge, Brave, Arc, Vivaldi', firefox: 'Firefox 128+', opera: 'Opera' }
+  const lines = Object.entries(links).filter(([, url]) => url).map(([k, url]) => `    ${names[k].padEnd(34)} ${url}`)
+  if (!lines.length) return ''
+  return `
+  Install from your browser's store (recommended):
+${lines.join('\n')}
+  The steps below load the extension from a folder instead, for developers.
+`
+}
+
+/**
  * The step people miss. Without the flag a dispatch still works, but it waits in the queue
  * until someone runs /pinpoint:comments, which reads as "nothing happens". Custom channels
  * are not on Anthropic's allowlist in the research preview, hence the long flag.
@@ -169,6 +187,7 @@ async function main() {
   ${copiedWith ? '(copied to your clipboard)' : '(copy the path above)'}
   ${status}
 
+${storeBlock()}
   Chrome runs the extension straight from that folder: don't move or delete it.
   After a Pinpoint update, run /pinpoint:setup again, then press Reload on its card.
 

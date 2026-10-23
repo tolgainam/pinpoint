@@ -24,6 +24,14 @@ Pinpoint closes that loop. Click an element, type what's wrong, dispatch. What a
 your session is a CSS selector, the component name, the visible text, the bounding box,
 the page URL and colour scheme, and a cropped PNG of the element itself.
 
+It runs in both directions. Claude Code answers a question you ask on a pin (start the note
+with `?`), keeps a backlog for later (start it with `!`), and marks a comment done when the fix
+lands, so the pin turns green. That is possible because Pinpoint is built on Claude Code's
+channels, a live link into a running session, which is why it works with Claude Code only.
+Channels are a research preview, so Claude Code needs one extra flag (see
+[Install](#install)). Without it nothing is lost: run `/pinpoint:comments` and every
+dispatched comment is there.
+
 ```
 browser overlay ──POST /dispatch──▶ bridge ──▶ queue on disk (json + PNGs)
                                       │
@@ -44,6 +52,12 @@ Nothing else: dependencies install themselves with the plugin.
    /plugin install pinpoint@pinpoint-marketplace
    ```
 
+   Or from a terminal, with npm, pnpm or yarn (it runs the two commands above for you):
+
+   ```bash
+   npx pinpoint-dev install
+   ```
+
 2. **Start Claude Code with channels on** (restart the session you were in):
 
    ```bash
@@ -56,7 +70,13 @@ Nothing else: dependencies install themselves with the plugin.
    this for local development**. Skip it and nothing breaks: comments wait in the queue
    until you run `/pinpoint:comments`.
 
-3. **Run setup:**
+3. **Add the browser extension.** Use your browser's store: the Chrome Web Store (Chrome,
+   Edge, Brave, Arc, Vivaldi), Mozilla Add-ons (Firefox 128+) or Opera add-ons. The links are on
+   [the website](https://tolgainam.github.io/pinpoint/). Until a listing is live for your
+   browser, load it from a folder (next step).
+
+4. **Run setup.** It checks that everything is connected, and it copies the extension for
+   loading from a folder:
 
    ```
    /pinpoint:setup
@@ -65,12 +85,13 @@ Nothing else: dependencies install themselves with the plugin.
    It copies the extension to `~/.claude/pinpoint/extension`, puts that path on your
    clipboard and opens `chrome://extensions`.
 
-4. **Load it in Chrome.** Turn on **Developer mode** (top right), click **Load
-   unpacked**, paste the path and select the folder. "Unpacked" means Chrome runs the
-   extension straight from that folder, so don't move or delete it.
+   **Loading from a folder** (developers, or until a listing is live): turn on **Developer
+   mode** (top right), click **Load unpacked**, paste the path and select the folder.
+   "Unpacked" means Chrome runs the extension straight from that folder, so don't move or
+   delete it.
 
-5. **Pin the icon:** the puzzle piece in Chrome's toolbar, then the pin next to Pinpoint.
-   A welcome tab opens once on install with the same steps.
+5. **Pin the icon:** the puzzle piece in the toolbar, then the pin next to Pinpoint. A welcome
+   tab opens once on install with the same steps.
 
 6. **Open your dev app on `localhost` and click the Pinpoint icon.** The toolbar starts
    hidden on every page; the icon shows and hides it. On any other site, such as a staging
@@ -88,9 +109,18 @@ browser and in Firefox.
 
 | Browser | How to load it | Notes |
 |---|---|---|
-| Chrome, Edge, Brave, Opera, Vivaldi, Arc | Same steps as above. Open the browser's own extensions page (`edge://extensions`, `brave://extensions`, ...) | `/pinpoint:setup` opens Chrome; open the other page yourself and paste the same path |
+| Chrome, Edge, Brave, Opera, Vivaldi, Arc | Same steps as above. `npx pinpoint-dev setup` does what `/pinpoint:setup` does. Open the browser's own extensions page (`edge://extensions`, `brave://extensions`, ...) | `/pinpoint:setup` opens Chrome; open the other page yourself and paste the same path |
 | Firefox 128+ | `/pinpoint:setup --firefox`, then `about:debugging#/runtime/this-firefox`, **Load Temporary Add-on**, pick `manifest.json` | Firefox removes a temporary add-on when it quits. Allow localhost access under `about:addons` > Pinpoint > Permissions |
 | Safari | Not supported yet | Needs `xcrun safari-web-extension-converter` and an Xcode build |
+
+**A permanent Firefox install** needs a signed add-on, because release Firefox refuses
+unsigned ones. Get an API key and secret from
+[addons.mozilla.org/developers/addon/api/key](https://addons.mozilla.org/developers/addon/api/key/),
+put them in your shell as `WEB_EXT_API_KEY` and `WEB_EXT_API_SECRET`, then run
+`npm run sign:firefox`. Mozilla signs it for self-distribution, which can take up to 24
+hours, and the signed `.xpi` lands in `web-ext-artifacts/`. Install it from
+`about:addons`, gear icon, **Install Add-on From File**. A self-distributed add-on does not
+update itself: sign and install each new version the same way.
 
 Firefox runs the same files as Chrome. `npm run build:firefox` writes the Firefox copy to
 `dist/firefox`; the only differences are four manifest keys (event page instead of a

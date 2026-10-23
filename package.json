@@ -1,11 +1,23 @@
 {
-  "name": "pinpoint-claude",
+  "name": "pinpoint-dev",
   "version": "0.4.0",
   "type": "module",
   "description": "Pin comments to elements on a localhost page and dispatch them into a running Claude Code session",
   "license": "MIT",
-  "repository": "github:tolgainam/pinpoint",
-  "keywords": ["claude-code", "claude-code-plugin", "mcp", "chrome-extension", "devtools"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tolgainam/pinpoint.git"
+  },
+  "keywords": [
+    "chrome-extension",
+    "claude-code",
+    "claude-code-plugin",
+    "cli",
+    "devtools",
+    "firefox",
+    "mcp",
+    "ui-feedback"
+  ],
   "engines": {
     "node": ">=20"
   },
@@ -13,9 +25,13 @@
     "server": "node server/pinpoint.js",
     "demo": "node demo/serve.js",
     "test": "node --test test/*.test.js",
+    "package:extension": "mkdir -p dist/store && rm -f dist/store/pinpoint-$npm_package_version.zip && cd extension && zip -r -X ../dist/store/pinpoint-$npm_package_version.zip . -x '*.DS_Store'",
+    "store:shots": "node scripts/store-shots.js 1280x800 store/chrome/screenshots && node scripts/store-tiles.js",
     "build:firefox": "node scripts/firefox.js",
+    "sign:firefox": "node scripts/firefox.js && npx --yes web-ext sign --channel=unlisted --source-dir=dist/firefox --artifacts-dir=web-ext-artifacts",
     "check:design": "node scripts/check-design.js",
-    "screens:update": "node scripts/screens-update.js"
+    "screens:update": "node scripts/screens-update.js",
+    "prepublishOnly": "npm test"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0"
@@ -24,5 +40,27 @@
     "pixelmatch": "^8.0.0",
     "playwright": "^1.64.1",
     "pngjs": "^7.0.0"
+  },
+  "bin": {
+    "pinpoint-dev": "scripts/cli.js"
+  },
+  "files": [
+    "server",
+    "extension",
+    "commands",
+    ".claude-plugin",
+    "plugin-mcp.json",
+    "scripts/cli.js",
+    "scripts/setup.js",
+    "scripts/doctor.js",
+    "scripts/firefox.js",
+    "README.md",
+    "LICENSE",
+    "PRIVACY.md",
+    "CHANGELOG.md"
+  ],
+  "homepage": "https://tolgainam.github.io/pinpoint/",
+  "bugs": {
+    "url": "https://github.com/tolgainam/pinpoint/issues"
   }
 }

@@ -110,6 +110,19 @@
   nav .links { display: flex; gap: 22px; margin-left: auto; }
   nav a { color: var(--ink-2); border: none; }
   nav a:hover { color: var(--ink); }
+  nav .links { align-items: center; }
+  nav a.nav-cta {
+    padding: 7px 16px;
+    border-radius: 4px;
+    background: var(--ink);
+    color: var(--paper);
+    font-weight: 600;
+  }
+  nav a.nav-cta:hover { background: var(--accent); color: var(--paper); }
+  /* On a phone the link row does not fit, and the one link that matters is the last. */
+  @media (max-width: 640px) {
+    nav .links a:not(.nav-cta) { display: none; }
+  }
 
   /* ---------------------------------------------------------------- hero */
 
@@ -829,11 +842,11 @@
   <span class="links">
     <a href="./index.html">Overview</a>
     <a href="./features.html" aria-current="page">Features</a>
-    <a href="./index.html#install">Install</a>
     <a href="./index.html#arrives">Payload</a>
     <a href="./index.html#how">How</a>
     <a href="./index.html#about">About</a>
     <a href="https://github.com/tolgainam/pinpoint">GitHub&nbsp;↗</a>
+    <a class="nav-cta" href="./index.html#install">Install</a>
   </span>
 </nav>
 

@@ -22,6 +22,13 @@
 - MIT licence, replacing the source-available one.
 - Ready for the Claude plugin directory: a plugin icon, `PRIVACY.md`, a README section that
   lists what Pinpoint runs, writes and sends, and annotations on every MCP tool.
+- The extension can be installed from the Chrome Web Store, Mozilla Add-ons and Opera add-ons
+  once the listings are live. Loading from a folder stays for developers.
+- `npx pinpoint-dev install` adds the plugin to Claude Code from a terminal. `setup` and
+  `doctor` run the same checks as the slash commands. pnpm and yarn work too.
+- Store packs: `npm run package:extension` builds the zip, and `npm run store:shots` makes the
+  screenshots and promo images. Listing text is in `store/`.
+- The project website now leads with install buttons for Chrome, Firefox and Opera.
 - The project website has search and sharing tags, a sitemap and `robots.txt`.
 - Tests: end-to-end tests that load the extension in Chromium, a Firefox manifest test, and a
   fix for bridge tests that failed whenever something else listened on port 3000.

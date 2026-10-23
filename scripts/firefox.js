@@ -28,7 +28,13 @@ export function firefoxManifest(chrome) {
     background: { scripts: [background.service_worker] },
     ...(page ? { options_ui: { page, open_in_tab: true } } : {}),
     browser_specific_settings: {
-      gecko: { id: GECKO_ID, strict_min_version: MIN_FIREFOX },
+      gecko: {
+        id: GECKO_ID,
+        strict_min_version: MIN_FIREFOX,
+        // Pinpoint sends nothing off the machine. Mozilla asks every new add-on to say so;
+        // Firefox older than 140 ignores the key, and web-ext lint notes that as a warning.
+        data_collection_permissions: { required: ['none'] },
+      },
     },
   }
 }

@@ -165,7 +165,7 @@ test('two sessions finishing different items at once each get their own', withPr
 }))
 
 test('history gets one heading a day and lines in the order they were written', withProject(async dir => {
-  await Promise.all([1, 2, 3].map(n => appendHistory(dir, [`- line ${n}`], '## 2026-01-02')))
+  await Promise.all([1, 2, 3].map(n => appendHistory(dir, [`- line ${n}`], '## 2026-01-02', { waitMs: 15000 })))
   await appendHistory(dir, [], '## 2026-01-02')
   await appendHistory(dir, ['- next day'], '## 2026-01-03')
   const text = read(join(dir, '.pinpoint', 'history.md'))

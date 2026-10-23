@@ -361,7 +361,7 @@ async function ensureInjected(tabId) {
 
   try {
     await chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', files: ['probe.js'] })
-    await chrome.scripting.executeScript({ target: { tabId }, files: ['status.js', 'content.js'] })
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['status.js', 'a11y.js', 'content.js'] })
     return true
   } catch (err) {
     console.warn('[pinpoint] could not inject into tab', tabId, err)
@@ -418,7 +418,7 @@ async function keepOnSite(pattern) {
   if (have.length) await chrome.scripting.unregisterContentScripts({ ids: have.map(s => s.id) })
   await chrome.scripting.registerContentScripts([
     { id: ids[0], matches: [pattern], js: ['probe.js'], world: 'MAIN', runAt: 'document_start', persistAcrossSessions: true },
-    { id: ids[1], matches: [pattern], js: ['status.js', 'content.js'], runAt: 'document_idle', persistAcrossSessions: true },
+    { id: ids[1], matches: [pattern], js: ['status.js', 'a11y.js', 'content.js'], runAt: 'document_idle', persistAcrossSessions: true },
   ])
 }
 
@@ -462,12 +462,19 @@ chrome.action.onClicked.addListener(async tab => {
  * The freeze hotkey. A page keydown listener would do for most sites, but the states
  * worth freezing — an open dropdown, a focus-trapped menu — are exactly the ones that
  * swallow keys. A browser command is above all of that.
+ *
+ * focus-pinpoint is the keyboard's way in. The overlay is mounted last in the page, so
+ * reaching it with Tab means walking the whole page first; this shows the toolbar and
+ * focuses its active item instead.
  */
+const COMMAND_MESSAGE = { freeze: 'freeze', 'focus-pinpoint': 'focus' }
+
 chrome.commands?.onCommand.addListener(async (command, tab) => {
-  if (command !== 'freeze' || !tab?.id) return
+  const type = COMMAND_MESSAGE[command]
+  if (!type || !tab?.id) return
   if (!WEB.test(tab.url ?? '')) return
   if (!(await ensureInjected(tab.id))) return
-  chrome.tabs.sendMessage(tab.id, { type: 'freeze' }).catch(() => {})
+  chrome.tabs.sendMessage(tab.id, { type }).catch(() => {})
 })
 
 /**

@@ -255,18 +255,28 @@ Left to right:
 | status pill | Where Dispatch goes. Your project's name (Auto), a project with a `⚑` (your pick), **Choose**, **Reconnecting** or **Offline**. Click it to pick a session for this localhost port; "How it works" at the bottom reopens the welcome tab. A `!` means the bridge and extension versions differ, and the list says what to run |
 | **Comment** | Comment mode: hover highlights elements, click opens a note composer |
 | count | Pending comments not yet dispatched |
+| **Pins** `n` | Goes to the first pin, for keyboard use; shown only when there are pins |
 | `⚠ n` | The page's own console errors and failed requests; shown only when there are some |
 | **Dispatch** | Sends the batch to the session the pill names. Disabled while nothing can receive it |
 | **Clear** | Removes every pin on this page; shown only when there are pins |
 | `✕` | Hides the toolbar (the icon brings it back) |
 | **Alt+Shift+F** | Freezes the page so vanishing states can be pinned, and shows the toolbar if hidden |
+| **Alt+Shift+P** | Shows the toolbar and moves the keyboard to it |
 
 **Several Claude Code sessions?** Comments go to the session whose folder contains the
 page's dev server. If that guess is wrong, or there is none, pick another session from the
 pill; the pick is kept for that port.
 
 `⌘↵` adds a note, `Esc` closes the composer or leaves comment mode. Drag the bar by its
-logo. Pins survive a reload — they're keyed by origin + pathname in
+logo.
+
+**From the keyboard.** The toolbar is one tab stop: the arrows move between its buttons,
+Home and End jump to the ends. On **Pins**, Enter or the down arrow goes to the first pin.
+The arrows walk the pins from the top of the page down, Enter or Space opens a card, and Tab
+leaves the overlay. `Esc` goes back one step: a card to its pin, a pin to **Pins**, the
+composer to **Comment**, the popover to the pill, and the toolbar to where you were on the
+page. Pins are read by number, kind, state and note, and dispatches, answers and errors are
+announced. Both shortcuts can be changed at `chrome://extensions/shortcuts`. Pins survive a reload — they're keyed by origin + pathname in
 `chrome.storage.local`.
 
 When Claude fixes a comment it calls `resolve_comment`, and the pin turns green with a ✓

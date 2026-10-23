@@ -17,6 +17,10 @@
     "freeze": {
       "suggested_key": { "default": "Alt+Shift+F" },
       "description": "Freeze the page and pin what is on screen"
+    },
+    "focus-pinpoint": {
+      "suggested_key": { "default": "Alt+Shift+P" },
+      "description": "Show the Pinpoint toolbar and move the keyboard to it"
     }
   },
   "content_scripts": [
@@ -29,7 +33,7 @@
     },
     {
       "matches": ["http://localhost/*", "http://127.0.0.1/*"],
-      "js": ["status.js", "content.js"],
+      "js": ["status.js", "a11y.js", "content.js"],
       "run_at": "document_idle",
       "all_frames": false
     }

@@ -92,16 +92,20 @@
 
 /* ---------------------------------------------------------------- pins */
 
+/* A real button, so it is named, focusable and pressed with Enter or Space. Its fill is a
+   variable rather than a background, so the generic button hover cannot repaint it. */
 .pin {
+  --pin-fill: var(--pp-accent);
   position: absolute;
   z-index: var(--pp-z-pin);
   pointer-events: auto;
   width: 22px;
   height: 22px;
   margin: -11px 0 0 -11px; /* design-ok: half the 22px pin, centres it on its point */
+  padding: 0;
   border-radius: 50%;
   border: 2px solid var(--pp-white);
-  background: var(--pp-accent);
+  background: var(--pin-fill);
   color: var(--pp-white);
   font-size: var(--pp-text-sm);
   font-weight: var(--pp-weight-bold);
@@ -112,20 +116,23 @@
   transition: transform 100ms ease;
 }
 
-.pin:hover { transform: scale(1.15); }
-.pin.sent { background: var(--pp-sent); }
+.pin:hover,
+.pin:focus-visible { transform: scale(1.15); }
+button.pin:hover:not(:disabled),
+button.pin:focus-visible:not(:disabled) { background: var(--pin-fill); }
+.pin.sent { --pin-fill: var(--pp-sent); }
 /* Resolved by Claude. Green and ticked, so it reads as done at a glance — a muted
    version of this was indistinguishable from the grey "dispatched" state. */
-.pin.resolved { background: var(--pp-resolved); border-color: var(--pp-resolved-ring); opacity: 1; }
+.pin.resolved { --pin-fill: var(--pp-resolved); border-color: var(--pp-resolved-ring); opacity: 1; }
 .pin.detached { opacity: 0.4; border-style: dashed; }
 /* A question never changes code, so it must never read like a fix request waiting to
    land. Violet across pending, dispatched, and answered — the colour says "intent",
    the fill says "how far along". */
-.pin.question { background: var(--pp-question); }
-.pin.question.sent { background: var(--pp-question-sent); }
-.pin.answered { background: var(--pp-question); border-color: var(--pp-question-ring); }
+.pin.question { --pin-fill: var(--pp-question); }
+.pin.question.sent { --pin-fill: var(--pp-question-sent); }
+.pin.answered { --pin-fill: var(--pp-question); border-color: var(--pp-question-ring); }
 /* Parked, not queued: no colour, so it recedes behind anything actually in flight. */
-.pin.backlog { background: var(--pp-backlog); border-color: var(--pp-backlog-ring); color: var(--pp-backlog-fg); }
+.pin.backlog { --pin-fill: var(--pp-backlog); border-color: var(--pp-backlog-ring); color: var(--pp-backlog-fg); }
 .pin.backlog.unsaved { border-color: var(--pp-danger); border-style: dashed; }
 
 /* Comments on one element share a pin, because two pins at the same coordinates means the
@@ -476,7 +483,8 @@ button.bug {
   font-variant-numeric: tabular-nums;
 }
 
-button.bug:hover:not(:disabled) { background: var(--pp-bug-wash); }
+button.bug:hover:not(:disabled),
+button.bug:focus-visible { background: var(--pp-bug-wash); }
 
 .debug-head {
   display: flex;
@@ -602,7 +610,8 @@ button.close {
   font-size: var(--pp-text-sm);
 }
 
-button.close:hover:not(:disabled) { color: var(--pp-fg); }
+button.close:hover:not(:disabled),
+button.close:focus-visible { color: var(--pp-fg); }
 
 /* ---------------------------------------------------------------- pin card sections */
 
@@ -676,7 +685,8 @@ button {
   white-space: nowrap;
 }
 
-button:hover:not(:disabled) { background: var(--pp-hover); }
+button:hover:not(:disabled),
+button:focus-visible:not(:disabled) { background: var(--pp-hover); }
 button:disabled { opacity: 0.45; cursor: default; }
 
 button.primary {
@@ -708,7 +718,19 @@ button.danger:hover { color: var(--pp-danger); }
   color: var(--pp-dim);
 }
 
-.bar button.danger:hover { color: var(--pp-danger); border-color: var(--pp-danger-line); }
+.bar button.danger:hover,
+.bar button.danger:focus-visible { color: var(--pp-danger); border-color: var(--pp-danger-line); }
+
+/* Pins, N: the keyboard's way to the pins. Quiet, like Clear. */
+.bar button.pins-nav {
+  padding: var(--pp-space-4) var(--pp-space-8);
+  font-size: var(--pp-text-sm);
+  color: var(--pp-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.bar button.pins-nav:hover,
+.bar button.pins-nav:focus-visible { color: var(--pp-fg); }
 
 /* ---------------------------------------------------------------- toolbar */
 
@@ -727,6 +749,9 @@ button.danger:hover { color: var(--pp-danger); }
   box-shadow: var(--pp-shadow-float);
   font-size: var(--pp-text-md);
   user-select: none;
+  /* At 200% zoom a row that no longer fits wraps instead of clipping its last actions. */
+  flex-wrap: wrap;
+  max-width: calc(100vw - 16px);
 }
 
 .grip {
@@ -814,7 +839,7 @@ button.danger:hover { color: var(--pp-danger); }
   --pp-row: 28px;
 }
 
-.pop.show { display: block; }
+.pop.show { display: block; overflow-y: auto; }
 .pop.below { bottom: auto; top: calc(100% + 8px); }
 
 .pop-head { padding: 0 var(--pp-space-12); font-weight: var(--pp-weight-semibold); }
@@ -841,7 +866,8 @@ button.danger:hover { color: var(--pp-danger); }
   color: var(--pp-fg);
 }
 
-.pop button.pop-row:hover { background: var(--pp-hover); }
+.pop button.pop-row:hover,
+.pop button.pop-row:focus-visible { background: var(--pp-hover); }
 .pop-mark { color: var(--pp-dim); flex: none; font-size: var(--pp-text-xs); }
 .pop-row.on .pop-mark { color: var(--pp-accent); }
 .pop-name { flex: none; }
@@ -982,4 +1008,72 @@ button.mode.on {
   accent-color: var(--pp-accent);
   margin: 0;
   cursor: pointer;
+}
+
+/* ---------------------------------------------------------------- keyboard and access */
+
+/* Read by screen readers, never seen: the live region that mirrors every toast. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* One ring for everything the keyboard can reach. Hover looks are repeated on focus above;
+   the ring is what says which one has it. */
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: var(--pp-focus-width) solid var(--pp-focus-ring);
+  outline-offset: var(--pp-focus-offset);
+}
+
+/* Over the page, the ring sits on a dark halo so it shows on a light background too. */
+.pin:focus-visible {
+  outline-color: var(--pp-focus-ring);
+  box-shadow: var(--pp-shadow-pin), var(--pp-focus-halo);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pin,
+  .highlight,
+  .card .hint,
+  .toast { transition: none; }
+  .pin:hover,
+  .pin:focus-visible { transform: none; }
+}
+
+/* Windows High Contrast and other forced palettes: system colours throughout, and state
+   carried by the border and the glyph, since every fill becomes the same colour. */
+@media (forced-colors: active) {
+  .pin,
+  .pin.sent,
+  .pin.question,
+  .pin.question.sent,
+  .pin.backlog {
+    --pin-fill: Canvas;
+    forced-color-adjust: none;
+    color: CanvasText;
+    border-color: CanvasText;
+    box-shadow: none;
+  }
+  .pin.sent { color: GrayText; border-color: GrayText; }
+  .pin.resolved,
+  .pin.answered { --pin-fill: Highlight; color: HighlightText; border-color: Highlight; }
+  .pin.backlog { border-style: dashed; }
+  .pin.backlog.unsaved { border-color: Mark; }
+  .pin.detached { border-style: dotted; }
+  .pin.stack::after { forced-color-adjust: none; background: CanvasText; color: Canvas; border-color: Canvas; }
+  .pin.working { animation: none; outline: var(--pp-focus-width) solid CanvasText; outline-offset: var(--pp-focus-offset); }
+  .pin:focus-visible { box-shadow: none; }
+  button:focus-visible,
+  [tabindex]:focus-visible,
+  .pin:focus-visible { outline: var(--pp-focus-width) solid Highlight; outline-offset: var(--pp-focus-offset); }
+  .highlight { border-color: Highlight; }
+  .chip.warn { border-color: Mark; }
 }

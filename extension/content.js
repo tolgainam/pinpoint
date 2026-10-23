@@ -92,6 +92,9 @@
   const layer = el('div', 'layer')
   root.append(layer)
   document.documentElement.append(host)
+  // Keyboard and screen-reader support lives in a11y.js; this is its handle on the page.
+  const A11y = globalThis.PinpointA11y
+  const live = A11y.liveRegion(root)
 
   function el(tag, cls, text) {
     const n = document.createElement(tag)
@@ -587,6 +590,7 @@
     capture.style.display = on ? 'block' : 'none'
     modeBtn.classList.toggle('on', on)
     modeBtn.textContent = on ? 'Commenting' : 'Comment'
+    modeBtn.setAttribute('aria-pressed', String(on))
     if (on) dismissTip()
     if (!on) { closeCard(); hideHighlight(); frozen = null; if (frame) releaseFrame() }
   }
@@ -828,12 +832,18 @@
     let captured         // always describes chain[depth].node; set by selectDepth below
 
     const card = el('div', 'card')
+    card.setAttribute('role', 'dialog')
+    card.setAttribute('aria-label', 'New comment')
+    // Escape returns to Comment, the action this card came from.
+    card.returnTo = () => modeBtn
     const crumbs = el('div', 'crumbs')
     crumbs.tabIndex = 0
     crumbs.title = '↑ parent · ↓ child — or click a level'
+    crumbs.setAttribute('aria-label', 'Element level. Up arrow for the parent, down arrow for the child')
     const meta = el('div', 'meta', '…')
     const box = el('textarea')
     box.placeholder = 'What is wrong here?    ⌘↵ add · ? ask · ! backlog'
+    box.setAttribute('aria-label', 'Note. Start with ? to ask a question or ! to add to the backlog')
     const hint = el('div', 'hint')
     // Above the box, so what the note is going to do is read before it is written. It always
     // takes its row, so typing a marker does not move the box.
@@ -847,6 +857,7 @@
     const shotBox = document.createElement('input')
     shotBox.type = 'checkbox'
     shotBox.checked = wantShot
+    shotBox.setAttribute('aria-label', 'Attach a screenshot of this element')
     shotLabel.append(shotBox, document.createTextNode('screenshot'))
     // The page's console and network failures are deliberately NOT here. They are a
     // property of the page, not of the element: an error thrown by clicking one button
@@ -1517,9 +1528,14 @@
    * is rebuilt in place as they come and go — so it closes only when you close it, or when
    * the last comment under it is gone.
    */
-  function openPinCard(stack, x, y) {
+  function openPinCard(stack, x, y, viaKeyboard) {
     const key = stackKey(stack[0])
     const card = el('div', 'card')
+    card.setAttribute('role', 'dialog')
+    card.setAttribute('aria-label', `Pin ${leadOf(stack).n}`)
+    card.tabIndex = -1
+    // Escape returns to the pin this card belongs to, as it is after any re-render.
+    card.returnTo = () => pinNodes.find(p => stackKey(p.comment) === key)?.pin
 
     function fill() {
       const live = comments.filter(c => stackKey(c) === key)
@@ -1534,6 +1550,7 @@
         `${head.component ? `<${head.component}>  ` : ''}${head.selector}${stacked ? `  ·  ${live.length} comments` : ''}`))
       const close = el('button', 'close', '✕')
       close.title = 'Close'
+      close.setAttribute('aria-label', 'Close')
       close.onclick = closeCard
       top.append(close)
       card.append(top)
@@ -1548,6 +1565,7 @@
     layer.append(card)
     openCard = card
     fill()
+    if (viaKeyboard) card.focus({ preventScroll: true })
   }
 
   // ---------------------------------------------------------------- pins
@@ -1595,10 +1613,18 @@
     [...stack].sort((a, b) => (PIN_RANK[a.status] ?? 9) - (PIN_RANK[b.status] ?? 9) || b.n - a.n)[0]
 
   function renderPins() {
+    // Rebuilding must not drop keyboard focus off a pin.
+    const hadFocus = root.activeElement?.classList.contains('pin') ? root.activeElement._key : null
     pins.textContent = ''
     pinNodes = stacks().map(stack => {
       const c = leadOf(stack)
-      const pin = el('div', 'pin', c.status === 'resolved' ? '✓' : String(c.n))
+      const pin = el('button', 'pin', c.status === 'resolved' ? '✓' : String(c.n))
+      pin.type = 'button'
+      // Reached through the toolbar's Pins item, never by Tab: no stop per pin.
+      pin.tabIndex = -1
+      pin._key = stackKey(c)
+      pin.setAttribute('aria-label', A11y.pinName(stack, c))
+      pin.setAttribute('aria-haspopup', 'dialog')
       pin.classList.toggle('sent', c.status === 'sent')
       pin.classList.toggle('resolved', c.status === 'resolved')
       pin.classList.toggle('answered', c.status === 'answered')
@@ -1613,12 +1639,21 @@
         ev.preventDefault()
         ev.stopPropagation()
         if (openCard) { closeCard(); return }
-        openPinCard(stack, ev.clientX, ev.clientY)
+        // Enter and Space click with no pointer: anchor on the pin and move focus in.
+        const keyboard = ev.detail === 0
+        const r = pin.getBoundingClientRect()
+        openPinCard(stack, keyboard ? r.left : ev.clientX, keyboard ? r.top : ev.clientY, keyboard)
       })
       pins.append(pin)
       return { pin, comment: c, stack }
     })
     positionPins()
+    // In walking order (top, then left, then number) once the positions are fresh, so the
+    // order a screen reader reads them in is the order the arrows walk.
+    const walk = [...pinNodes].sort((a, b) => A11y.byPosition(a.comment, b.comment))
+    if (walk.some((p, i) => p !== pinNodes[i])) { pinNodes = walk; pins.append(...walk.map(p => p.pin)) }
+    const again = hadFocus && pinNodes.find(p => p.pin._key === hadFocus)
+    if (again) again.pin.focus({ preventScroll: true })
   }
 
   /** Open the card of the pin this comment is on, if the pin is on screen. */
@@ -1682,7 +1717,12 @@
   grip.append(gripMark)
   const dot = el('div', 'dot')
   const modeBtn = el('button', 'mode', 'Comment')
+  modeBtn.setAttribute('aria-pressed', 'false')
   const count = el('div', 'count', '0')
+  // Dispatch already says how many, in words; the bare number would be read as noise.
+  count.setAttribute('aria-hidden', 'true')
+  /** The way into pin navigation from the keyboard. Mounted only while there are pins. */
+  const pinsBtn = el('button', 'pins-nav')
   const sendBtn = el('button', 'primary', 'Dispatch')
   /**
    * ✕ dismisses the overlay. It used to mean "clear all pins", which made it a dead
@@ -1692,12 +1732,15 @@
    */
   const closeBtn = el('button', '', '✕')
   closeBtn.title = 'Hide Pinpoint — the toolbar icon brings it back'
+  closeBtn.setAttribute('aria-label', 'Hide Pinpoint')
   // Only mounted when there is something to clear, for the same reason the ⚠ is.
   const clearBtn = el('button', 'danger', 'Clear')
   clearBtn.title = 'Remove every pin on this page'
+  clearBtn.setAttribute('aria-label', 'Clear all pins')
   // Mounted only when the page has actually logged something, and sitting next to
   // Dispatch because that is what it modifies: what the whole batch carries with it.
   const bugBtn = el('button', 'bug', '')
+  bugBtn.setAttribute('aria-expanded', 'false')
   bar.append(grip, dot, modeBtn, count, sendBtn, closeBtn)
   // Hidden from the first frame rather than shown and then hidden, so a page load never
   // flashes the toolbar. setHidden owns the state from here on.
@@ -1725,6 +1768,7 @@
   const bugLabel = el('label', 'toggle')
   const bugBox = document.createElement('input')
   bugBox.type = 'checkbox'
+  bugBox.setAttribute('aria-label', 'Send the page errors with the batch')
   const bugLabelText = document.createTextNode('send with the batch')
   bugLabel.append(bugBox, bugLabelText)
   const bugClose = el('button', 'debug-more', 'close')
@@ -1771,6 +1815,7 @@
   function closeBugPanel() {
     if (!bugPanel.classList.contains('show')) return
     bugPanel.classList.remove('show')
+    bugBtn.setAttribute('aria-expanded', 'false')
     paintTip()
   }
 
@@ -1779,6 +1824,7 @@
     pageDebug = await probeDebug()
     const n = pageDebug.length
     bugBtn.textContent = `⚠ ${n}`
+    bugBtn.setAttribute('aria-label', `${n} page error${n === 1 ? '' : 's'}`)
     bugBtn.title = n
       ? `${n} error${n === 1 ? '' : 's'} logged by this page — click to read them`
       : ''
@@ -1794,6 +1840,7 @@
     bugBox.checked = wantDebug
     paintBugList()
     bugPanel.classList.add('show')
+    bugBtn.setAttribute('aria-expanded', 'true')
     placeBugPanel()
     paintTip()
   }
@@ -1809,6 +1856,7 @@
   let toastTimer
   function say(text, bad, ms = 3200) {
     toast.textContent = text
+    live.announce(text)
     toast.classList.toggle('bad', !!bad)
     toast.classList.add('show')
     const r = bar.getBoundingClientRect()
@@ -1933,6 +1981,12 @@
     // Clear only exists while there is something to clear.
     if (comments.length && !clearBtn.isConnected) bar.insertBefore(clearBtn, closeBtn)
     if (!comments.length) clearBtn.remove()
+    // Pins, N: only while there is a pin to go to.
+    const label = A11y.pinsLabel(pinNodes.length)
+    pinsBtn.textContent = label.text
+    pinsBtn.setAttribute('aria-label', label.name)
+    if (pinNodes.length && !pinsBtn.isConnected) count.after(pinsBtn)
+    if (!pinNodes.length) pinsBtn.remove()
     // Mirror the count onto the toolbar icon, so a tab you scrolled away from still shows it.
     send({ type: 'count', n: pending }).catch(() => {})
   }
@@ -2085,6 +2139,8 @@
   // own layout code stays as it was.
   bar.insertBefore(pill, dot)
   pill.append(dot, pillMark, pillLabel, pillWarn)
+  pill.setAttribute('aria-haspopup', 'dialog')
+  pill.setAttribute('aria-expanded', 'false')
   pillMark.style.display = 'none'
   pillWarn.style.display = 'none'
   pillLabel.textContent = status.label
@@ -2124,6 +2180,8 @@
     if (answer.ok) openCard?.repaintScales?.(toScales(answer))
   }
   pop.append(popHead, popLines, popList, popFoot, popVersion, popRefresh, popHow)
+  pop.setAttribute('role', 'dialog')
+  pop.setAttribute('aria-label', 'Project and connection')
   bar.append(pop)
 
   const popOpen = () => pop.classList.contains('show')
@@ -2134,6 +2192,7 @@
   function openPop() {
     if (popOpen()) return
     pop.classList.add('show')
+    pill.setAttribute('aria-expanded', 'true')
     popShown = ''
     paintPop()
     paintTip()
@@ -2141,6 +2200,7 @@
 
   function closePop() {
     pop.classList.remove('show')
+    pill.setAttribute('aria-expanded', 'false')
     paintTip()
   }
 
@@ -2151,7 +2211,12 @@
    */
   function placePop() {
     const r = bar.getBoundingClientRect()
-    pop.classList.toggle('below', r.top < (pop.offsetHeight || 200) + 16)
+    // Measured at its natural height, then capped to the room on its side: at 200% zoom a
+    // popover taller than that scrolls inside itself instead of running off the screen.
+    pop.style.maxHeight = ''
+    const below = r.top < (pop.offsetHeight || 200) + 16
+    pop.classList.toggle('below', below)
+    pop.style.maxHeight = `${Math.max(120, below ? innerHeight - r.bottom - 16 : r.top - 16)}px`
     const w = pop.offsetWidth
     const left = Math.max(8, Math.min(r.left, innerWidth - w - 8))
     pop.style.left = `${left - r.left}px`
@@ -2204,6 +2269,7 @@
     pillWarn.style.display = versionInfo ? '' : 'none'
     pillLabel.textContent = status.label
     pill.title = status.sendsTo ? `Sending to ${PinpointStatus.tilde(status.sendsTo)}` : status.heading
+    pill.setAttribute('aria-label', `Project: ${status.label}${status.pin ? ', picked' : ''}${versionInfo ? ', versions differ' : ''}`)
     paintDispatch()
     paintPop()
     // Only its second line depends on the status, and only Offline or not.
@@ -2234,6 +2300,45 @@
     closePop()
   }
   addEventListener('pointerdown', onOutside, true)
+
+  // ---------------------------------------------------------------- keyboard
+
+  /** Pins in walking order, as they are now: positions move with the page. */
+  const pinOrder = () => [...pinNodes].sort((a, b) => A11y.byPosition(a.comment, b.comment)).map(p => p.pin)
+  const toFirstPin = () => A11y.focusPin(pinOrder()[0], positionPins)
+  const toLastPin = () => A11y.focusPin(pinOrder().at(-1), positionPins)
+
+  /** The page element that had focus before the keyboard came into the overlay. */
+  let pageFocus = null
+  root.addEventListener('focusin', ev => {
+    const from = ev.relatedTarget
+    if (from && from !== host && !root.contains(from)) pageFocus = from
+  })
+
+  const rover = A11y.toolbar(bar, {
+    root,
+    items: () => [...bar.children].filter(n => n.tagName === 'BUTTON'),
+    fallback: () => modeBtn,
+    // Down (or Up, from the end) on Pins goes into the pins.
+    onKey: (ev, item) => {
+      if (item !== pinsBtn) return false
+      if (ev.key === 'ArrowDown') { toFirstPin(); return true }
+      if (ev.key === 'ArrowUp') { toLastPin(); return true }
+      return false
+    },
+  })
+  pinsBtn.onclick = toFirstPin
+
+  A11y.pinNav(pins, {
+    pins: pinOrder,
+    // Tab hands the stop back to Pins and lets the browser carry focus on from there,
+    // which leaves the overlay: every other toolbar item is out of the tab order.
+    exit: how => {
+      rover.setActive(pinsBtn)
+      pinsBtn.focus({ preventScroll: true })
+      return how
+    },
+  })
 
   /**
    * Pings overlap: the 5s beat, Retry, and a pick each send one. Only the newest answer
@@ -2299,6 +2404,7 @@
   tipText.append(el('div', 'tip-head', 'Click Comment, then click any element.'), tipLine2)
   const tipX = el('button', 'tip-x', '✕')
   tipX.title = 'Got it'
+  tipX.setAttribute('aria-label', 'Dismiss tip')
   const tipArrow = el('div', 'tip-arrow')
   tip.append(tipText, tipX, tipArrow)
   tip.onclick = () => dismissTip()
@@ -2440,7 +2546,7 @@
         // The answer is the point, so show it: open the pin's card instead of leaving it
         // behind a click. Not over a card that is already open, and not for a pin that is
         // off screen, where the toast has to carry it.
-        if (hit.question && !openCard && revealPin(hit)) return
+        if (hit.question && !openCard && revealPin(hit)) { live.announce(`Answer on pin ${hit.n}: ${ev.text}`); return }
       }
       if (ev.text) say(`${hit ? `#${hit.n} — ` : ''}${ev.text}`.slice(0, 600), false, 9000)
       return
@@ -2583,18 +2689,43 @@
       respond({ ok: true })
       return false
     }
+    // The focus-pinpoint shortcut: show the toolbar and put the keyboard on it.
+    if (msg?.type === 'focus') {
+      const from = document.activeElement
+      if (from && from !== document.body && from !== host) pageFocus = from
+      if (hidden) { setHidden(false); rememberOpen() }
+      rover.enter()
+      respond({ ok: true })
+      return false
+    }
     if (msg?.type === 'bridge-event') { respond({ ok: true, handled: !!msg.event && belongsHere(msg.event) }); onBridgeEvent(msg.event); return false }
     return false
   })
 
+  /**
+   * Escape closes the topmost surface and says where focus goes:
+   *   popover -> the project pill; error panel -> its count; composer -> Comment;
+   *   pin card -> its pin; a pin -> the Pins item; comment mode or a frozen frame -> it
+   *   ends and focus stays; the toolbar -> back to the page element focused before it.
+   * Focus only moves when it is already ours or nowhere, never off the page.
+   */
   function onKeydown(ev) {
     if (ev.key !== 'Escape') return
+    const inside = root.activeElement
     // The popover is the topmost thing, so it goes first. Stopped here, in the window's
     // capture phase, so the composer's own Escape handler never sees this press.
-    if (popOpen()) { ev.preventDefault(); ev.stopImmediatePropagation(); closePop(); return }
-    if (openCard) { closeCard(); return }
+    if (popOpen()) { ev.preventDefault(); ev.stopImmediatePropagation(); closePop(); A11y.returnFocus(root, pill); return }
+    if (bugPanel.classList.contains('show')) { ev.preventDefault(); closeBugPanel(); A11y.returnFocus(root, bugBtn); return }
+    if (openCard) {
+      const back = openCard.returnTo
+      closeCard()
+      A11y.returnFocus(root, back?.())
+      return
+    }
+    if (inside?.classList.contains('pin')) { ev.preventDefault(); ev.stopImmediatePropagation(); rover.setActive(pinsBtn); pinsBtn.focus({ preventScroll: true }); return }
     if (frame) { releaseFrame(); setMode(false); return }
-    if (mode) setMode(false)
+    if (mode) { setMode(false); return }
+    if (inside && bar.contains(inside) && pageFocus?.isConnected) { ev.preventDefault(); pageFocus.focus() }
   }
   addEventListener('keydown', onKeydown, true)
 

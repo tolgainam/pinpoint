@@ -119,6 +119,14 @@
   --pp-shadow-panel: 0 10px 30px rgb(0 0 0 / 0.45);
   --pp-ring-pulse: 0 0 0 5px color-mix(in srgb, var(--pp-accent) 30%, transparent);
 
+  /* ------------------------------------------------------------ keyboard focus */
+  /* A blue no pin state uses, so a focused pin never reads as a state. On a pin it sits
+     on a dark halo, which keeps it visible over a light page as well as on the bar. */
+  --pp-focus-ring: #60a5fa;
+  --pp-focus-width: 2px;
+  --pp-focus-offset: 2px;
+  --pp-focus-halo: 0 0 0 6px var(--pp-bg);
+
   /* ------------------------------------------------------------ layers */
   --pp-z-frame: 0;
   --pp-z-capture: 1;

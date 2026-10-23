@@ -1008,6 +1008,45 @@
   </div>
 </section>
 
+<section id="apply-to">
+  <div class="kicker">new in 0.7</div>
+  <h2>Say which elements a picked value is for</h2>
+  <div class="prose">
+    <p>
+      <strong>Apply to.</strong> Once you pick a value from a chip, the composer shows an
+      <strong>Apply to</strong> list with a count beside each choice: <strong>Only this</strong>,
+      <strong>Same classes</strong>, <strong>Same component role</strong>,
+      <strong>Same container</strong> and <strong>Every h3</strong> (or whatever the tag is).
+      It always starts at Only this. One choice covers every value picked in that comment;
+      for two different groups, write two comments. Notes you type are not affected.
+    </p>
+    <p>
+      <strong>What each one means.</strong> Same classes is the same tag with exactly the
+      same classes, so a title with one extra class is left out. Same component role is the
+      same tag rendered by the same React or Vue component; it is not offered when the page
+      has no component names, when they are minified, or when the page takes longer than
+      250 ms to answer. Same container is the same element in every copy of a repeated
+      container, such as the title of each card, and is not offered when that is ambiguous.
+      A choice that finds the same elements as one above it is not repeated.
+    </p>
+    <p>
+      <strong>See it before you send it.</strong> Hovering a choice, or reaching it with the
+      keyboard, outlines its elements. Choosing it previews the picked values on all of them,
+      and Cancel, Escape or Add puts the page back. If some of them use another value today,
+      the composer says so, for example <em>"1 of 3 matches currently uses a different text
+      colour"</em>. Counts are for the current page only; hidden elements are counted
+      separately. A group of 200 or more reads <strong>200+</strong>: you can still choose it,
+      but it is not previewed. On a frozen frame only Only this is offered.
+    </p>
+    <p>
+      <strong>From the keyboard.</strong> The choices are radio buttons: Tab reaches the
+      chosen one, the arrows change it, and the new choice is read out with its count and
+      any warning. The choice is saved with the comment; sending it to the session comes in
+      the next step of this release.
+    </p>
+  </div>
+</section>
+
 <section id="say">
   <div class="kicker">picked values</div>
   <h2>Pick the value instead of describing it</h2>

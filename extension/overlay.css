@@ -448,6 +448,104 @@ button.pin:focus-visible:not(:disabled) { background: var(--pin-fill); }
 
 .swatch.on { outline: 2px solid var(--pp-fg); outline-offset: 1px; }
 
+/* ---------------------------------------------------------------- apply to */
+
+/* Which elements the picked values are for. One compact list in the manner of a property
+   panel: a name, a short hint, the count on the right. Only there once a value is picked. */
+.scope {
+  display: none;
+  min-width: 0;
+  margin: 0 0 var(--pp-space-6);
+  padding: var(--pp-space-2) var(--pp-space-4) var(--pp-space-5);
+  border: 1px solid var(--pp-line);
+  border-radius: var(--pp-radius-7);
+  background: var(--pp-input);
+}
+
+.scope.show { display: block; }
+
+/* Floated, so it sits inside the box as a heading instead of on its border. */
+.scope-legend {
+  float: left;
+  width: 100%;
+  padding: var(--pp-space-3) var(--pp-space-4);
+  color: var(--pp-dim);
+  font-size: var(--pp-text-xs);
+  font-weight: var(--pp-weight-semibold);
+  letter-spacing: var(--pp-tracking-wide);
+  text-transform: uppercase;
+}
+
+.scope-list { clear: both; display: flex; flex-direction: column; gap: 1px; }
+
+.scope-opt {
+  display: flex;
+  align-items: center;
+  gap: var(--pp-space-6);
+  min-height: 24px;
+  padding: 0 var(--pp-space-4);
+  border-radius: var(--pp-radius-5);
+  font-size: var(--pp-text-sm);
+  cursor: pointer;
+}
+
+.scope-opt:hover,
+.scope-opt:focus-within { background: var(--pp-hover); }
+.scope-opt input { flex: none; margin: 0; accent-color: var(--pp-accent); cursor: pointer; }
+.scope-opt input:focus-visible { outline: var(--pp-focus-width) solid var(--pp-focus-ring); outline-offset: var(--pp-focus-offset); }
+.scope-name { flex: none; color: var(--pp-fg); white-space: nowrap; }
+.scope-hint {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--pp-dim);
+  font-family: var(--pp-font-mono);
+  font-size: var(--pp-text-xs);
+}
+.scope-count { flex: none; min-width: 28px; margin-left: auto; text-align: right; color: var(--pp-dim); font-variant-numeric: tabular-nums; }
+.scope-opt.on .scope-name { font-weight: var(--pp-weight-semibold); }
+.scope-opt.on .scope-count { color: var(--pp-fg); }
+
+/* What the option under the pointer or the keyboard is, in full. */
+.scope-detail {
+  padding: var(--pp-space-3) var(--pp-space-4) 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--pp-dim);
+  font-size: var(--pp-text-xs);
+}
+
+/* Members of the chosen group that compute another value now. Words and an icon, not a colour. */
+.scope-warn {
+  display: none;
+  gap: var(--pp-space-5);
+  margin: var(--pp-space-4) var(--pp-space-2) 0;
+  padding: var(--pp-space-3) var(--pp-space-6);
+  border: 1px solid var(--pp-warn);
+  border-radius: var(--pp-radius-5);
+  background: var(--pp-warn-wash);
+  color: var(--pp-warn-fg);
+  font-size: var(--pp-text-sm);
+  line-height: 1.4;
+}
+
+.scope-warn.show { display: flex; }
+.scope-warn-icon { flex: none; }
+/* A large group or a frozen frame: information, not a warning. */
+.scope-warn.note { border-color: var(--pp-line); background: var(--pp-wash); color: var(--pp-dim); }
+
+/* The members of an option, outlined with boxes of our own: the page's nodes are never styled for it. */
+.scope-outlines { position: absolute; inset: 0; z-index: var(--pp-z-highlight); pointer-events: none; }
+.scope-outline {
+  position: absolute;
+  border: 1px dashed var(--pp-accent);
+  border-radius: var(--pp-radius-2);
+  background: var(--pp-accent-wash-faint);
+}
+
 /* ---------------------------------------------------------------- page errors */
 
 /* What the page logged, printed rather than tallied. It hangs off the toolbar and not
@@ -1076,4 +1174,7 @@ button:focus-visible,
   .pin:focus-visible { outline: var(--pp-focus-width) solid Highlight; outline-offset: var(--pp-focus-offset); }
   .highlight { border-color: Highlight; }
   .chip.warn { border-color: Mark; }
+  .scope-warn { border-color: Mark; }
+  .scope-outline { border-color: Highlight; }
+  .scope-opt input:focus-visible { outline-color: Highlight; }
 }

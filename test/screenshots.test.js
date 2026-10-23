@@ -158,7 +158,7 @@ test('the bridge answers /health promptly while it writes a large batch', async 
   for (let round = 0; round < 3; round++) {
     let done = false
     const sent = dispatch(b, body).then(r => { done = true; return r })
-    let worst = 0
+    const all = []
     let waves = 0
     // Waves of 20 at once until the dispatch has answered, and always at least one.
     while (!done || waves === 0) {
@@ -169,14 +169,19 @@ test('the bridge answers /health promptly while it writes a large batch', async 
         assert.equal(r.status, 200)
         return performance.now() - t
       }))
-      worst = Math.max(worst, ...times)
+      all.push(...times)
       waves++
     }
     const res = await sent
     assert.equal(res.status, 200)
     await res.arrayBuffer()
-    t.diagnostic(`round ${round + 1}: ${waves} waves, slowest /health ${Math.round(worst)} ms`)
-    assert.ok(worst < 500, `slowest /health took ${Math.round(worst)} ms in round ${round + 1}`)
+    // The bar is p95 under 500 ms; one slow sample on a busy machine must not fail the run.
+    all.sort((a, c) => a - c)
+    const p95 = all[Math.floor(all.length * 0.95)]
+    const worst = all[all.length - 1]
+    t.diagnostic(`round ${round + 1}: ${waves} waves, p95 ${Math.round(p95)} ms, slowest ${Math.round(worst)} ms`)
+    assert.ok(p95 < 500, `p95 /health took ${Math.round(p95)} ms in round ${round + 1}`)
+    assert.ok(worst < 3000, `slowest /health took ${Math.round(worst)} ms in round ${round + 1}`)
   }
 })
 

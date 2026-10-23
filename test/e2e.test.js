@@ -40,7 +40,7 @@ function recordingBridge(version) {
     for (const res of streams) res.write(frame)
   }
   /** A bridge started with PINPOINT_TOKEN asks every POST for it. Empty means it does not. */
-  const state = { token: '' }
+  const state = { token: '', palette: null }
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
     identities.push({ path: url.pathname, version: req.headers['x-pinpoint-extension'], origin: req.headers.origin })
@@ -65,7 +65,9 @@ function recordingBridge(version) {
         let asked = {}
         try { asked = JSON.parse(body || '{}') } catch { /* recorded as empty */ }
         designAsks.push(asked)
-        json(200, { ok: true, detected: false, stale: false, ...(asked.refresh ? { refreshed: true } : {}) })
+        // The Apply to tests need a palette to pick from; everything before them sees none.
+        const scales = state.palette ? { detected: true, step: 4, color: state.palette, spacing: [], type: [], radius: [] } : { detected: false }
+        json(200, { ok: true, stale: false, ...scales, ...(asked.refresh ? { refreshed: true } : {}) })
       })
       return
     }
@@ -85,7 +87,48 @@ function recordingBridge(version) {
   return { server, dispatched, designAsks, state, emit, identities }
 }
 
-let context, page, worker, demo, bridge, profile, ext, bridgeServer
+/** Named colours only: the picks and the page never need a raw value. */
+const PALETTE = [
+  { name: '--accent', hex: 'rebeccapurple', value: 'rebeccapurple' },
+  { name: '--ink', hex: 'navy', value: 'navy' },
+]
+
+/** The cards page. */
+function cardsPage(q) {
+  const many = Math.min(Number(q.get('many')) || 0, 1000)
+  const react = q.get('react')
+  const slow = q.get('slow') === '1'
+  const card = (n, cls) => `<article class="card"><h3 class="${cls}" data-n="${n}">Card ${n}</h3><p>Body ${n}</p></article>`
+  const plain = n => Array.from({ length: n }, (_, i) => `<h3 data-plain="${i + 1}">Plain ${i + 1}</h3>`).join('')
+  const owners = react ? `
+    const type = ${react === 'min' ? "{ displayName: 't' }" : 'function CardTitle() {}'}
+    const fiber = { _debugOwner: { type } }
+    for (const n of document.querySelectorAll('.card h3, .promo h3')) n.__reactFiber$pp = fiber
+  ` : ''
+  const held = slow ? `
+    const post = window.postMessage.bind(window)
+    window.postMessage = function (msg, ...rest) {
+      if (msg && msg.tag === 'pinpoint:probe' && msg.dir === 'res' && msg.group) { setTimeout(() => post(msg, ...rest), 600); return }
+      return post(msg, ...rest)
+    }
+  ` : ''
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Cards</title><style>
+    body { font-family: sans-serif; color: black; margin: 0; padding: 16px }
+    .grid { display: flex; gap: 8px }
+    .card { border: 1px solid silver; padding: 8px; width: 200px }
+    h3 { margin: 4px 0; padding: 4px; font-size: 16px }
+    .card-title { color: black }
+    .card-title--accent { color: gray }
+    .plain h3, .many h3 { display: inline-block; margin-right: 8px }
+  </style></head><body><main>
+    <section class="grid">${card(1, 'card-title')}${card(2, 'card-title')}${card(3, 'card-title card-title--accent')}</section>
+    <aside class="promo"><h3 class="card-title" data-n="promo">Promo</h3></aside>
+    <section class="plain">${plain(11)}</section>
+    ${many ? `<section class="many">${plain(many)}</section>` : ''}
+  </main><script>${owners}${held}</script></body></html>`
+}
+
+let context, page, worker, demo, bridge, profile, ext, bridgeServer, cards, cardsPort
 
 before(async () => {
   if (!browser.ok) return
@@ -94,6 +137,11 @@ before(async () => {
   bridgeServer = bridge.server
   const bridgePort = await listen(bridgeServer)
   demo = await startDemo()
+  cards = createServer((req, res) => {
+    const url = new URL(req.url ?? '/', 'http://127.0.0.1')
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }).end(cardsPage(url.searchParams))
+  })
+  cardsPort = await listen(cards)
   ext = await extensionCopy(bridgePort)
   profile = await mkdtemp(join(tmpdir(), 'pinpoint-e2e-'))
   context = await browser.chromium.launchPersistentContext(profile, {
@@ -117,6 +165,8 @@ before(async () => {
 after(async () => {
   await context?.close().catch(() => {})
   bridgeServer?.close()
+  cards?.closeAllConnections?.()
+  cards?.close()
   demo?.stop()
   for (const dir of [profile, ext]) if (dir) await rm(dir, { recursive: true, force: true })
 })
@@ -495,6 +545,334 @@ test('a capture waits for its turn before the overlay hides', { skip: !browser.o
   } finally {
     await welcome.close()
   }
+})
+
+// ---------------------------------------------------------------- Apply to
+
+/*
+ * "Apply to" in the real composer, on a cards page served by this file: the owner's example
+ * of three cards whose h3 shares `card-title`, one with an override class and another text
+ * colour, a promo title with the same class outside the cards, and eleven plain h3s. The
+ * bridge answers with a small palette from here on. Query flags add what a test needs:
+ *   react=1    fake React owners (CardTitle) on the card and promo titles
+ *   react=min  the same with a minified name
+ *   slow=1     the main-world group answer is held back past the 250ms budget
+ *   many=N     N more plain h3s, to pass the 200 cap
+ */
+
+const KEY = () => `pinpoint:http://localhost:${cardsPort}/cards`
+
+/** Load the cards page with these flags, toolbar showing, storage for it empty. */
+async function loadCards(query = '') {
+  bridge.state.palette = PALETTE
+  await worker.evaluate(k => chrome.storage.local.remove(k), KEY())
+  await page.goto(`http://localhost:${cardsPort}/cards${query}`)
+  await host('.bar').waitFor({ state: 'attached', timeout: 15000 })
+  if (!(await host('.bar').isVisible())) {
+    await worker.evaluate(async () => {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+      await chrome.tabs.sendMessage(tab.id, { type: 'toggle' })
+    })
+  }
+  await host('.pill-label').filter({ hasText: PROJECT.name }).waitFor({ timeout: 15000 })
+  await page.evaluate(() => window.scrollTo(0, 0))
+}
+
+/** Open the composer on an element of the page. */
+async function compose(selector) {
+  if ((await host('.mode').innerText()).trim() !== 'Commenting') await host('.mode').click()
+  const b = await page.locator(selector).first().boundingBox()
+  await page.mouse.click(b.x + 12, b.y + b.height / 2)
+  await host('.card textarea').waitFor()
+  await host('.card input[type=checkbox]').first().uncheck()
+}
+
+/** Pick the accent from the text colour chip; the scope control then shows. */
+async function pickColour() {
+  await host('.card .chip').filter({ hasText: 'text' }).click()
+  await host('.card .swatch').first().click()
+  await host('.scope.show').waitFor({ timeout: 5000 })
+}
+
+/** kind:count for every option, in order. */
+const rows = () => page.evaluate(() =>
+  [...document.getElementById('pinpoint-host').shadowRoot.querySelectorAll('.scope-opt')]
+    .map(r => `${r.dataset.kind}:${r.querySelector('.scope-count').textContent}`))
+
+const checked = () => page.evaluate(() =>
+  document.getElementById('pinpoint-host').shadowRoot.querySelector('.scope input:checked')?.value ?? null)
+
+const omitted = () => host('.scope').getAttribute('data-omitted')
+
+/** The inline colour the preview wrote on each card title, the promo and the first plain h3. */
+const inline = () => page.evaluate(() => {
+  const at = s => document.querySelector(s)?.style.getPropertyValue('color') ?? null
+  return { c1: at('[data-n="1"]'), c2: at('[data-n="2"]'), c3: at('[data-n="3"]'), promo: at('[data-n="promo"]'), plain: at('[data-plain="1"]') }
+})
+
+const liveText = () => page.evaluate(() =>
+  document.getElementById('pinpoint-host').shadowRoot.querySelector('[aria-live="polite"]')?.textContent ?? '')
+
+async function liveSays(re, timeout = 5000) {
+  const until = Date.now() + timeout
+  let text = ''
+  while (Date.now() < until) {
+    text = await liveText()
+    if (re.test(text)) return text
+    await page.waitForTimeout(50)
+  }
+  assert.fail(`the live region never said ${re}; last: "${text}"`)
+}
+
+const focusedValue = () => page.evaluate(() => {
+  const a = document.getElementById('pinpoint-host').shadowRoot.activeElement
+  return a ? (a.value || a.textContent) : null
+})
+
+/** The stored comments of the cards page, once the debounced save has run. */
+async function stored(n) {
+  const until = Date.now() + 5000
+  let list = []
+  while (Date.now() < until) {
+    list = (await worker.evaluate(async k => (await chrome.storage.local.get(k))[k]?.comments ?? [], KEY()))
+    if (list.length >= n) return list
+    await page.waitForTimeout(50)
+  }
+  return list
+}
+
+async function closeAll() {
+  for (let i = 0; i < 3 && (await host('.card').count()); i++) await page.keyboard.press('Escape')
+  if ((await host('.mode').innerText()).trim() === 'Commenting') await host('.mode').click()
+}
+
+test('no Apply to until a value is picked; then every match with its count, and Only this chosen', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await loadCards()
+  await compose('[data-n="1"]')
+  assert.equal(await host('.scope').isVisible(), false, 'the scope shows before any pick')
+  await pickColour()
+  assert.equal(await host('.scope legend').innerText(), 'APPLY TO')
+  assert.deepEqual(await rows(), ['element:1', 'classes:3', 'pattern:3', 'tag:15'])
+  assert.equal(await checked(), 'element')
+  assert.equal((await host('.scope-opt[data-kind="pattern"] .scope-name').innerText()).trim(), 'Same container')
+  assert.equal(await host('.scope-opt[data-kind="pattern"] .scope-hint').innerText(), 'article.card › h3')
+  assert.equal(await host('.scope-opt[data-kind="tag"] .scope-name').innerText(), 'Every h3')
+  assert.equal(await host('.scope-opt[data-kind="classes"] input').getAttribute('aria-label'), 'Same classes, h3.card-title, 3 matches')
+  // No React or Vue on this page: no component role, and the reason is kept.
+  await page.waitForTimeout(400)
+  assert.match(await omitted(), /component:no-name/)
+  // Only this previews on the target alone.
+  assert.deepEqual(await inline(), { c1: 'rebeccapurple', c2: '', c3: '', promo: '', plain: '' })
+})
+
+test('choosing a group previews it on every member, warns about the one that differs, and Cancel puts it all back', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await host('.scope-opt[data-kind="pattern"]').click()
+  assert.equal(await checked(), 'pattern')
+  assert.deepEqual(await inline(), { c1: 'rebeccapurple', c2: 'rebeccapurple', c3: 'rebeccapurple', promo: '', plain: '' })
+  const warn = (await host('.scope-warn.show').innerText()).replace(/\s+/g, ' ').trim()
+  assert.equal(warn, '⚠ 1 of 3 matches currently uses a different text colour')
+  await liveSays(/^Apply to Same container: 3 matches\. 1 of 3 matches currently uses a different text colour$/)
+  // The same classes do not include the card with the override, and nobody differs.
+  await host('.scope-opt[data-kind="classes"]').click()
+  assert.deepEqual(await inline(), { c1: 'rebeccapurple', c2: 'rebeccapurple', c3: '', promo: 'rebeccapurple', plain: '' })
+  assert.equal(await host('.scope-warn.show').count(), 0)
+  await host('.card button').filter({ hasText: 'Cancel' }).click()
+  assert.deepEqual(await inline(), { c1: '', c2: '', c3: '', promo: '', plain: '' })
+  assert.equal(await host('.scope-outline').count(), 0)
+  await closeAll()
+})
+
+test('Add stores the scope with the comment, Dispatch leaves it out for now, and the next comment starts at Only this', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await compose('[data-n="1"]')
+  await pickColour()
+  await host('.scope-opt[data-kind="classes"]').click()
+  await host('.card button.primary').click()
+  await host('.card').waitFor({ state: 'detached' })
+  assert.deepEqual(await inline(), { c1: '', c2: '', c3: '', promo: '', plain: '' })
+
+  const [c] = await stored(1)
+  assert.ok(c.scope, 'the comment has no scope')
+  const { members, observations, source, ...rest } = c.scope
+  assert.deepEqual(rest, {
+    version: 1, kind: 'classes', match: { tag: 'h3', classes: ['card-title'] }, hint: 'h3.card-title',
+    counts: { document: 3, visible: 3, capped: false },
+  })
+  assert.equal(source, c.selector)
+  assert.equal(members.length, 3)
+  assert.equal(await page.evaluate(m => m.map(s => document.querySelector(s)?.dataset.n).join(','), members), '1,2,promo')
+  assert.deepEqual(observations, [{ prop: 'color', target: c.deltas[0].from, different: 0, samples: [] }])
+
+  const before = bridge.dispatched.length
+  await host('.bar button.primary').filter({ hasText: 'Dispatch' }).click()
+  const until = Date.now() + 8000
+  while (bridge.dispatched.length === before && Date.now() < until) await page.waitForTimeout(50)
+  assert.ok(bridge.dispatched.length > before, 'nothing was dispatched')
+  const sent = bridge.dispatched.at(-1).comments[0]
+  assert.equal(sent.deltas.length, 1)
+  assert.equal('scope' in sent, false, 'scope went to the bridge before it can carry it')
+
+  // A fresh composer is back at Only this.
+  await compose('[data-n="2"]')
+  await pickColour()
+  assert.equal(await checked(), 'element')
+  await closeAll()
+})
+
+test('the keyboard reaches the radios, arrows choose and outline, and Escape returns to Comment', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await compose('[data-n="1"]')
+  await pickColour()
+  // A pick hands focus back to the note; the options are one Shift+Tab before it.
+  await page.keyboard.press('Shift+Tab')
+  assert.equal(await focusedValue(), 'element')
+  await page.keyboard.press('ArrowDown')
+  assert.equal(await checked(), 'classes')
+  await liveSays(/^Apply to Same classes: 3 matches$/)
+  // Keyboard focus outlines the members, like hover does.
+  assert.equal(await host('.scope-outline').count(), 3)
+  assert.match(await host('.scope-detail').innerText(), /h3\.card-title · 3 matches/)
+  await page.keyboard.press('ArrowDown')
+  assert.equal(await checked(), 'pattern')
+  await page.keyboard.press('ArrowUp')
+  await page.keyboard.press('ArrowUp')
+  assert.equal(await checked(), 'element')
+  await page.keyboard.press('Space')
+  assert.equal(await checked(), 'element')
+  // Hover outlines too.
+  await host('.scope-opt[data-kind="tag"]').hover()
+  assert.equal(await host('.scope-outline').count(), 15)
+  await page.keyboard.press('Escape')
+  assert.equal(await host('.card').count(), 0)
+  assert.equal(await focusedValue(), 'Commenting')
+  assert.deepEqual(await inline(), { c1: '', c2: '', c3: '', promo: '', plain: '' })
+  assert.equal(await host('.scope-outline').count(), 0)
+  await closeAll()
+})
+
+test('a hidden member is counted in the document but not as visible', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await page.evaluate(() => { document.querySelectorAll('.card')[1].style.display = 'none' })
+  try {
+    await compose('[data-n="1"]')
+    await pickColour()
+    await host('.scope-opt[data-kind="classes"]').hover()
+    assert.equal(await host('.scope-detail').innerText(), 'h3.card-title · 2 visible · 3 in document')
+    assert.equal(await host('.scope-opt[data-kind="classes"] input').getAttribute('aria-label'), 'Same classes, h3.card-title, 2 visible, 3 in document')
+    await closeAll()
+  } finally {
+    await page.evaluate(() => { document.querySelectorAll('.card')[1].style.display = '' })
+  }
+})
+
+test('the picks gone or the element changed: back to Only this, nothing previewed', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await compose('[data-n="1"]')
+  // The padding chip has no scale here, so it opens the stepper.
+  const padding = async () => { await host('.card .chip').filter({ hasText: 'padding' }).click(); await host('.card .stepper').waitFor() }
+  await padding()
+  await host('.card .stepper button').filter({ hasText: '+' }).click()
+  await host('.card .stepper button').filter({ hasText: 'Use' }).click()
+  await host('.scope.show').waitFor()
+  await host('.scope-opt[data-kind="classes"]').click()
+  assert.equal(await page.evaluate(() => document.querySelector('[data-n="2"]').style.getPropertyValue('padding')), '5px')
+  // Using the current value again removes the only pick.
+  await padding()
+  await host('.card .stepper button').filter({ hasText: 'Use' }).click()
+  assert.equal(await host('.scope').isVisible(), false)
+  assert.equal(await page.evaluate(() => document.querySelector('[data-n="2"]').style.getPropertyValue('padding')), '')
+  // Pick again: Only this.
+  await pickColour()
+  assert.equal(await checked(), 'element')
+  await host('.scope-opt[data-kind="tag"]').click()
+  // Walking to the parent drops the picks, and coming back starts over.
+  await host('.card textarea').focus()
+  await page.keyboard.press('ArrowUp')
+  assert.equal(await host('.scope').isVisible(), false)
+  assert.deepEqual(await inline(), { c1: '', c2: '', c3: '', promo: '', plain: '' })
+  await page.keyboard.press('ArrowDown')
+  await pickColour()
+  assert.equal(await checked(), 'element')
+  await closeAll()
+})
+
+test('a group past the cap reads 200+, can be chosen, and is never previewed or listed', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await loadCards('?many=250')
+  await compose('[data-n="1"]')
+  await pickColour()
+  assert.deepEqual(await rows(), ['element:1', 'classes:3', 'pattern:3', 'tag:200+'])
+  await host('.scope-opt[data-kind="tag"]').hover()
+  assert.equal(await host('.scope-outline').count(), 0, 'a capped group was outlined')
+  await host('.scope-opt[data-kind="tag"]').click()
+  assert.equal(await checked(), 'tag')
+  assert.equal(await host('.scope-warn.show').innerText(), 'Large group — preview unavailable. Rechecked when added.')
+  assert.deepEqual(await inline(), { c1: 'rebeccapurple', c2: '', c3: '', promo: '', plain: '' })
+  await liveSays(/^Apply to Every h3: 200 or more matches\. Large group/)
+  await host('.card button.primary').click()
+  const [c] = await stored(1)
+  assert.deepEqual(c.scope.counts, { document: 200, visible: null, capped: true })
+  assert.equal(c.scope.kind, 'tag')
+  assert.deepEqual(c.scope.observations, [])
+  assert.equal('members' in c.scope, false)
+  await closeAll()
+})
+
+test('React owners give a component role, restricted to the tag', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await loadCards('?react=1')
+  await compose('[data-n="1"]')
+  await pickColour()
+  await host('.scope-opt[data-kind="component"]').waitFor({ timeout: 2000 })
+  assert.deepEqual(await rows(), ['element:1', 'classes:3', 'component:4', 'pattern:3', 'tag:15'])
+  assert.equal(await host('.scope-opt[data-kind="component"] .scope-hint').innerText(), 'CardTitle / h3')
+  await host('.scope-opt[data-kind="component"]').click()
+  assert.deepEqual(await inline(), { c1: 'rebeccapurple', c2: 'rebeccapurple', c3: 'rebeccapurple', promo: 'rebeccapurple', plain: '' })
+  await host('.card button.primary').click()
+  const [c] = await stored(1)
+  assert.deepEqual(c.scope.match, { tag: 'h3', component: 'CardTitle' })
+  assert.equal(c.scope.counts.document, 4)
+  assert.equal(c.scope.observations[0].different, 1)
+  await closeAll()
+})
+
+test('a minified component name is not offered', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await loadCards('?react=min')
+  await compose('[data-n="1"]')
+  await pickColour()
+  await page.waitForTimeout(400)
+  assert.equal(await host('.scope-opt[data-kind="component"]').count(), 0)
+  assert.match(await omitted(), /component:minified/)
+  await closeAll()
+})
+
+test('a component answer slower than 250ms is given up on, and a late one is ignored', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await loadCards('?react=1&slow=1')
+  await compose('[data-n="1"]')
+  const t0 = Date.now()
+  await pickColour()
+  // The other matches do not wait for the probe.
+  await host('.scope-opt[data-kind="classes"]').waitFor({ timeout: 1000 })
+  assert.ok(Date.now() - t0 < 2000)
+  await host('.scope[data-omitted*="component:timeout"]').waitFor({ timeout: 2000 })
+  // The held answer lands at 600ms; it must not add the option afterwards.
+  await page.waitForTimeout(900)
+  assert.equal(await host('.scope-opt[data-kind="component"]').count(), 0)
+  assert.deepEqual(await rows(), ['element:1', 'classes:3', 'pattern:3', 'tag:15'])
+  await closeAll()
+})
+
+test('a frozen frame offers only Only this', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await loadCards()
+  // No real capture in a headless test browser: the frame only needs a picture.
+  await worker.evaluate(() => { chrome.tabs.captureVisibleTab = async () => 'data:image/png;base64,AAAA' })
+  await worker.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+    await chrome.tabs.sendMessage(tab.id, { type: 'freeze' })
+  })
+  await host('.frame-note').waitFor({ timeout: 5000 })
+  const b = await page.locator('[data-n="1"]').boundingBox()
+  await page.mouse.click(b.x + 12, b.y + b.height / 2)
+  await host('.card textarea').waitFor()
+  await pickColour()
+  assert.deepEqual(await rows(), ['element:1'])
+  assert.equal(await host('.scope-warn.show').innerText(), 'Frozen frame — only this element can be chosen.')
+  await closeAll()
+  await page.keyboard.press('Escape')
 })
 
 test('a page left open across an extension reload says so, instead of throwing', { skip: !browser.ok, timeout: 60000 }, async () => {

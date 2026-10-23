@@ -7,7 +7,8 @@
  * over postMessage.
  *
  * It never receives a DOM node — content.js sends a selector (plus a point as a
- * fallback) and this resolves it here. Nothing is written to the page.
+ * fallback) and this resolves it here. Nothing is written to the page. "Apply to" asks
+ * one batched `group` question: which elements of the same tag the same component rendered.
  *
  * It also keeps a small ring buffer of console errors, uncaught exceptions, and failed
  * requests. Running in the page's own world at document_start is the only place that
@@ -202,6 +203,50 @@
     }
   }
 
+  // ---------------------------------------------------------------- component group
+
+  /**
+   * A structural selector for a node: tag and child position from <html> down. Not for
+   * reading, only for resolving the same live node again from the isolated world, which
+   * cannot be handed a node across worlds.
+   */
+  function pathOf(n) {
+    const parts = []
+    for (; n && n.nodeType === 1 && n.parentElement; n = n.parentElement) {
+      const i = Array.prototype.indexOf.call(n.parentElement.children, n) + 1
+      parts.unshift(`${n.tagName.toLowerCase()}:nth-child(${i})`)
+    }
+    return parts.length ? `html > ${parts.join(' > ')}` : ''
+  }
+
+  /**
+   * "Same component role", in one request rather than one per node: every element with the
+   * target's tag whose nearest named component is the target's. Answers within its own
+   * budget, below the 250ms the isolated world waits, and says `incomplete` rather than
+   * sending a partial list when it runs out. The isolated world checks every path still
+   * resolves to the same tag and decides whether the name is worth showing.
+   */
+  function group(d) {
+    let el = null
+    try { el = typeof d.selector === 'string' && d.selector ? document.querySelector(d.selector) : null } catch { /* bad selector */ }
+    if (!el) return { name: null, reason: 'unresolved' }
+    const name = describe(el)
+    if (!name) return { name: null }
+    const cap = Math.max(1, Math.min(Number(d.cap) || 200, 500))
+    const budget = Math.max(10, Math.min(Number(d.budget) || 200, 240))
+    const t0 = performance.now()
+    const all = document.getElementsByTagName(el.tagName)
+    const members = []
+    for (let i = 0; i < all.length; i++) {
+      if ((i & 15) === 15 && performance.now() - t0 > budget) return { name, incomplete: true }
+      const n = all[i]
+      if (n !== el && describe(n) !== name) continue
+      members.push(pathOf(n))
+      if (members.length >= cap) return { name, capped: true }
+    }
+    return { name, members }
+  }
+
   window.addEventListener('message', ev => {
     if (ev.source !== window) return
     const d = ev.data
@@ -209,6 +254,13 @@
 
     if (d.kind === 'debug') {
       window.postMessage({ tag: TAG, dir: 'res', id: d.id, debug: ring.slice() }, '*')
+      return
+    }
+
+    if (d.kind === 'group') {
+      let answer
+      try { answer = group(d) } catch { answer = { name: null } }
+      window.postMessage({ tag: TAG, dir: 'res', id: d.id, group: answer }, '*')
       return
     }
 

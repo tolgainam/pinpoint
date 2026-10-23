@@ -378,6 +378,24 @@ Picks preview on the live element and dispatch as `padding: 24px (spacing-6) →
 (spacing-8)`, so a comment can be nothing but the change. Works with no design system at
 all — the chips fall back to raw values.
 
+### Apply a picked value to more than one element
+
+Once a value is picked, the composer shows **Apply to**, with a count beside each choice:
+**Only this** (the default), **Same classes** (same tag, exactly the same classes),
+**Same component role** (same tag, same React or Vue component), **Same container** (the
+same element in every copy of a repeated container, such as each card's title) and
+**Every h3** (or whatever the tag is). One choice covers every value picked in the comment.
+A choice is left out when it would find only this element, the same elements as one above
+it, or when the evidence is not there: no or minified component names, a page that takes
+more than 250 ms to name them, or a container that holds the element more than once.
+
+Hovering a choice or reaching it with the keyboard outlines its elements, and choosing it
+previews the picks on all of them; Cancel, Escape and Add put the page back. If some of
+them use another value today, the composer says how many. Counts are for the current page,
+with hidden elements counted apart, and stop at **200+**, which can be chosen but is not
+previewed. A frozen frame offers only Only this. The choice is stored with the comment;
+it is not sent to the session yet.
+
 ### What rides along with a comment
 
 Every comment carries the element's curated computed styles — box model, layout,

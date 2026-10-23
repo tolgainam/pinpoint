@@ -171,7 +171,11 @@ test('history gets one heading a day and lines in the order they were written', 
   const text = read(join(dir, '.pinpoint', 'history.md'))
   assert.ok(text.startsWith('# Pinpoint history'))
   assert.equal(text.match(/## 2026-01-02/g).length, 1)
-  assert.match(text, /## 2026-01-02\n- line 1\n- line 2\n- line 3\n\n## 2026-01-03\n- next day\n$/)
+  // The three were started together, so the file holds them in lock order, which the
+  // jittered retry makes any order. Each exactly once, under the one heading.
+  const day = text.match(/## 2026-01-02\n((?:- line \d\n){3})\n## 2026-01-03\n- next day\n$/)
+  assert.ok(day, text)
+  assert.deepEqual(day[1].trim().split('\n').sort(), ['- line 1', '- line 2', '- line 3'])
   assert.deepEqual(leftovers(dir), [])
 }))
 

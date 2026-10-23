@@ -106,15 +106,13 @@
   // ---------------------------------------------------------------- selector
 
   const TEST_ATTRS = ['data-testid', 'data-test-id', 'data-test', 'data-cy', 'data-qa', 'data-component']
+  /** "Apply to" groups live in scope.js; this is its handle on the page. */
+  const Scope = globalThis.PinpointScope
   /**
-   * Hashed class names from CSS-in-JS: stable within a build, meaningless across one.
-   *
-   * The short-prefix arm requires a digit in the tail. Without one it also swallowed
-   * ordinary hyphenated names — `hero-actions`, `card-header`, `nav-wrapper` all match
-   * "up to four letters, hyphen, six or more alphanumerics" — which quietly cost every
-   * selector and breadcrumb the most descriptive class on the element.
+   * Hashed class names from CSS-in-JS. One filter for selectors, breadcrumbs and the
+   * stable classes "Apply to" matches on, so the three never disagree; see scope.js.
    */
-  const GENERATED_CLASS = /^(css|sc|emotion|jsx|styled|makeStyles)[-_]|^[A-Za-z]+__[A-Za-z0-9]{5,}$|^[a-z]{1,4}-(?=[a-z0-9]{6,}$)[a-z]*\d[a-z0-9]*$/
+  const GENERATED_CLASS = Scope.GENERATED_CLASS
   /** Runtime-generated ids: React useId, Radix, Headless UI. */
   const GENERATED_ID = /^(:r|radix-|headlessui-|mui-|react-aria)|\d{5,}/
 
@@ -211,6 +209,15 @@
   /** Which component rendered this. */
   const probeComponent = (selector, x, y) =>
     ask({ kind: 'component', selector, x, y }).then(r => r?.component || null)
+
+  /**
+   * "Same component role": one batched request for every element with this tag that the
+   * same component rendered. Null when the probe did not answer inside its 250ms, and a
+   * name-less answer from a probe too old to know the request.
+   */
+  const probeGroup = node =>
+    ask({ kind: 'group', selector: buildSelector(node), cap: Scope.CAP, budget: 200 }, 250)
+      .then(r => (r ? (r.group ?? { name: null }) : null))
 
   /** The page's console/network ring buffer. */
   const probeDebug = () => ask({ kind: 'debug' }).then(r => (Array.isArray(r?.debug) ? r.debug : []))
@@ -448,6 +455,14 @@
       n = n.parentElement
     }
     return out
+  }
+
+  /** Rendered, as opposed to mounted but display:none or visibility:hidden. Scrolled away still counts. */
+  function isShown(n) {
+    try {
+      if (typeof n.checkVisibility === 'function') return n.checkVisibility({ visibilityProperty: true, checkVisibilityCSS: true })
+      return n.getClientRects().length > 0
+    } catch { return false }
   }
 
   // ---------------------------------------------------------------- element capture
@@ -872,13 +887,30 @@
     const staleNote = el('div', 'chips-note', 'design system may be out of date; refresh from the project menu')
     const picker = el('div', 'picker')
 
+    // "Apply to": which elements the picked values are for. Hidden until a value is
+    // picked, Only this by default; the groups and their previews live in scope.js.
+    const scopeCtl = Scope.composer({
+      el,
+      doc: document,
+      exclude: host,
+      layer,
+      visible: isShown,
+      read: (n, prop) => tidy(prop, getComputedStyle(n).getPropertyValue(prop).trim()),
+      probe: probeGroup,
+      resolve: sel => { try { return document.querySelector(sel) } catch { return null } },
+      selectorOf: buildSelector,
+      announce: text => live.announce(text),
+      focused: () => root.activeElement,
+    })
+
     const cancel = el('button', '', 'Cancel')
     const add = el('button', 'primary', 'Add')
     row.append(shotLabel, el('span', 'spacer'), cancel, add)
-    card.append(crumbs, meta, chips, staleNote, picker, intent, box, hint, row)
+    card.append(crumbs, meta, chips, staleNote, picker, scopeCtl.node, intent, box, hint, row)
     layer.append(card)
     openCard = card
-    card.cleanup = restorePreviews
+    card.cleanup = () => { restorePreviews(); scopeCtl.destroy() }
+    card.reposition = scopeCtl.reposition
     // Whether Park is possible changes with the 5s ping, so the toolbar repaints this.
     card.repaintIntent = () => paintIntent()
     placeCard(card, x + 12, y + 12, () => (snapRect && depth === 0 ? snapRect : target.getBoundingClientRect()))
@@ -904,6 +936,7 @@
      * picture shows the problem rather than the proposal.
      */
     function restorePreviews() {
+      scopeCtl.restore()
       for (const [node, saved] of previewed) {
         for (const [prop, was] of saved) {
           // Priority is part of the original: an inline `!important` that came back
@@ -1083,6 +1116,9 @@
       }
 
       chips.classList.toggle('show', chips.childElementCount > 0)
+      // Every change to the picks or the element passes through here, so the scope does too:
+      // shown with the first pick, back to Only this with the last one gone or a new element.
+      scopeCtl.sync({ target, deltas: [...deltas.values()], frozen: !!frame, source: captured.selector })
     }
 
     // The scales arrive after the card does. Chips are painted twice on purpose: raw
@@ -1234,6 +1270,17 @@
       // change that has not been made anywhere.
       restorePreviews()
 
+      // The group is measured again now, with the page put back. A group that has gone is
+      // refused with a reason rather than quietly narrowed to Only this.
+      const scoped = await scopeCtl.finalize()
+      if (openCard !== card) return
+      if (!scoped.ok) {
+        say(scoped.error, true)
+        for (const d of picks) preview(target, d.prop, d.to)
+        scopeCtl.reapply()
+        return
+      }
+
       wantShot = shotBox.checked
 
       // Re-measure: the composer has been open for a while and the app may have moved.
@@ -1270,6 +1317,9 @@
         note: text,
         transient: frame ? true : undefined,
         deltas: picks.length ? picks : undefined,
+        // Kept with the comment, on this page only for now: the dispatch and backlog
+        // payloads leave it out until the bridge says it can carry it.
+        scope: picks.length ? scoped.scope : undefined,
         debug: debug.length ? debug : undefined,
         shot: shot || undefined,
         question: kind === 'question' || undefined,
@@ -1696,7 +1746,8 @@
   function schedulePins() {
     if (queued) return
     queued = true
-    requestAnimationFrame(() => { queued = false; positionPins() })
+    // The composer's "Apply to" outlines follow the page the same way the pins do.
+    requestAnimationFrame(() => { queued = false; positionPins(); openCard?.reposition?.() })
   }
 
   // Named, because unmount has to be able to take them off again.
@@ -2740,6 +2791,8 @@
     removeEventListener('keydown', onKeydown, true)
     removeEventListener('pointerdown', onOutside, true)
     try { chrome.storage.onChanged.removeListener(onStorage) } catch { /* runtime already gone */ }
+    // An open composer may be previewing picks on the page; put them back before going.
+    try { closeCard() } catch { /* going away either way */ }
     host.remove()
   }
 

@@ -29,6 +29,9 @@ import {
 } from './design-system.js'
 import { compareVersions } from './version.js'
 import { real, canon, inside, nowhere } from './paths.js'
+import {
+  sectionRange, parseItems, appendOpen, startItem, finishItem, appendHistory, ProjectBusyError,
+} from './project-files.js'
 
 const PORT = Number(process.env.PINPOINT_PORT ?? 8788)
 /**
@@ -46,12 +49,6 @@ const QUEUE = process.env.PINPOINT_QUEUE ?? join(homedir(), '.claude', 'pinpoint
 const backlogFile = dir => join(dir, '.pinpoint', 'backlog.md')
 const BACKLOG_FILE = backlogFile(PROJECT_DIR)
 const shotsDir = dir => join(dir, '.pinpoint', 'shots')
-/**
- * The record of what was asked and what came of it. Like the backlog it belongs to the
- * project rather than to the queue: the queue is pruned after a day, and "what did I ask
- * for last week, and what happened" is a question that outlives that by a lot.
- */
-const historyFile = dir => join(dir, '.pinpoint', 'history.md')
 /** Optional shared secret. When set, /dispatch also requires X-Pinpoint-Token. */
 const TOKEN = process.env.PINPOINT_TOKEN?.trim()
 /** How long a fully-resolved batch is kept before its screenshots are deleted. */
@@ -168,93 +165,12 @@ function prune() {
 // ---------------------------------------------------------------- backlog file
 
 /**
- * The backlog is a markdown file a human owns, not a database this server owns. So every
- * operation here is a surgical splice of whole lines: an item keeps whatever sub-bullets
- * someone typed under it, sections we didn't write are left exactly where they are, and
- * a hand-written item is a first-class citizen the tools can list and close.
+ * The format and every write live in project-files.js, behind the project lock: two sessions
+ * can write one backlog at once. Reading needs no lock, since a write is one rename.
  */
-
-const BACKLOG_SEED = `# Pinpoint backlog
-
-Things worth doing, in the order they're worth doing. Pinpoint appends browser-pinned
-items to \`## Open\` and moves finished ones to \`## Done\`; everything else is yours.
-
-**Format:** one checkbox per item. Sub-bullets are free-form; \`id\`, \`selector\`, and
-\`shot\` appear on items Pinpoint wrote itself.
-
----
-
-## Open
-
-## Done
-`
-
-/** The line range a `## ` heading owns: itself, up to the next heading or end of file. */
-function sectionRange(lines, heading) {
-  const start = lines.findIndex(l => l.trim() === heading)
-  if (start === -1) return null
-  let end = lines.length
-  for (let i = start + 1; i < lines.length; i++) {
-    if (/^##\s/.test(lines[i])) { end = i; break }
-  }
-  return { start, end }
-}
-
-/**
- * Checkbox items in a line range. An item owns every indented or blank line after it,
- * which is what lets hand-written sub-bullets travel with the item when it moves. A
- * flush-left non-blank line that is not a checkbox (a `---` rule, a paragraph) ends the
- * run and stays put.
- */
-function parseItems(lines, start, end) {
-  const items = []
-  let cur = null
-  for (let i = start; i < end; i++) {
-    const line = lines[i]
-    if (/^- \[[ xX]\]/.test(line)) {
-      cur = { from: i, to: i + 1, body: [line] }
-      items.push(cur)
-    } else if (cur && (!line.trim() || /^\s/.test(line))) {
-      cur.body.push(line)
-      cur.to = i + 1
-    } else if (line.trim()) {
-      cur = null
-    }
-  }
-  // Trailing blanks belong to the gap between items, not to the item.
-  for (const it of items) {
-    while (it.body.length > 1 && !it.body[it.body.length - 1].trim()) { it.body.pop(); it.to-- }
-  }
-  return items
-}
-
-const titleOf = body => {
-  const first = body[0].replace(/^- \[[ xX]\]\s*/, '')
-  const bold = first.match(/\*\*(.+?)\*\*/)
-  return (bold ? bold[1] : first.split(' — ')[0]).trim()
-}
-
-const idOf = body => (body.join('\n').match(/^\s*- id: `?([\w-]+)`?\s*$/m) ?? [])[1]
 
 function readBacklogText(file = BACKLOG_FILE) {
   try { return readFileSync(file, 'utf8') } catch { return null }
-}
-
-function writeBacklogLines(lines, file = BACKLOG_FILE) {
-  mkdirSync(dirname(file), { recursive: true })
-  // Splicing leaves the odd double gap behind; collapsing runs keeps the diff readable.
-  let out = lines.join('\n').replace(/\n{3,}/g, '\n\n')
-  if (!out.endsWith('\n')) out += '\n'
-  writeFileSync(file, out)
-}
-
-/** Guarantee a heading exists, appending it at the end rather than guessing where it goes. */
-function ensureSection(lines, heading) {
-  let range = sectionRange(lines, heading)
-  if (range) return range
-  if (lines.length && lines[lines.length - 1].trim()) lines.push('')
-  lines.push(heading, '')
-  return sectionRange(lines, heading)
 }
 
 /** Every open item, in file order. */
@@ -267,18 +183,6 @@ function listOpen(file = BACKLOG_FILE) {
   return parseItems(lines, range.start + 1, range.end)
 }
 
-/** Resolve a user-supplied reference: Pinpoint id, 1-based position, or title substring. */
-function findItem(items, ref) {
-  const q = String(ref ?? '').trim()
-  if (!q) return -1
-  const byId = items.findIndex(it => idOf(it.body) === q)
-  if (byId !== -1) return byId
-  const n = Number(q)
-  if (Number.isInteger(n) && n >= 1 && n <= items.length) return n - 1
-  const low = q.toLowerCase()
-  return items.findIndex(it => titleOf(it.body).toLowerCase().includes(low))
-}
-
 /** Shots are stored repo-relative so the committed file stays machine-independent;
     Claude needs the absolute path to hand to Read, so expand it on the way out. */
 const absolutiseShots = text =>
@@ -286,87 +190,26 @@ const absolutiseShots = text =>
 
 const renderItem = (item, i) => absolutiseShots([`${i + 1}. ${item.body[0].replace(/^- \[[ xX]\]\s*/, '')}`, ...item.body.slice(1)].join('\n'))
 
-/** Written by the bridge on behalf of whichever project the page belongs to, hence `file`. */
-function appendOpen(block, file = BACKLOG_FILE) {
-  const lines = (readBacklogText(file) ?? BACKLOG_SEED).split('\n')
-  const range = ensureSection(lines, '## Open')
-  const items = parseItems(lines, range.start + 1, range.end)
-  const at = items.length ? items[items.length - 1].to : range.start + 1
-  lines.splice(at, 0, '', ...block)
-  writeBacklogLines(lines, file)
-}
-
-const IN_PROGRESS = /^\s*- status: in progress/
-
-/** Stamp an open item so a second session — or tomorrow's you — can see it is taken. */
-function markStarted(index) {
-  const text = readBacklogText()
-  if (text == null) return false
-  const lines = text.split('\n')
-  const range = sectionRange(lines, '## Open')
-  if (!range) return false
-  const item = parseItems(lines, range.start + 1, range.end)[index]
-  if (!item) return false
-  if (item.body.some(l => IN_PROGRESS.test(l))) return true
-  lines.splice(item.to, 0, `  - status: in progress (since ${human()})`)
-  writeBacklogLines(lines)
-  return true
-}
-
-/** Move one open item into `## Done`, ticked and dated. */
-function moveToDone(index, outcome) {
-  const text = readBacklogText()
-  if (text == null) return null
-  const lines = text.split('\n')
-  const range = sectionRange(lines, '## Open')
-  if (!range) return null
-  const item = parseItems(lines, range.start + 1, range.end)[index]
-  if (!item) return null
-
-  const body = item.body.filter(l => !IN_PROGRESS.test(l))
-  body[0] = body[0].replace(/^- \[[ xX]\]/, '- [x]')
-  body.push(`  - done: ${human()}${outcome ? ` — ${outcome}` : ''}`)
-
-  lines.splice(item.from, item.to - item.from)
-  const done = ensureSection(lines, '## Done')
-  const doneItems = parseItems(lines, done.start + 1, done.end)
-  const at = doneItems.length ? doneItems[doneItems.length - 1].to : done.end
-  lines.splice(at, 0, '', ...body)
-  writeBacklogLines(lines)
-  return { title: titleOf(item.body), id: idOf(item.body) }
+/** A failed backlog write as a tool result: busy is worth retrying, anything else is not. */
+function backlogError(err, what) {
+  if (err instanceof ProjectBusyError) {
+    return { content: [{ type: 'text', text: `${what}: the project files are busy with another Pinpoint write. Nothing was changed; try again.` }], isError: true }
+  }
+  console.error('[pinpoint] backlog write failed:', err)
+  return { content: [{ type: 'text', text: `${what}: ${err?.message ?? err}` }], isError: true }
 }
 
 // ---------------------------------------------------------------- history log
 
-const HISTORY_SEED = `# Pinpoint history
-
-What was pinned, and what came of it. Appended by Pinpoint, newest at the bottom; the
-queue in ~/.claude is pruned after a day, this is not. Delete it whenever you like — it
-is a log, nothing reads it back.
-
-`
-
 /**
- * Append lines under today's date heading, adding the heading if this is the first entry
- * of the day.
- *
- * Append-only and strictly chronological, which is the whole design. Writing a batch and
- * then going back to annotate it when it resolves would mean splicing a file a human also
- * edits; a resolution written as its own line, later in the file, says the same thing and
- * cannot corrupt anything.
+ * A log that cannot be written must never cost a dispatch or a resolve. It is a record, not
+ * a step, so a busy lock or a full disk is said on stderr and nothing else.
  */
-function appendHistory(lines, dir = PROJECT_DIR) {
-  if (!lines.length) return
-  const file = historyFile(dir)
+async function logHistory(lines, dir = PROJECT_DIR) {
   try {
-    mkdirSync(dirname(file), { recursive: true })
-    let text = existsSync(file) ? readFileSync(file, 'utf8') : HISTORY_SEED
-    const today = `## ${human().slice(0, 10)}`
-    if (!text.includes(today)) text += `${text.endsWith('\n') ? '' : '\n'}\n${today}\n`
-    writeFileSync(file, `${text}${text.endsWith('\n') ? '' : '\n'}${lines.join('\n')}\n`)
+    await appendHistory(dir, lines, `## ${human().slice(0, 10)}`)
   } catch (err) {
-    // A log that cannot be written must never cost a dispatch. It is a record, not a step.
-    console.error('[pinpoint] history write failed:', err)
+    console.error('[pinpoint] history write failed:', err?.message ?? err)
   }
 }
 
@@ -888,7 +731,8 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
     if (resolutionOf(args)) c.resolution = resolutionOf(args)
     writeBatch(b)
     const shown = await tell({ type: 'resolved', id: args.id, resolution: resolutionOf(args) ?? '' })
-    appendHistory([`- ${clock()} · ✓ ${args.id}${resolutionOf(args) ? ` — ${String(resolutionOf(args)).split('\n')[0].slice(0, 200)}` : ''}`])
+    // The batch's own project, which is not this session's when a peer routed it here.
+    await logHistory([`- ${clock()} · ✓ ${args.id}${resolutionOf(args) ? ` — ${String(resolutionOf(args)).split('\n')[0].slice(0, 200)}` : ''}`], b.projectDir ?? PROJECT_DIR)
 
     // Ask the page for a fresh crop of the same rect, so the edit can be looked at rather
     // than assumed. A failure here is information, not an error: it says the verification
@@ -959,22 +803,30 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
     return { content: [{ type: 'text', text: `${head}\n\n${items.map(renderItem).join('\n\n')}` }] }
   }
 
+  // The reference is resolved inside the write, against the file as it is then: another
+  // session may have finished an item since this one listed them, and a number from that
+  // list now points somewhere else.
   if (req.params.name === 'start_backlog_item') {
-    const items = listOpen()
-    const i = findItem(items, args.id)
-    if (i === -1) return { content: [{ type: 'text', text: `No open backlog item matching "${args.id}".` }], isError: true }
-    const text = renderItem(items[i], i)
-    markStarted(i)
-    return { content: [{ type: 'text', text: `Working on backlog item ${i + 1}:\n\n${text}` }] }
+    let got
+    try {
+      got = await startItem(BACKLOG_FILE, args.id, human())
+    } catch (err) {
+      return backlogError(err, `Could not start "${args.id}"`)
+    }
+    if (!got) return { content: [{ type: 'text', text: `No open backlog item matching "${args.id}".` }], isError: true }
+    const text = renderItem(got.item, got.index)
+    return { content: [{ type: 'text', text: `Working on backlog item ${got.index + 1}:\n\n${text}` }] }
   }
 
   if (req.params.name === 'finish_backlog_item') {
-    const items = listOpen()
-    const i = findItem(items, args.id)
-    if (i === -1) return { content: [{ type: 'text', text: `No open backlog item matching "${args.id}".` }], isError: true }
     const outcome = args.outcome ? String(args.outcome) : ''
-    const moved = moveToDone(i, outcome)
-    if (!moved) return { content: [{ type: 'text', text: `Could not move "${args.id}" to Done.` }], isError: true }
+    let moved
+    try {
+      moved = await finishItem(BACKLOG_FILE, args.id, outcome, human())
+    } catch (err) {
+      return backlogError(err, `Could not move "${args.id}" to Done`)
+    }
+    if (!moved) return { content: [{ type: 'text', text: `No open backlog item matching "${args.id}".` }], isError: true }
     if (moved.id) tell({ type: 'backlog-done', id: moved.id, outcome })
     return { content: [{ type: 'text', text: `Done: ${moved.title}` }] }
   }
@@ -1984,7 +1836,11 @@ async function handleDispatch(req, res) {
     rmSync(batchDir(id), { recursive: true, force: true })
     return send(res, 503, headers, 'screenshots could not be written, try again')
   }
-  appendHistory(historyForBatch(batch), route.projectDir)
+  // Started here, after the commit, and waited for before the answer. The first try at the
+  // lock is synchronous, so in the usual case the line is written before anything below; a
+  // busy lock waits without holding up the notify, which must follow the commit with no
+  // yield in between.
+  const logged = logHistory(historyForBatch(batch), route.projectDir)
   prune()
 
   // Only the notification has to come from the target session, since it is the one
@@ -1997,6 +1853,7 @@ async function handleDispatch(req, res) {
   // question, so say which one: when it started. One session needs no explaining.
   const key = canon(route.projectDir)
   const here = sessions().filter(x => x.key === key)
+  await logged
   sendJson(res, 200, headers, {
     ok: true, batch: id, count: comments.length, projectDir: route.projectDir, name: route.name,
     ...(here.length > 1 && target?.started ? { sessions: here.length, sessionStarted: target.started } : {}),
@@ -2173,8 +2030,9 @@ async function handleBacklog(req, res) {
   if (note !== title) block.push(`  - note: ${note.replace(/\n/g, '\n    ')}`)
 
   try {
-    appendOpen(block, file)
+    await appendOpen(file, block)
   } catch (err) {
+    if (err instanceof ProjectBusyError) return send(res, 503, headers, 'project files busy, try again')
     console.error('[pinpoint] backlog write failed:', err)
     return send(res, 500, headers, `could not write ${file}`)
   }

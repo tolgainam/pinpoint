@@ -8,8 +8,8 @@
  */
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, readFileSync, readdirSync, existsSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { mkdtempSync, rmSync, readFileSync, readdirSync, existsSync, writeFileSync } from 'node:fs'
+import { tmpdir, hostname } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
@@ -415,4 +415,53 @@ test('/state holds what Claude said about a pin, on disk, for a page that did no
   // And a page that is not local gets nothing.
   const blocked = await fetch(`${BRIDGE}/state?ids=${encodeURIComponent(q)}`, { headers: { Origin: 'https://example.com' } })
   assert.equal(blocked.status, 403)
+})
+
+// ---------------------------------------------------------------- backlog
+
+test('a parked item is started and finished by id over the tools', async () => {
+  const park = note => post('/backlog', { url: 'http://localhost:3000/', pathname: '/', comment: { note } })
+  const one = await park('Tighten the header')
+  const two = await park('Footer spacing')
+  assert.equal(one.ok, true)
+  assert.equal(one.file, join(projectDir, '.pinpoint', 'backlog.md'))
+
+  const started = await call('start_backlog_item', { id: two.id })
+  assert.notEqual(started.isError, true)
+  assert.match(textOf(started), /^Working on backlog item 2:\n\n2\. \*\*Footer spacing\*\*/)
+  assert.match(readFileSync(one.file, 'utf8'), /status: in progress/)
+
+  const done = await call('finish_backlog_item', { id: two.id, outcome: 'evened it out' })
+  assert.equal(textOf(done), 'Done: Footer spacing')
+  await waitFor(e => e.type === 'backlog-done' && e.id === two.id, 'the backlog-done event')
+  const text = readFileSync(one.file, 'utf8')
+  assert.match(text.slice(text.indexOf('\n## Done')), /- \[x\] \*\*Footer spacing\*\*[\s\S]*done: .* — evened it out/)
+  assert.doesNotMatch(text, /in progress/)
+  assert.match(textOf(await call('list_backlog')), /1 open backlog item\*\*[\s\S]*Tighten the header/)
+
+  assert.equal((await call('finish_backlog_item', { id: 'bk-nope' })).isError, true)
+})
+
+test('a backlog write that cannot get the project lock says busy, and writes nothing', async () => {
+  // A live holder on this host with a fresh lock: this test process.
+  const lock = join(projectDir, '.pinpoint', '.write.lock')
+  writeFileSync(lock, JSON.stringify({ version: 1, token: 'test', pid: process.pid, hostname: hostname(), createdAt: Date.now() }))
+  try {
+    const before = readFileSync(join(projectDir, '.pinpoint', 'backlog.md'), 'utf8')
+    const [parked, started] = await Promise.all([
+      fetch(`${BRIDGE}/backlog`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ url: 'http://localhost:3000/', comment: { note: 'not now' } }),
+      }),
+      call('start_backlog_item', { id: '1' }),
+    ])
+    assert.equal(parked.status, 503)
+    assert.equal(await parked.text(), 'project files busy, try again')
+    assert.equal(started.isError, true)
+    assert.match(textOf(started), /busy with another Pinpoint write\. Nothing was changed; try again/)
+    assert.equal(readFileSync(join(projectDir, '.pinpoint', 'backlog.md'), 'utf8'), before)
+  } finally {
+    rmSync(lock, { force: true })
+  }
 })

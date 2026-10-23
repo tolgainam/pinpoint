@@ -158,7 +158,7 @@ export const lockPathOf = dir => join(dir, '.pinpoint', '.write.lock')
 /** A lock path that is a link or a directory is someone else's doing. Never follow or remove it. */
 function refuseOdd(path, st) {
   if (st.isSymbolicLink() || !st.isFile()) {
-    const err = new Error(`${path} is not a regular file; remove it by hand if it is not yours`)
+    const err = /** @type {Error & { code?: string }} */ (new Error(`${path} is not a regular file; remove it by hand if it is not yours`))
     err.code = 'EPINPOINT_LOCK'
     throw err
   }
@@ -236,6 +236,7 @@ function tryAcquire(path, mine, staleMs) {
 function release(path, mine) {
   try {
     const held = readLock(path)
+    // @ts-expect-error readLock's record type is not declared
     if (held?.rec.token === mine) unlinkSync(path)
   } catch { /* nothing of ours left to remove */ }
 }
@@ -301,6 +302,10 @@ function fsyncDir(dir) {
  * stat again, rename over the target if nothing changed, fsync the directory.
  * `mutate` returns the new text, or null for no change, in which case nothing is written.
  * `beforeCommit` is for tests: it runs between the temp write and the recheck.
+ * @param {string} file
+ * @param {string} seed
+ * @param {(text: string) => string | null} mutate
+ * @param {{ retries?: number, beforeCommit?: (attempt: number) => void }} [opts]
  * @returns {string | null} the text written, or null when there was no change
  */
 export function updateText(file, seed, mutate, { retries = 3, beforeCommit } = {}) {

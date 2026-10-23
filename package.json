@@ -30,6 +30,9 @@
     "build:firefox": "node scripts/firefox.js",
     "sign:firefox": "node scripts/firefox.js && npx --yes web-ext sign --channel=unlisted --source-dir=dist/firefox --artifacts-dir=web-ext-artifacts",
     "check:design": "node scripts/check-design.js",
+    "check": "node scripts/check.js",
+    "check:rules": "node scripts/check-rules.js",
+    "check:types": "tsc -p tsconfig.check.json",
     "screens:update": "node scripts/screens-update.js",
     "prepublishOnly": "npm test"
   },
@@ -37,9 +40,11 @@
     "@modelcontextprotocol/sdk": "^1.32.1"
   },
   "devDependencies": {
+    "@types/node": "^26.6.5",
     "pixelmatch": "^8.0.0",
     "playwright": "^1.64.1",
-    "pngjs": "^7.0.0"
+    "pngjs": "^7.0.0",
+    "typescript": "^7.0.2"
   },
   "bin": {
     "pinpoint-dev": "scripts/cli.js"

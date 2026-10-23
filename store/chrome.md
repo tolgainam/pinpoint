@@ -6,7 +6,7 @@ each tab. Build the zip and the images with `npm run package:extension` and
 
 ## Package
 
-- File: `dist/store/pinpoint-0.4.3.zip`. It is the `extension/` folder with `manifest.json`
+- File: `dist/store/pinpoint-0.4.4.zip`. It is the `extension/` folder with `manifest.json`
   at the top. The same file works for Edge Add-ons.
 - The extension's name and description come from `manifest.json`. The description is under
   132 characters, which the store requires.
@@ -81,7 +81,8 @@ each tab. Build the zip and the images with `npm run package:extension` and
   | `storage` | Keeps pins, unsent drafts, the toolbar position and settings in the browser. |
   | `tabs` | Reads the address of the current tab to tell a local page from another site, and sends events from the worker to the right tab. |
   | `scripting` | Attaches the toolbar to a tab that was already open when the extension was installed or reloaded, and to a site the user chose. |
-  | `activeTab` | Takes a screenshot of the tab after the user clicks the icon. |
+  | `alarms` | Wakes the extension's background worker every 30 seconds so that an answer from the coding agent still reaches the page while the browser window is in the background. |
+| `activeTab` | Takes a screenshot of the tab after the user clicks the icon. |
   | Host access: `http://localhost/*`, `http://127.0.0.1/*` | The pages Pinpoint works on, and the address of its own local bridge (`127.0.0.1:8788`). |
   | Optional host access: all sites | Not granted at install. Asked for one site at a time when the user clicks the icon on a site that is not local, and once on the welcome page if the user chooses screenshots without clicking. |
 

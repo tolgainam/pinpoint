@@ -14,9 +14,10 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { freePort } from './port.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const PORT = 8811
+const PORT = await freePort()
 const BRIDGE = `http://127.0.0.1:${PORT}`
 /** The smallest real PNG, so the write path is exercised without carrying an image around. */
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
@@ -343,4 +344,75 @@ test('health says which extension version talked last, and only believes an exte
   const opera = (await health()).extension
   assert.equal(opera.version, '0.4.3')
   assert.equal(opera.browser, 'opera')
+})
+
+test('a client that remembers a sequence number from an earlier bridge is replayed everything', async () => {
+  // Events carry the epoch of the run that sent them.
+  await call('reply', { text: 'one for the replay' })
+  const sent = await waitFor(e => e.type === 'reply' && e.text === 'one for the replay', 'the reply event')
+  assert.ok(sent.epoch, 'the event named no epoch')
+
+  /** What the stream sends in a moment, as the event objects. */
+  const replay = async query => {
+    const ctl = new AbortController()
+    setTimeout(() => ctl.abort(), 400)
+    let text = ''
+    try {
+      const res = await fetch(`${BRIDGE}/events?${query}`, { signal: ctl.signal })
+      const rd = res.body.getReader()
+      for (;;) { const { value, done } = await rd.read(); if (done) break; text += Buffer.from(value).toString() }
+    } catch { /* the stop is the point */ }
+    return text.split('\n').filter(l => l.startsWith('data:')).map(l => JSON.parse(l.slice(5)))
+  }
+
+  // A worker that saw seq 100000 of some other run, or an earlier run of this one, got none of this run's.
+  const stale = await replay(`since=100000&epoch=an-earlier-run`)
+  assert.ok(stale.some(e => e.text === 'one for the replay'), 'a stale epoch was not replayed')
+  // The same number in this run really does mean "I have all of those".
+  const current = await replay(`since=100000&epoch=${sent.epoch}`)
+  assert.equal(current.length, 0)
+  // And an older client that sends no epoch keeps the old meaning.
+  const legacy = await replay('since=100000')
+  assert.equal(legacy.length, 0)
+})
+
+test('/state holds what Claude said about a pin, on disk, for a page that did not hear it', async () => {
+  const res = await post('/dispatch', {
+    origin: 'http://localhost:3000',
+    url: 'http://localhost:3000/',
+    comments: [
+      { note: 'why is this grey', question: true, selector: '[data-testid="cta"]', rect: { x: 4, y: 4, w: 80, h: 30 } },
+      { note: 'make it larger', selector: '[data-testid="cta2"]', rect: { x: 4, y: 40, w: 80, h: 30 } },
+    ],
+  })
+  assert.equal(res.ok, true)
+  const q = `${res.batch}#1`
+  const fix = `${res.batch}#2`
+  const state = ids => fetch(`${BRIDGE}/state?ids=${encodeURIComponent(ids.join(','))}`, { headers: { Origin: 'http://localhost:3000' } }).then(r => r.json())
+
+  // Nothing said yet: nothing to report.
+  assert.deepEqual((await state([q, fix])).states, {})
+
+  // The answer is kept with the comment, not only sent.
+  await call('reply', { id: q, text: 'It is the secondary style.' })
+  assert.equal((await state([q])).states[q].answer, 'It is the secondary style.')
+
+  // Progress and resolution are there too, and a resolved pin no longer reports progress.
+  await call('report_progress', { id: fix, state: 'edited', note: 'padding', files: ['src/Button.tsx +2 -1'] })
+  assert.equal((await state([fix])).states[fix].progress.state, 'edited')
+  await call('resolve_comment', { id: fix, resolution: 'Raised the padding' })
+  const done = (await state([fix])).states[fix]
+  assert.equal(done.resolved, true)
+  assert.equal(done.resolution, 'Raised the padding')
+  assert.equal(done.progress, undefined)
+
+  // The brief says a question was already answered, so a second pass does not answer it twice.
+  assert.match(textOf(await call('list_comments')), /already answered/)
+
+  // Only a real comment id gets near the disk.
+  const bad = await state(['../../etc/passwd#1', '..#1', 'x#1', `${res.batch}#99999`])
+  assert.deepEqual(bad.states, {})
+  // And a page that is not local gets nothing.
+  const blocked = await fetch(`${BRIDGE}/state?ids=${encodeURIComponent(q)}`, { headers: { Origin: 'https://example.com' } })
+  assert.equal(blocked.status, 403)
 })

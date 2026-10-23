@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.4
+
+- Answers no longer go missing when the bridge restarts. The bridge numbers its events from 1 on
+  every start, and the extension remembered the last number it had seen, so after a restart it
+  asked for "everything after 24" of a bridge that had sent six, and any answer that landed
+  while its background worker was reconnecting was lost until the extension was reloaded. Every
+  event now names the run of the bridge it belongs to, and a worker that comes back with another
+  run's number is given everything.
+- An answer is no longer only an event. `reply` saves the answer on the comment in the batch file
+  before it sends anything, and the bridge serves what it holds at `GET /state`. A page asks for
+  the state of its pins when it loads, when you come back to the tab, when the extension
+  reconnects and every 30 seconds while the tab is visible, and fills in what it missed. A missed
+  event, a restarted bridge, a sleeping worker or a closed tab now costs nothing: the answer is
+  there when you look. The brief also tells Claude when a question was already answered.
+- A timer wakes the extension's background worker every 30 seconds, so an answer still arrives
+  when the browser window is in the background. This adds the `alarms` permission, which shows
+  no warning.
+
 ## 0.4.3
 
 - `/pinpoint:setup` and `/pinpoint:doctor` now say what your browser really has. The extension names

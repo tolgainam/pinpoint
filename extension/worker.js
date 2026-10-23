@@ -171,7 +171,11 @@ async function captureOnce() {
  */
 let streaming = false
 let lastSeq = 0
+/** Which run of the bridge lastSeq belongs to. A new run starts counting again from 1. */
+let lastEpoch = ''
 let seqLoaded = false
+/** True once a stream has connected, so the next connect is a return. */
+let streamedBefore = false
 let retry = null
 let backoff = 1000
 
@@ -219,9 +223,13 @@ async function fanOut(event) {
 }
 
 async function readStream() {
-  const res = await fetch(`${BRIDGE}/events?since=${lastSeq}`, { headers: IDENTITY })
+  const res = await fetch(`${BRIDGE}/events?since=${lastSeq}&epoch=${encodeURIComponent(lastEpoch)}`, { headers: IDENTITY })
   if (!res.ok || !res.body) throw new Error(`events ${res.status}`)
   backoff = 1000
+  // Back after being away: the pages ask what they missed. Not on the first connection of this
+  // worker, when they have only just loaded and ask anyway.
+  if (streamedBefore) fanOut({ type: 'sync' })
+  streamedBefore = true
 
   const reader = res.body.getReader()
   const dec = new TextDecoder()
@@ -247,7 +255,8 @@ async function readStream() {
       try { event = JSON.parse(data) } catch { continue }
       if (event.seq) {
         lastSeq = event.seq
-        chrome.storage.session?.set({ lastSeq }).catch(() => {})
+        if (event.epoch) lastEpoch = event.epoch
+        chrome.storage.session?.set({ lastSeq, lastEpoch }).catch(() => {})
       }
       const delivery = await fanOut(event)
       if (delivery && event.seq) post('/delivery', { seq: event.seq, ...delivery }).catch(() => {})
@@ -264,8 +273,9 @@ async function ensureStream() {
     if (!seqLoaded) {
       seqLoaded = true
       try {
-        const got = await chrome.storage.session?.get('lastSeq')
+        const got = await chrome.storage.session?.get(['lastSeq', 'lastEpoch'])
         if (got?.lastSeq) lastSeq = got.lastSeq
+        if (got?.lastEpoch) lastEpoch = got.lastEpoch
       } catch { /* session storage unavailable */ }
     }
     await readStream()
@@ -371,6 +381,12 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
   // browser session: a new tab starts hidden, as it always did.
   if (msg?.type === 'open-state') { openState(sender.tab?.id).then(open => respond({ open })); return true }
   if (msg?.type === 'set-open') { setOpenState(sender.tab?.id, !!msg.open).then(() => respond({ ok: true })); return true }
+  // The page asks what the bridge holds about its pins, for the ones it did not hear about.
+  if (msg?.type === 'state') {
+    const ids = Array.isArray(msg.ids) ? msg.ids.filter(i => typeof i === 'string').slice(0, 100) : []
+    call(`/state?ids=${encodeURIComponent(ids.join(','))}`).then(r => respond(r.ok && r.json ? r.json : { ok: false })).catch(() => respond({ ok: false }))
+    return true
+  }
   if (msg?.type === 'capture-wait') { captureTurn().then(() => respond({ ok: true })); return true }
   if (msg?.type === 'capture') { capture().then(respond); return true }
   // The welcome page's bridge check: no page and no pick, so the bridge answers for no
@@ -476,6 +492,16 @@ chrome.runtime.onInstalled.addListener(async details => {
     console.warn('[pinpoint] startup injection failed', err)
   }
 })
+
+/**
+ * The page's own 5s ping is what normally wakes a sleeping worker, and a tab in the background
+ * runs timers about once a minute, so a reply could wait that long for the stream to come back.
+ * An alarm wakes the worker whether or not any page is awake. Chrome allows one every 30s.
+ */
+try {
+  chrome.alarms.create('pinpoint-stream', { periodInMinutes: 0.5 })
+  chrome.alarms.onAlarm.addListener(alarm => { if (alarm.name === 'pinpoint-stream') ensureStream() })
+} catch { /* no alarms API: the page's ping still covers it */ }
 
 // A worker that just woke up — install, browser start, or a nap — reconnects immediately.
 chrome.runtime.onStartup?.addListener(() => ensureStream())

@@ -6,9 +6,9 @@ screenshots are in `store/screenshots`, made by `npm run store:shots`.
 
 ## Package
 
-- File: `dist/store/pinpoint-0.4.3.zip` (the contents of `extension/`, with `manifest.json`
+- File: `dist/store/pinpoint-0.4.4.zip` (the contents of `extension/`, with `manifest.json`
   at the top of the zip).
-- Version: `0.4.3`.
+- Version: `0.4.4`.
 - Icon: `extension/icons/icon-128.png`. A larger square PNG is at `.claude-plugin/icon.png`
   (1024 x 1024).
 - Screenshots (800 x 500, scaled from the Chrome set; the site allows up to 800 x 600), in this
@@ -77,6 +77,7 @@ Use these if the form or a reviewer asks.
 | `storage` | Keeps your pins, drafts, toolbar position and settings in the browser. |
 | `tabs` | Reads the address of the current tab so the toolbar can tell a local page from another site, and sends events to the right tab. |
 | `scripting` | Attaches the toolbar to a tab that was already open when the extension was installed or reloaded. |
+| `alarms` | Wakes the extension's background worker every 30 seconds so that an answer from the coding agent still reaches the page while the browser window is in the background. |
 | `activeTab` | Lets the extension take a screenshot of the tab after you click its icon. |
 | `localhost` and `127.0.0.1` | The pages Pinpoint works on, and the address of its own local bridge. |
 | Optional: all sites | Never granted at install. Asked for one site at a time when you click the icon on a site that is not local, and once, on the welcome page, if you choose lasting screenshot access. |

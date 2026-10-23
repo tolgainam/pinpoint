@@ -63,7 +63,7 @@ const MAX_BODY = 48 * 1024 * 1024
  * Keep in step with package.json and the manifests. PINPOINT_VERSION exists for the yield
  * test, which needs an older and a newer bridge built from the same file.
  */
-const VERSION = process.env.PINPOINT_VERSION ?? '0.4.3'
+const VERSION = process.env.PINPOINT_VERSION ?? '0.4.4'
 
 mkdirSync(QUEUE, { recursive: true })
 
@@ -90,6 +90,9 @@ mkdirSync(QUEUE, { recursive: true })
 
 const batchDir = id => join(QUEUE, id)
 const batchFile = id => join(batchDir(id), 'batch.json')
+
+/** A comment id: a batch id and a number. The only shape allowed near a path. */
+const STATE_ID = /^[\w-]{6,64}#\d{1,4}$/
 
 /** @returns {Batch | null} */
 function readBatch(id) {
@@ -547,6 +550,7 @@ function renderBatch(b) {
         ? [`**requested change${c.deltas.length > 1 ? 's' : ''}** — ${c.deltas.map(deltaLine).filter(Boolean).join(' · ')}`]
         : []),
       followUpFact(c),
+      c.answer ? `**already answered** — your reply was "${String(c.answer).replace(/\s+/g, ' ').slice(0, 200)}". Only answer again if the user has asked more.` : null,
       c.component ? `component: \`${c.component}\`` : null,
       c.selector ? `selector: \`${c.selector}\`` : null,
       c.text ? `text: "${c.text.slice(0, 120)}"` : null,
@@ -776,6 +780,15 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
         content: [{ type: 'text', text: 'Not sent: reply needs `text`, the answer itself. It is shown on the pin in the browser, and the user reads it there, not in the terminal. Call reply again with the whole answer in `text`.' }],
       }
     }
+    // Kept on the comment, on disk, before anything is sent. The event is a hint that says "look
+    // now"; this is what the page reads when it did not hear the hint, and what a follow-up round
+    // can quote.
+    if (args.id) {
+      const [batchId, nRaw] = String(args.id).split('#')
+      const b = STATE_ID.test(String(args.id)) ? readBatch(batchId) : null
+      const c = b?.comments.find(x => x.n === Number(nRaw))
+      if (c) { c.answer = text; c.answeredAt = new Date().toISOString(); writeBatch(b) }
+    }
     const shown = await tell({ type: 'reply', text, id: args.id ? String(args.id) : undefined })
     return { content: [{ type: 'text', text: `${args.id ? `answered ${args.id}` : 'sent'}${undelivered(shown)}` }] }
   }
@@ -827,6 +840,13 @@ const listeners = new Set()
 const recent = []
 const MAX_RECENT = 200
 let evSeq = 0
+/**
+ * Which run of the bridge a sequence number belongs to. The counter starts again from 1 each
+ * time the bridge does, and a client that remembers "I saw 24" would then ask for everything
+ * after 24 of a bridge that has only sent six, and miss all of them. Every event carries the
+ * epoch, and a client that comes back with an epoch that is not this one is given everything.
+ */
+const EPOCH = randomBytes(6).toString('hex')
 
 /** What the extension said about an event that named a tab: seq → {ok, reason?}. */
 const deliveries = new Map()
@@ -853,7 +873,7 @@ const DELIVERY_WAIT = 2500
 
 function broadcast(payload) {
   const seq = ++evSeq
-  const chunk = `id: ${seq}\ndata: ${JSON.stringify({ ...payload, seq })}\n\n`
+  const chunk = `id: ${seq}\ndata: ${JSON.stringify({ ...payload, seq, epoch: EPOCH })}\n\n`
   recent.push({ seq, chunk })
   if (recent.length > MAX_RECENT) recent.splice(0, recent.length - MAX_RECENT)
   for (const emit of listeners) {
@@ -972,6 +992,8 @@ const PEER_KEY_FILE = process.env.PINPOINT_PEER_KEY ?? join(homedir(), '.claude'
 /** How long a new owner waits for peers to reconnect before it answers "no session". */
 const GRACE_MS = Number(process.env.PINPOINT_ROUTE_GRACE_MS ?? 4000)
 const LSOF = process.env.PINPOINT_LSOF ?? 'lsof'
+/** Real lsof takes 50 to 150ms; a cut-off answer reads as "no dev server", so a test that stands in a slower program can raise this. */
+const LSOF_TIMEOUT_MS = Number(process.env.PINPOINT_LSOF_TIMEOUT_MS ?? 1500)
 /** How long a detected cwd is trusted while the same process still holds the port. */
 const DETECT_TTL = 30_000
 /** Within this window a hit is reused without even asking lsof who holds the port. */
@@ -1150,7 +1172,7 @@ function pagePort(page) {
 /** execFile, never a shell: the port is ours, but the habit is what keeps it that way. */
 function lsof(args) {
   return new Promise(done => {
-    execFile(LSOF, args, { timeout: 1500 }, (err, out) => done(String(out ?? '')))
+    execFile(LSOF, args, { timeout: LSOF_TIMEOUT_MS }, (err, out) => done(String(out ?? '')))
   })
 }
 
@@ -1937,6 +1959,27 @@ const server = createServer((req, res) => {
 
   if (req.method === 'OPTIONS') return send(res, 204, cors(origin))
 
+  // What the bridge holds about some pins, read from disk. The event stream says "look now";
+  // this is what a page asks when it loaded after the fact, came back to the tab, or never heard.
+  // The ids are checked for shape before they go near a path.
+  if (url.pathname === '/state' && req.method === 'GET') {
+    if (!originAllowed(origin)) return send(res, 403, {}, 'forbidden')
+    const ids = String(url.searchParams.get('ids') ?? '').split(',').filter(Boolean).slice(0, 100)
+    const states = {}
+    for (const id of ids) {
+      if (!STATE_ID.test(id)) continue
+      const [batchId, nRaw] = id.split('#')
+      const c = readBatch(batchId)?.comments.find(x => x.n === Number(nRaw))
+      if (!c) continue
+      const st = {}
+      if (c.answer) st.answer = c.answer
+      if (c.status === 'resolved') { st.resolved = true; if (c.resolution) st.resolution = c.resolution }
+      if (c.progress && c.status !== 'resolved') st.progress = { state: c.progress.state, note: c.progress.note, files: c.progress.files }
+      if (Object.keys(st).length) states[id] = st
+    }
+    return sendJson(res, 200, cors(origin), { ok: true, states })
+  }
+
   if (url.pathname === '/health') {
     resolveRoute(url.searchParams.get('page'), url.searchParams.get('pick')).then(route => {
       // projectDir stays for the toolbar that predates routing: it now names where a
@@ -1983,7 +2026,11 @@ const server = createServer((req, res) => {
     // writes means a pin that clears a beat late.
     res.socket?.setNoDelay(true)
 
-    const since = Number(url.searchParams.get('since') ?? req.headers['last-event-id'] ?? 0) || 0
+    // An older client sends no epoch and keeps the old meaning of `since`. One that does, and
+    // names a different run of the bridge, has seen none of this run: replay all of it.
+    const claimed = url.searchParams.get('epoch')
+    const stale = claimed !== null && claimed !== EPOCH
+    const since = stale ? 0 : Number(url.searchParams.get('since') ?? req.headers['last-event-id'] ?? 0) || 0
     const emit = chunk => res.write(chunk)
     emit(`: connected ${evSeq}\n\n`)
     // Replay whatever landed while this client was away, so a pin still clears

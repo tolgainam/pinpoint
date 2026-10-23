@@ -15,9 +15,10 @@ import { connect } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { freePort } from './port.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const PORT = 8814
+const PORT = await freePort()
 
 async function health() {
   try {

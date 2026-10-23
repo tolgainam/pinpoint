@@ -2342,8 +2342,37 @@
     return PinpointStatus.eventFor(status, ev.projectDir)
   }
 
+  /**
+   * Ask the bridge what it holds about this page's pins, and apply what the page does not
+   * know. Events are the fast path; this is the one that cannot miss. It runs when the page
+   * loads, when the tab comes back, when the stream reconnects and now and then while the tab
+   * is open, so an answer is there when you look even if the event was never heard.
+   */
+  let syncing = false
+  async function syncState() {
+    if (syncing || orphaned()) return
+    const ids = comments
+      .filter(c => c.batch && c.serverN && c.status !== 'resolved' && c.status !== 'backlog')
+      .map(c => `${c.batch}#${c.serverN}`)
+    if (!ids.length) return
+    syncing = true
+    try {
+      const res = await send({ type: 'state', ids })
+      for (const [id, st] of Object.entries(res?.states ?? {})) {
+        const c = byServerId(id)
+        if (!c || c.status === 'resolved') continue
+        // The same handlers as a live event, so a late answer looks like a timely one.
+        if (st.answer && !c.answer) onBridgeEvent({ type: 'reply', id, text: st.answer })
+        if (st.progress && !c.progress) onBridgeEvent({ type: 'progress', id, ...st.progress })
+        if (st.resolved) onBridgeEvent({ type: 'resolved', id, resolution: st.resolution ?? '' })
+      }
+    } catch { /* the bridge is away; the next trigger asks again */ } finally { syncing = false }
+  }
+
   function onBridgeEvent(ev) {
     if (!ev) return
+    // The worker says it is connected again: ask what was missed.
+    if (ev.type === 'sync') { syncState(); return }
     if (!belongsHere(ev)) return
 
     // The tab this answer was meant for is gone: another page of the project says so.
@@ -2540,6 +2569,11 @@
 
   await load()
   await tipLoaded
+  // Whatever was answered while this page was not here.
+  syncState()
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) syncState() })
+  addEventListener('focus', syncState)
+  setInterval(() => { if (!document.hidden) syncState() }, 30000)
   // A tab where the toolbar was left open opens it again.
   send({ type: 'open-state' }).then(r => { if (r?.open && hidden) setHidden(false) }).catch(() => {})
   render()

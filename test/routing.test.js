@@ -15,22 +15,23 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+import { freePort } from './port.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const PORT = 8813
+const PORT = await freePort()
 const BRIDGE = `http://127.0.0.1:${PORT}`
 
 let base, queueDir, ownerDir, peerDir, otherDir, keyFile, homeDir, repoDir, mapFile
 let owner, peer
 /** Channel notifications each session received, by batch id. */
-const heard = { owner: [], peer: [], nested: [] }
+const heard = { owner: [], peer: [], nested: [], slow: [] }
 /** What the lsof stub answers: port to cwd, or to {pid, cwd} when the pid matters. */
 let lsofMap
 const setLsof = map => { lsofMap = map; writeFileSync(mapFile, JSON.stringify(map)) }
 const events = []
 let stream
 
-async function start(name, projectDir) {
+async function start(name, projectDir, env = {}) {
   const client = new Client({ name: `test-${name}`, version: '0' })
   client.fallbackNotificationHandler = async n => {
     if (n.method === 'notifications/claude/channel') heard[name].push(n.params.meta.batch_id)
@@ -49,9 +50,12 @@ async function start(name, projectDir) {
       PINPOINT_ACK_MS: '500',
       PINPOINT_DETECT_RECHECK_MS: '0',
       PINPOINT_LSOF: join(base, 'lsof-stub.js'),
+      // The stub is a whole Node process, which can take over 1.5s to start under load.
+      PINPOINT_LSOF_TIMEOUT_MS: '10000',
       STUB_LSOF_FILE: mapFile,
       // A home of its own, so a test that fails cannot write a backlog into the real one.
       HOME: homeDir,
+      ...env,
     },
     stderr: 'ignore',
   }))
@@ -103,7 +107,7 @@ const map = JSON.parse(fs.readFileSync(process.env.STUB_LSOF_FILE, 'utf8'))
 const all = Object.entries(map).map(([port, v]) => typeof v === 'string' ? { port, pid: port, cwd: v } : { port, ...v })
 const args = process.argv.slice(2)
 const port = (args.find(a => a.startsWith('-iTCP:')) || '').slice(6)
-if (port) { const hit = all.find(e => e.port === port); if (hit) console.log(String(hit.pid)); else process.exit(1) }
+if (port) { const hit = all.find(e => e.port === port); if (hit?.delay) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, hit.delay); if (hit) console.log(String(hit.pid)); else process.exit(1) }
 const p = args.indexOf('-p')
 const proc = p !== -1 && all.find(e => String(e.pid) === args[p + 1])
 if (proc) console.log('p' + proc.pid + '\\nfcwd\\nn' + proc.cwd)
@@ -284,6 +288,31 @@ test('detection never caches a miss, and notices a new process on the same port'
   assert.equal(await at(), otherDir, 'the server that just started is seen at once')
   setLsof({ ...lsofMap, 5179: { pid: 7002, cwd: join(peerDir, 'web') } })
   assert.equal(await at(), join(peerDir, 'web'), 'a different pid is a different server')
+})
+
+test('an lsof slower than the budget reads as no dev server, and a larger budget sees it', async () => {
+  // A bridge of its own on another port, alone, so only the budget differs between runs.
+  const slowDir = join(base, 'slow')
+  mkdirSync(join(slowDir, 'web'), { recursive: true })
+  setLsof({ ...lsofMap, 5183: { pid: 5183, cwd: join(slowDir, 'web'), delay: 700 } })
+  const slowPort = await freePort()
+  const page = encodeURIComponent('http://localhost:5183')
+  for (const [budget, how, detected] of [['300', 'only', null], ['10000', 'auto', join(slowDir, 'web')]]) {
+    const slow = await start('slow', slowDir, {
+      PINPOINT_PORT: String(slowPort),
+      PINPOINT_QUEUE: join(base, `slow-queue-${budget}`),
+      PINPOINT_PEER_KEY: join(base, 'slow-key', 'peer.key'),
+      PINPOINT_LSOF_TIMEOUT_MS: budget,
+    })
+    try {
+      const h = await until(() => fetch(`http://127.0.0.1:${slowPort}/health?page=${page}`).then(r => r.json()).catch(() => null), 'the slow bridge')
+      assert.equal(h.route.detected, detected, `budget ${budget}`)
+      assert.equal(h.route.how, how, `budget ${budget}`)
+    } finally {
+      await slow.close()
+      await until(async () => !(await fetch(`http://127.0.0.1:${slowPort}/health`).then(() => true).catch(() => false)), 'the slow bridge to close')
+    }
+  }
 })
 
 test('a peer that acknowledges its delivers keeps its link', async () => {

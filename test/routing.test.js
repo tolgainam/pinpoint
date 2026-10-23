@@ -24,7 +24,7 @@ const BRIDGE = `http://127.0.0.1:${PORT}`
 let base, queueDir, ownerDir, peerDir, otherDir, keyFile, homeDir, repoDir, mapFile
 let owner, peer
 /** Channel notifications each session received, by batch id. */
-const heard = { owner: [], peer: [], nested: [], slow: [] }
+const heard = { owner: [], peer: [], nested: [], slow: [], newer: [], older: [] }
 /** What the lsof stub answers: port to cwd, or to {pid, cwd} when the pid matters. */
 let lsofMap
 const setLsof = map => { lsofMap = map; writeFileSync(mapFile, JSON.stringify(map)) }
@@ -288,6 +288,36 @@ test('detection never caches a miss, and notices a new process on the same port'
   assert.equal(await at(), otherDir, 'the server that just started is seen at once')
   setLsof({ ...lsofMap, 5179: { pid: 7002, cwd: join(peerDir, 'web') } })
   assert.equal(await at(), join(peerDir, 'web'), 'a different pid is a different server')
+})
+
+test('two sessions of one project: the one that started last gets the dispatch, whatever order they connected in', async () => {
+  // A bridge of its own. The NEWER session owns the bridge and the OLDER one joins it afterwards,
+  // which is what happens after a plugin update: the new session takes the port over and the old
+  // one reconnects as a peer. By join order the old one looks newest; by start time it is not.
+  const dir = join(base, 'twice')
+  mkdirSync(dir, { recursive: true })
+  const twicePort = await freePort()
+  const env = { PINPOINT_PORT: String(twicePort), PINPOINT_QUEUE: join(base, 'twice-queue'), PINPOINT_PEER_KEY: join(base, 'twice-key', 'peer.key') }
+  const newer = await start('newer', dir, { ...env, PINPOINT_STARTED_AT: '2000' })
+  await until(() => fetch(`http://127.0.0.1:${twicePort}/health`).then(r => r.ok).catch(() => false), 'the first session to hold the port')
+  const older = await start('older', dir, { ...env, PINPOINT_STARTED_AT: '1000' })
+  try {
+    // Wait until the second session has joined: the answer then says two sessions are open.
+    const got = await until(async () => {
+      const r = await fetch(`http://127.0.0.1:${twicePort}/dispatch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:3000' },
+        body: JSON.stringify({ origin: 'http://localhost:3000', url: 'http://localhost:3000/', pick: dir, comments: [{ note: 'which terminal', rect: { x: 0, y: 0, w: 10, h: 10 } }] }),
+      }).then(r => r.json()).catch(() => null)
+      return r?.sessions === 2 ? r : null
+    }, 'both sessions to be known')
+    assert.equal(got.sessionStarted, 2000, 'the dispatch went to the session that joined last, not the one that started last')
+    await until(() => heard.newer.includes(got.batch), 'the newer session to hear the dispatch')
+    assert.ok(!heard.older.includes(got.batch), 'the older session was told as well')
+  } finally {
+    await newer.close().catch(() => {})
+    await older.close().catch(() => {})
+  }
 })
 
 test('an lsof slower than the budget reads as no dev server, and a larger budget sees it', async () => {

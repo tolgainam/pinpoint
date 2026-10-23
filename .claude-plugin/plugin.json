@@ -1,7 +1,7 @@
 {
   "name": "pinpoint",
   "displayName": "Pinpoint",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "Pin comments to elements on a localhost page and dispatch them, with screenshots, into a running Claude Code session on your computer. Ask questions, park notes and watch fixes land.",
   "author": {
     "name": "Tolga Inam",

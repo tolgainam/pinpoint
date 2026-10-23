@@ -1995,7 +1995,12 @@
         c.serverN = i + 1
         c.sentTo = res.projectDir
       })
-      say(`Dispatched ${outgoing.length} to Claude Code`)
+      // With two sessions open on one project, say which one got it: the terminal to look at is the
+      // one that started at that time.
+      const which = res.sessions > 1 && res.sessionStarted
+        ? ` (${res.sessions} sessions open: the one started at ${new Date(res.sessionStarted).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`
+        : ''
+      say(`Dispatched ${outgoing.length} to Claude Code${which}`, false, which ? 7000 : 3200)
       rememberLast(res.projectDir)
       save()
     } else {

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.5
+
+- Two sessions open on one project no longer swap places. A dispatch goes to the session that
+  started last. Before, the order was the order they last connected to the bridge, and that
+  changes whenever the bridge restarts or is taken over by a newer plugin: the older session
+  reconnected after the new one and counted as the newest, so dispatches landed in a terminal
+  you were not watching and nothing showed in the one you were.
+- When there is a choice, the toolbar says which session got it: "Dispatched 1 to Claude Code
+  (2 sessions open: the one started at 17:15)".
+
 ## 0.4.4
 
 - Answers no longer go missing when the bridge restarts. The bridge numbers its events from 1 on

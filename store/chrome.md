@@ -6,7 +6,7 @@ each tab. Build the zip and the images with `npm run package:extension` and
 
 ## Package
 
-- File: `dist/store/pinpoint-0.4.4.zip`. It is the `extension/` folder with `manifest.json`
+- File: `dist/store/pinpoint-0.4.5.zip`. It is the `extension/` folder with `manifest.json`
   at the top. The same file works for Edge Add-ons.
 - The extension's name and description come from `manifest.json`. The description is under
   132 characters, which the store requires.

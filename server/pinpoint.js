@@ -63,7 +63,7 @@ const MAX_BODY = 48 * 1024 * 1024
  * Keep in step with package.json and the manifests. PINPOINT_VERSION exists for the yield
  * test, which needs an older and a newer bridge built from the same file.
  */
-const VERSION = process.env.PINPOINT_VERSION ?? '0.4.4'
+const VERSION = process.env.PINPOINT_VERSION ?? '0.4.5'
 
 mkdirSync(QUEUE, { recursive: true })
 
@@ -1043,12 +1043,19 @@ const peers = new Set()
 /** Connection order, so "most recently connected wins" needs no clock. */
 let joinSeq = 0
 let ownerAt = 0
+/**
+ * When this process started. Sessions of one project are compared by it, newest first. They used
+ * to be compared by when each last connected to the bridge, which changes every time the bridge
+ * is restarted or taken over: the older session reconnects after the new owner has started and so
+ * counts as the newest, and dispatches go to a terminal nobody is watching.
+ */
+const STARTED_AT = Number(process.env.PINPOINT_STARTED_AT) || Date.now()
 let graceUntil = 0
 
 /** This bridge plus every peer, as live sessions. Empty when this server is not the bridge. */
 function sessions() {
   if (!server.listening) return []
-  const list = [{ projectDir: PROJECT_DIR, key: canon(PROJECT_DIR), at: ownerAt, self: true }, ...peers]
+  const list = [{ projectDir: PROJECT_DIR, key: canon(PROJECT_DIR), at: ownerAt, started: STARTED_AT, self: true }, ...peers]
   for (const s of list) rememberProject(s.key)
   return list
 }
@@ -1118,7 +1125,9 @@ function displayName(dir) {
 function sessionFor(dir) {
   const key = canon(dir)
   let best = null
-  for (const s of sessions()) if (s.key === key && (!best || s.at > best.at)) best = s
+  // The session that started last. A reconnect does not change that; the join order only breaks a tie.
+  const newer = (a, b) => (a.started ?? 0) !== (b.started ?? 0) ? (a.started ?? 0) > (b.started ?? 0) : a.at > b.at
+  for (const s of sessions()) if (s.key === key && (!best || newer(s, best))) best = s
   return best
 }
 
@@ -1276,6 +1285,8 @@ async function handlePeer(req, res, url) {
     res.socket?.setNoDelay(true)
     const peer = {
       pid: Number(url.searchParams.get('pid')) || 0, projectDir: resolve(dir), key: canon(dir), at: ++joinSeq,
+      // A peer from before this field has none, so it counts as the oldest and loses to any newer session.
+      started: Number(url.searchParams.get('started')) || 0,
       res, write: chunk => res.write(chunk),
     }
     res.write(': connected\n\n')
@@ -1441,7 +1452,7 @@ function connectPeer() {
     console.error('[pinpoint] no peer key:', err?.message ?? err)
     return
   }
-  const qs = new URLSearchParams({ pid: String(process.pid), projectDir: PROJECT_DIR })
+  const qs = new URLSearchParams({ pid: String(process.pid), projectDir: PROJECT_DIR, started: String(STARTED_AT) })
   const req = httpRequest({ host: '127.0.0.1', port: PORT, path: `/peer?${qs}`, headers: { 'X-Pinpoint-Peer': key } })
   peerLink = req
   let up = false
@@ -1758,7 +1769,14 @@ async function handleDispatch(req, res) {
   if (!target || target.self) await notifyBatch(batch)
   else deliver(target, id)
 
-  sendJson(res, 200, headers, { ok: true, batch: id, count: comments.length, projectDir: route.projectDir, name: route.name })
+  // More than one live session for the project is the case where "which terminal" is a real
+  // question, so say which one: when it started. One session needs no explaining.
+  const key = canon(route.projectDir)
+  const here = sessions().filter(x => x.key === key)
+  sendJson(res, 200, headers, {
+    ok: true, batch: id, count: comments.length, projectDir: route.projectDir, name: route.name,
+    ...(here.length > 1 && target?.started ? { sessions: here.length, sessionStarted: target.started } : {}),
+  })
 }
 
 /**

@@ -1491,6 +1491,23 @@
    */
   const stackKey = c => c.selector || `\u0000#${c.n}`
 
+  const SCOPE_KIND_NAME = { classes: 'Same classes', component: 'Same component role', pattern: 'Same container' }
+
+  /**
+   * The one line a card keeps about "Apply to": `Applies to: Same classes · 3 elements`.
+   * Nothing for Only this or no scope. The record is the page's own, so every part is
+   * checked here and the line goes in with textContent.
+   */
+  function appliesLabel(scope) {
+    if (!scope || typeof scope !== 'object' || scope.kind === 'element') return ''
+    const tag = typeof scope.match?.tag === 'string' ? scope.match.tag.slice(0, 40) : ''
+    const name = scope.kind === 'tag' ? (tag ? `Every ${tag}` : '') : SCOPE_KIND_NAME[scope.kind]
+    if (!name) return ''
+    const n = Number(scope.counts?.document)
+    const count = scope.counts?.capped ? `${Scope.CAP}+ elements` : n >= 1 ? `${n} ${n === 1 ? 'element' : 'elements'}` : ''
+    return `Applies to: ${name}${count ? ` · ${count}` : ''}`
+  }
+
   /** One comment, as a section of a pin card. `refresh` rebuilds the card around it. */
   function commentSection(comment, stacked, refresh) {
     const sect = el('div', `sect ${kindOf(comment)}`)
@@ -1508,6 +1525,9 @@
       }
       sect.append(asked)
     }
+
+    const applies = appliesLabel(comment.scope)
+    if (applies) sect.append(el('div', 'applies', applies))
 
     if (comment.answer) sect.append(el('div', 'answer', comment.answer))
     if (comment.resolution) sect.append(el('div', 'resolution', `✓ ${comment.resolution}`))

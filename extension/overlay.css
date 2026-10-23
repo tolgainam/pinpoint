@@ -681,6 +681,12 @@ button.debug-more:hover:not(:disabled) { background: none; color: var(--pp-fg); 
   font-variant-numeric: tabular-nums;
 }
 
+.card .applies {
+  margin-bottom: var(--pp-space-8);
+  color: var(--pp-dim);
+  font-size: var(--pp-text-sm);
+}
+
 .card .delta + .delta { margin-top: var(--pp-space-3); }
 
 /* ---------------------------------------------------------------- card header */

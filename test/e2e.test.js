@@ -817,6 +817,69 @@ test('a group past the cap reads 200+, can be chosen, and is never previewed or 
   await closeAll()
 })
 
+/** The text of the Applies to line on the open pin card, or null. */
+const appliesLine = async () => (await host('.card .applies').count()) ? (await host('.card .applies').first().innerText()).trim() : null
+
+async function openFirstPin() {
+  await closeAll()
+  await host('.pin').first().click()
+  await host('.card .note').waitFor()
+}
+
+test('a pin card keeps the group scope as one line, for a pending comment, after dispatch and after a reload', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await loadCards()
+  await compose('[data-n="1"]')
+  await pickColour()
+  await host('.scope-opt[data-kind="classes"]').click()
+  await host('.card button.primary').click()
+  await host('.card').waitFor({ state: 'detached' })
+  await stored(1)
+  await openFirstPin()
+  assert.equal(await appliesLine(), 'Applies to: Same classes · 3 elements')
+  await closeAll()
+
+  const before = bridge.dispatched.length
+  await host('.bar button.primary').filter({ hasText: 'Dispatch' }).click()
+  const until = Date.now() + 8000
+  while (bridge.dispatched.length === before && Date.now() < until) await page.waitForTimeout(50)
+  await openFirstPin()
+  assert.equal(await appliesLine(), 'Applies to: Same classes · 3 elements')
+  await closeAll()
+
+  // Saving is debounced; the record is in storage before the page goes.
+  await stored(1)
+  await page.reload()
+  await host('.pin').first().waitFor({ timeout: 15000 })
+  await openFirstPin()
+  assert.equal(await appliesLine(), 'Applies to: Same classes · 3 elements')
+  await closeAll()
+})
+
+test('a pin card says nothing about scope for Only this', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await loadCards()
+  await compose('[data-n="1"]')
+  await pickColour()
+  await host('.card button.primary').click()
+  await host('.card').waitFor({ state: 'detached' })
+  await stored(1)
+  await openFirstPin()
+  assert.equal(await appliesLine(), null)
+  await closeAll()
+})
+
+test('a capped group reads 200+ on the pin card', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await loadCards('?many=250')
+  await compose('[data-n="1"]')
+  await pickColour()
+  await host('.scope-opt[data-kind="tag"]').click()
+  await host('.card button.primary').click()
+  await host('.card').waitFor({ state: 'detached' })
+  await stored(1)
+  await openFirstPin()
+  assert.equal(await appliesLine(), 'Applies to: Every h3 · 200+ elements')
+  await closeAll()
+})
+
 test('React owners give a component role, restricted to the tag', { skip: !browser.ok, timeout: 60000 }, async () => {
   await loadCards('?react=1')
   await compose('[data-n="1"]')

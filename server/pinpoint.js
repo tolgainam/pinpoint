@@ -21,6 +21,7 @@ import { createServer, request as httpRequest } from 'node:http'
 import { execFile } from 'node:child_process'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync, linkSync, renameSync, appendFileSync } from 'node:fs'
+import { writeFile, mkdir, rm } from 'node:fs/promises'
 import { join, dirname, basename, resolve, isAbsolute, relative } from 'node:path'
 import { homedir } from 'node:os'
 import {
@@ -59,6 +60,9 @@ const RETAIN_MS = Number(process.env.PINPOINT_RETAIN_HOURS ?? 24) * 3600_000
 const MAX_BATCHES = Number(process.env.PINPOINT_MAX_BATCHES ?? 200)
 /** A batch carries screenshots, so bodies are large by web standards — but not unbounded. */
 const MAX_BODY = 48 * 1024 * 1024
+/** One decoded screenshot, and every screenshot of one dispatch together. */
+const MAX_IMAGE = 12 * 1024 * 1024
+const MAX_BATCH_IMAGES = 40 * 1024 * 1024
 /**
  * Keep in step with package.json and the manifests. PINPOINT_VERSION exists for the yield
  * test, which needs an older and a newer bridge built from the same file.
@@ -107,6 +111,19 @@ function readBatch(id) {
 function writeBatch(b) {
   mkdirSync(batchDir(b.id), { recursive: true })
   writeFileSync(batchFile(b.id), JSON.stringify(b, null, 2))
+}
+
+/**
+ * batch.json for a new batch, written beside its final name. The returned function moves it
+ * into place, synchronously: that rename is the commit, since readBatch sees nothing in the
+ * directory until batch.json parses, and the caller decides the instant it happens.
+ * @param {Batch} b
+ */
+async function stageBatch(b) {
+  await mkdir(batchDir(b.id), { recursive: true })
+  const tmp = `${batchFile(b.id)}.tmp-${process.pid}`
+  await writeFile(tmp, JSON.stringify(b, null, 2))
+  return () => renameSync(tmp, batchFile(b.id))
 }
 
 /** Every batch that still has at least one unresolved comment, oldest first. */
@@ -1100,12 +1117,15 @@ async function handleRecapture(req, res) {
     return sendJson(res, 200, headers, { ok: true })
   }
 
-  if (typeof payload.shot === 'string' && payload.shot.startsWith('data:image/png;base64,')) {
+  if (isPng(payload.shot)) {
     const name = `after-${String(c.n).padStart(2, '0')}.png`
     try {
-      writeFileSync(join(batchDir(batchId), name), Buffer.from(payload.shot.split(',')[1], 'base64'))
-      c.after = name
-      writeBatch(b)
+      await writeFile(join(batchDir(batchId), name), decodePng(payload.shot))
+      // Read again after the write: the batch can have changed on disk while it ran.
+      const now = readBatch(batchId) ?? b
+      const fresh = now.comments.find(x => x.n === c.n) ?? c
+      fresh.after = name
+      writeBatch(now)
       waiting({ shot: join(batchDir(batchId), name) })
     } catch (err) {
       waiting({ error: `could not write the crop: ${err?.message ?? err}` })
@@ -1725,6 +1745,31 @@ function readBody(req) {
 
 // ---------------------------------------------------------------- dispatch
 
+const PNG_PREFIX = 'data:image/png;base64,'
+const isPng = v => typeof v === 'string' && v.startsWith(PNG_PREFIX)
+
+/** An error that carries the status a handler should answer with. */
+const refusal = (status, message) => Object.assign(new Error(message), { status })
+
+/**
+ * The decoded size of a PNG data URL, worked out from its length, so an oversized one is
+ * refused before Buffer.from allocates it.
+ */
+function pngSize(dataUrl, maxBytes = MAX_IMAGE) {
+  const b64 = dataUrl.slice(PNG_PREFIX.length)
+  if (!b64 || b64.length % 4 === 1 || !/^[A-Za-z0-9+/]+={0,2}$/.test(b64)) throw refusal(400, 'a screenshot is not valid base64')
+  const size = Math.floor(b64.length * 3 / 4)
+  if (size > maxBytes) throw refusal(413, `a screenshot is larger than ${maxBytes / 1024 / 1024} MiB`)
+  return size
+}
+
+/** A PNG data URL as bytes. Throws a refusal (400 or 413) rather than decode something absurd. */
+function decodePng(dataUrl, maxBytes = MAX_IMAGE) {
+  if (!isPng(dataUrl)) throw refusal(400, 'a screenshot is not a PNG data URL')
+  pngSize(dataUrl, maxBytes)
+  return Buffer.from(dataUrl.slice(PNG_PREFIX.length), 'base64')
+}
+
 /** The buffer is page-controlled, so it is trimmed here rather than trusted for length. */
 function sanitiseDebug(debug) {
   if (!Array.isArray(debug) || !debug.length) return undefined
@@ -1833,6 +1878,17 @@ async function handleDispatch(req, res) {
   const incoming = Array.isArray(payload?.comments) ? payload.comments : []
   if (!incoming.length) return send(res, 400, headers, 'no comments')
 
+  // Screenshots are measured before anything else happens, so one that is too big or not
+  // base64 is refused with nothing written and no route looked up.
+  const pageShotData = isPng(payload.pageShot) ? payload.pageShot : undefined
+  try {
+    let total = 0
+    for (const data of [...incoming.map(c => c?.shot), pageShotData]) if (isPng(data)) total += pngSize(data)
+    if (total > MAX_BATCH_IMAGES) throw refusal(413, `the screenshots add up to more than ${MAX_BATCH_IMAGES / 1024 / 1024} MiB`)
+  } catch (err) {
+    return send(res, err.status ?? 400, headers, err.message)
+  }
+
   // Resolved here rather than trusted from the last /health: a session can have come or
   // gone since the toolbar last looked. Nothing is written for a route with no session.
   const route = await resolveRoute(pageOf(payload), payload.pick)
@@ -1840,20 +1896,21 @@ async function handleDispatch(req, res) {
   // The route was resolved against this bridge's session list, and the bridge may have
   // handed the port over while lsof ran. Its list is empty now, so the lookup below would
   // land the batch in this session whatever the route said. Nothing is written yet; the
-  // toolbar retries and reaches the new owner. Everything from here on is synchronous up
-  // to the notify, so this is the last point a yield can slip in.
-  if (!server.listening) return send(res, 409, headers, 'Pinpoint is switching to a newer version. Try again in a few seconds.')
+  // toolbar retries and reaches the new owner. The same check runs again after the writes.
+  const switching = 'Pinpoint is switching to a newer version. Try again in a few seconds.'
+  if (!server.listening) return send(res, 409, headers, switching)
 
   const id = stamp()
-  mkdirSync(batchDir(id), { recursive: true })
+  /** @type {[string, string][]} file name and data URL, written in this order */
+  const shots = []
 
   const comments = incoming.map((c, i) => {
     const n = i + 1
     let shot
     // Screenshots arrive as data URLs and land as real PNGs so Read can render them.
-    if (typeof c.shot === 'string' && c.shot.startsWith('data:image/png;base64,')) {
+    if (isPng(c.shot)) {
       shot = `shot-${String(n).padStart(2, '0')}.png`
-      writeFileSync(join(batchDir(id), shot), Buffer.from(c.shot.split(',')[1], 'base64'))
+      shots.push([shot, c.shot])
     }
     return {
       n,
@@ -1878,9 +1935,9 @@ async function handleDispatch(req, res) {
 
   // One uncropped viewport shot per batch, as context for the crops.
   let pageShot
-  if (typeof payload.pageShot === 'string' && payload.pageShot.startsWith('data:image/png;base64,')) {
+  if (pageShotData) {
     pageShot = 'page.png'
-    writeFileSync(join(batchDir(id), pageShot), Buffer.from(payload.pageShot.split(',')[1], 'base64'))
+    shots.push([pageShot, pageShotData])
   }
 
   const batch = {
@@ -1899,7 +1956,34 @@ async function handleDispatch(req, res) {
     projectKey: canon(route.projectDir),
     comments,
   }
-  writeBatch(batch)
+
+  // The images go first, one at a time and off the event loop, then batch.json beside its
+  // name. Until the rename below the directory holds no batch.json, so nothing reads it as
+  // a batch, and a failure anywhere removes it whole: no half batch, no history line.
+  let commit
+  try {
+    await mkdir(batchDir(id), { recursive: true })
+    for (const [name, data] of shots) await writeFile(join(batchDir(id), name), decodePng(data))
+    commit = await stageBatch(batch)
+  } catch (err) {
+    console.error('[pinpoint] could not write a batch:', err?.message ?? err)
+    await rm(batchDir(id), { recursive: true, force: true }).catch(() => {})
+    return send(res, 503, headers, 'screenshots could not be written, try again')
+  }
+  // The writes gave a yield room to land. Nothing has been committed, logged or notified,
+  // so this answers exactly like the check above and the retry is safe. From here to the
+  // notify everything is synchronous, so this is the last point a yield can slip in.
+  if (!server.listening) {
+    await rm(batchDir(id), { recursive: true, force: true }).catch(() => {})
+    return send(res, 409, headers, switching)
+  }
+  try {
+    commit()
+  } catch (err) {
+    console.error('[pinpoint] could not commit a batch:', err?.message ?? err)
+    rmSync(batchDir(id), { recursive: true, force: true })
+    return send(res, 503, headers, 'screenshots could not be written, try again')
+  }
   appendHistory(historyForBatch(batch), route.projectDir)
   prune()
 
@@ -2041,13 +2125,18 @@ async function handleBacklog(req, res) {
 
   // Repo-relative in the file, absolute nowhere: this path gets committed.
   let shotRel
-  if (typeof c.shot === 'string' && c.shot.startsWith('data:image/png;base64,')) {
+  let warning
+  if (isPng(c.shot)) {
+    // A shot that cannot be saved costs the item its shot line, not the item: the note is
+    // the part worth keeping, so it is still parked and the reply says what went missing.
     try {
-      mkdirSync(shotsDir(dir), { recursive: true })
-      writeFileSync(join(shotsDir(dir), `${id}.png`), Buffer.from(c.shot.split(',')[1], 'base64'))
+      const png = decodePng(c.shot)
+      await mkdir(shotsDir(dir), { recursive: true })
+      await writeFile(join(shotsDir(dir), `${id}.png`), png)
       shotRel = `.pinpoint/shots/${id}.png`
     } catch (err) {
-      console.error('[pinpoint] backlog screenshot failed:', err)
+      console.error('[pinpoint] backlog screenshot failed:', err?.message ?? err)
+      warning = 'screenshot not saved'
     }
   }
 
@@ -2090,7 +2179,7 @@ async function handleBacklog(req, res) {
     return send(res, 500, headers, `could not write ${file}`)
   }
 
-  sendJson(res, 200, headers, { ok: true, id, file })
+  sendJson(res, 200, headers, { ok: true, id, file, ...(warning ? { warning } : {}) })
 }
 
 // ---------------------------------------------------------------- serve

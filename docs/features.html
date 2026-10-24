@@ -1102,6 +1102,46 @@
   </div>
 </section>
 
+<section id="inbox">
+  <div class="kicker">new in 0.9</div>
+  <h2>See what needs you on this page</h2>
+  <div class="prose">
+    <p>
+      <strong>An Inbox on the toolbar.</strong> When the page has comments, the toolbar shows
+      <strong>Inbox</strong> after Pins. Its badge counts the comments that need you, not
+      every comment: an answer or an edit you have not looked at yet, a comment marked
+      resolved or a backlog item marked done since you last looked, a dispatch that failed,
+      a backlog item that could not be written, and a pin whose element is gone from the
+      URL it was written on. Pending comments, work that is under way and things you have
+      already seen add nothing. Screen readers hear the count in the button's name, for
+      example <em>"Open Pinpoint inbox, 2 items need attention"</em>.
+    </p>
+    <p>
+      <strong>One list for the page.</strong> The panel lists this route's comments in
+      groups: Needs attention first, then Not dispatched, In progress, Parked and Recently
+      done, at most 50 in each. Every row shows the pin number, whether it is a change, a
+      question or parked, its state, the start of the note and the element. An answer is
+      shown in full under its row.
+    </p>
+    <p>
+      <strong>Go to the pin, or mark it seen.</strong> Choosing a row closes the panel,
+      scrolls the pin into view, puts focus on it and opens its card, where removing,
+      retrying and replying work as before. A pin whose element is gone opens its card by
+      the toolbar. <strong>Mark seen</strong> clears an answer, edit or resolution from the
+      badge without leaving the panel. Opening a pin's card counts as seeing it; opening the
+      list does not. A failed dispatch stays until a dispatch succeeds, and an unsaved
+      backlog item until Retry works or it is removed. Two tabs on the same route share what
+      you have seen.
+    </p>
+    <p>
+      <strong>From the keyboard.</strong> Inbox is a toolbar button like the others. Enter
+      opens the panel with focus on the first row, the up and down arrows move through it,
+      Home and End jump to the ends, and Escape closes it and returns to Inbox. Comments on
+      other routes are not listed yet.
+    </p>
+  </div>
+</section>
+
 <section id="say">
   <div class="kicker">picked values</div>
   <h2>Pick the value instead of describing it</h2>

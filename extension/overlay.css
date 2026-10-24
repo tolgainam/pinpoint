@@ -852,6 +852,35 @@ button.danger:hover { color: var(--pp-danger); }
 .bar button.pins-nav:hover,
 .bar button.pins-nav:focus-visible { color: var(--pp-fg); }
 
+/* Inbox: quiet like Pins until something needs attention, then the count says so. */
+.bar button.inbox-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pp-space-5);
+  padding: var(--pp-space-4) var(--pp-space-8);
+  font-size: var(--pp-text-sm);
+  color: var(--pp-dim);
+}
+
+.bar button.inbox-btn:hover,
+.bar button.inbox-btn:focus-visible,
+.bar button.inbox-btn.attention { color: var(--pp-fg); }
+.bar button.inbox-btn.attention { border-color: var(--pp-accent); }
+
+.inbox-badge {
+  min-width: 16px;
+  padding: 0 var(--pp-space-4);
+  border: 1px solid transparent;
+  border-radius: var(--pp-radius-pill);
+  background: var(--pp-accent);
+  color: var(--pp-white);
+  font-size: var(--pp-text-xs);
+  font-weight: var(--pp-weight-bold);
+  line-height: var(--pp-leading-12);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------------------------------------------------------------- toolbar */
 
 .bar {
@@ -1130,6 +1159,130 @@ button.mode.on {
   cursor: pointer;
 }
 
+/* ---------------------------------------------------------------- inbox */
+
+/* This route's comments, what needs attention first. Above the bar like the error panel,
+   capped to the room it has and scrolled inside itself, so nothing runs off the screen. */
+.inbox {
+  position: absolute;
+  z-index: var(--pp-z-card);
+  display: none;
+  width: 340px;
+  max-width: calc(100vw - 16px);
+  overflow-y: auto;
+  border: 1px solid var(--pp-line);
+  border-radius: var(--pp-radius-9);
+  background: var(--pp-bg);
+  color: var(--pp-fg);
+  box-shadow: var(--pp-shadow-panel);
+  font-size: var(--pp-text-md);
+  pointer-events: auto;
+}
+
+.inbox.show { display: block; }
+
+.inbox-head {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--pp-space-6);
+  padding: var(--pp-space-6) var(--pp-space-8) var(--pp-space-6) var(--pp-space-10);
+  border-bottom: 1px solid var(--pp-line);
+  background: var(--pp-bg);
+}
+
+.inbox-head .spacer { flex: 1; }
+.inbox-title { font-weight: var(--pp-weight-semibold); }
+
+button.inbox-close {
+  padding: 0 var(--pp-space-4);
+  border-color: transparent;
+  color: var(--pp-dim);
+}
+
+.inbox-group {
+  margin: 0;
+  padding: var(--pp-space-8) var(--pp-space-10) var(--pp-space-4);
+  color: var(--pp-dim);
+  font-size: var(--pp-text-xs);
+  font-weight: var(--pp-weight-semibold);
+  letter-spacing: var(--pp-tracking-wide);
+  text-transform: uppercase;
+}
+
+.inbox-list { margin: 0; padding: 0; list-style: none; }
+
+.inbox-item {
+  padding: 0 var(--pp-space-4) var(--pp-space-4);
+  border-top: 1px solid var(--pp-divider-faint);
+}
+
+.inbox button.inbox-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--pp-space-2);
+  width: 100%;
+  margin-top: var(--pp-space-4);
+  padding: var(--pp-space-4) var(--pp-space-6);
+  border: 0;
+  border-radius: var(--pp-radius-6);
+  text-align: left;
+  white-space: normal;
+}
+
+.inbox-line { display: flex; align-items: baseline; gap: var(--pp-space-6); font-size: var(--pp-text-sm); }
+.inbox-n { font-weight: var(--pp-weight-semibold); font-variant-numeric: tabular-nums; }
+.inbox-kind { color: var(--pp-dim); }
+.inbox-kind.question { color: var(--pp-question-fg); }
+.inbox-kind.parked { color: var(--pp-backlog-fg); }
+.inbox-state { margin-left: auto; color: var(--pp-dim); }
+.inbox-item.failed .inbox-state,
+.inbox-item.unsaved .inbox-state { color: var(--pp-danger-fg); }
+.inbox-item.answered .inbox-state { color: var(--pp-answer-fg); }
+.inbox-item.edited .inbox-state { color: var(--pp-frozen-fg); }
+.inbox-item.resolved .inbox-state,
+.inbox-item.completed .inbox-state { color: var(--pp-resolved-fg); }
+.inbox-item.detached .inbox-state { color: var(--pp-warn-fg); }
+.inbox-note { word-break: break-word; }
+
+.inbox-hint {
+  overflow: hidden;
+  color: var(--pp-dim);
+  font-family: var(--pp-font-mono);
+  font-size: var(--pp-text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-answer {
+  margin: var(--pp-space-2) var(--pp-space-6) var(--pp-space-4);
+  padding: var(--pp-space-4) var(--pp-space-7);
+  border-left: 2px solid var(--pp-question);
+  border-radius: var(--pp-radius-4);
+  background: var(--pp-question-wash-faint);
+  color: var(--pp-answer-fg);
+  font-size: var(--pp-text-sm);
+  word-break: break-word;
+}
+
+.inbox-detail {
+  margin: 0 var(--pp-space-6) var(--pp-space-4);
+  color: var(--pp-danger-fg);
+  font-size: var(--pp-text-sm);
+  word-break: break-word;
+}
+
+.inbox button.inbox-seen {
+  margin-left: var(--pp-space-6);
+  padding: var(--pp-space-3) var(--pp-space-8);
+  font-size: var(--pp-text-sm);
+}
+
+.inbox-more,
+.inbox-empty { padding: var(--pp-space-6) var(--pp-space-10); color: var(--pp-dim); font-size: var(--pp-text-sm); }
+
 /* ---------------------------------------------------------------- keyboard and access */
 
 /* Read by screen readers, never seen: the live region that mirrors every toast. */
@@ -1200,4 +1353,8 @@ button:focus-visible,
   .scope-warn { border-color: Mark; }
   .scope-outline { border-color: Highlight; }
   .scope-opt input:focus-visible { outline-color: Highlight; }
+  .inbox { border-color: CanvasText; }
+  .inbox-badge { forced-color-adjust: none; background: Highlight; color: HighlightText; border-color: CanvasText; }
+  .bar button.inbox-btn.attention { border-color: Highlight; }
+  .inbox-answer { border-left-color: CanvasText; }
 }

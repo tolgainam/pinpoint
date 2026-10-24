@@ -13,6 +13,7 @@
   "files": [
     "extension/scope.js",
     "extension/route.js",
+    "extension/inbox.js",
     "server/project-files.js",
     "server/scope.js",
     "server/version.js",

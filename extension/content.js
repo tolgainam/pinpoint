@@ -54,6 +54,8 @@
   const Route = globalThis.PinpointRoute
   /** This route's bucket. It changes when a single-page app moves to another route. */
   let KEY = Route.keyFor(location)
+  /** What needs attention on this route, and the panel that lists it; see inbox.js. */
+  const Inbox = globalThis.PinpointInbox
   const BAR_KEY = 'pinpoint:bar'
   const PREFS_KEY = 'pinpoint:prefs'
   const MAX_TEXT = 200
@@ -1587,6 +1589,7 @@
     // lone comment it just repeats what the pin already says.
     const parts = [`${stacked ? `#${comment.n} · ` : ''}${STATE_LABEL[comment.status] ?? comment.status}`]
     if (comment.status === 'backlog' && comment.unsaved) parts.push('not written — bridge down')
+    if (comment.status === 'pending' && comment.deliveryError) parts.push('not delivered — Dispatch to retry')
     if (comment.debug?.length) parts.push(`${comment.debug.length} console`)
     if (!comment.shot) parts.push('no screenshot')
     const status = el('span', 'meta', parts.join(' · '))
@@ -1762,6 +1765,7 @@
         // Enter and Space click with no pointer: anchor on the pin and move focus in.
         const keyboard = ev.detail === 0
         const r = pin.getBoundingClientRect()
+        seeStack(stack)
         openPinCard(stack, keyboard ? r.left : ev.clientX, keyboard ? r.top : ev.clientY, keyboard)
       })
       pins.append(pin)
@@ -1809,6 +1813,7 @@
           const note = A11y.placeNote(where)
           pin.title = `${note ? `${note}\n` : ''}${stack.map(x => `#${x.n} ${x.note}`).join('\n')}`
           pin.classList.toggle('elsewhere', place === 'elsewhere')
+          inboxSoon()
         }
       }
       if (pin._place === 'detached') live = null
@@ -1879,6 +1884,16 @@
   // Dispatch because that is what it modifies: what the whole batch carries with it.
   const bugBtn = el('button', 'bug', '')
   bugBtn.setAttribute('aria-expanded', 'false')
+  /** The inbox: mounted while this route has comments, between Pins and the rest. */
+  const inboxBtn = el('button', 'inbox-btn')
+  inboxBtn.setAttribute('aria-haspopup', 'dialog')
+  inboxBtn.setAttribute('aria-expanded', 'false')
+  const inboxText = el('span', 'inbox-text', 'Inbox')
+  const inboxBadge = el('span', 'inbox-badge')
+  // The accessible name carries the count; the number on its own would be read twice.
+  inboxBadge.setAttribute('aria-hidden', 'true')
+  inboxBtn.append(inboxText, inboxBadge)
+  const inbox = Inbox.panel({ onJump: jumpTo, onSeen: seeOne, onClose: () => { closeInbox(); A11y.returnFocus(root, inboxBtn) } })
   bar.append(grip, dot, modeBtn, count, sendBtn, closeBtn)
   // Hidden from the first frame rather than shown and then hidden, so a page load never
   // flashes the toolbar. setHidden owns the state from here on.
@@ -1913,7 +1928,7 @@
   const bugList = el('div', 'debug-list')
   bugHead.append(bugLabel, el('span', 'spacer'), bugClose)
   bugPanel.append(bugHead, bugList)
-  layer.append(bugPanel)
+  layer.append(bugPanel, inbox.node)
 
   function paintBugList() {
     bugList.textContent = ''
@@ -1973,6 +1988,7 @@
 
   bugBtn.onclick = async () => {
     if (bugPanel.classList.contains('show')) { closeBugPanel(); return }
+    closeInbox()
     await refreshDebug()
     if (!pageDebug.length) return
     bugBox.checked = wantDebug
@@ -2027,7 +2043,7 @@
   let hidden = true
   function setHidden(on) {
     hidden = on
-    if (on) { setMode(false); closeBugPanel() }
+    if (on) { setMode(false); closeBugPanel(); closeInbox() }
     bar.style.display = on ? 'none' : ''
     pins.style.display = on ? 'none' : ''
     // Place the bar first: the tip is anchored to it.
@@ -2061,6 +2077,7 @@
     drag = { dx: ev.clientX - r.left, dy: ev.clientY - r.top }
     // The panel is anchored to where the bar was, so it cannot come along for the ride.
     closeBugPanel()
+    closeInbox()
     grip.setPointerCapture(ev.pointerId)
   })
   grip.addEventListener('pointermove', ev => {
@@ -2125,6 +2142,7 @@
     pinsBtn.setAttribute('aria-label', label.name)
     if (pinNodes.length && !pinsBtn.isConnected) count.after(pinsBtn)
     if (!pinNodes.length) pinsBtn.remove()
+    paintInbox()
     // Mirror the count onto the toolbar icon, so a tab you scrolled away from still shows it.
     send({ type: 'count', n: pending }).catch(() => {})
   }
@@ -2219,6 +2237,7 @@
         c.batch = res.batch
         c.serverN = i + 1
         c.sentTo = res.projectDir
+        delete c.deliveryError
       })
       keepAway(home, outgoing)
       // With two sessions open on one project, say which one got it: the terminal to look at is the
@@ -2231,6 +2250,10 @@
       save()
     } else {
       say(res?.error || 'dispatch failed', true)
+      // Kept on the comment, not only in the toast: the inbox lists it until a dispatch succeeds.
+      for (const c of outgoing) c.deliveryError = String(res?.error || 'dispatch failed').slice(0, 200)
+      keepAway(home, outgoing)
+      save()
     }
     render()
     return !!res?.ok
@@ -2355,6 +2378,7 @@
 
   function openPop() {
     if (popOpen()) return
+    closeInbox()
     pop.classList.add('show')
     pill.setAttribute('aria-expanded', 'true')
     popShown = ''
@@ -2462,8 +2486,9 @@
 
   /** Outside means outside both the popover and the controls that open it. */
   function onOutside(ev) {
-    if (!popOpen()) return
     const path = ev.composedPath()
+    if (inbox.isOpen() && !path.includes(inbox.node) && !path.includes(inboxBtn)) closeInbox()
+    if (!popOpen()) return
     if (path.includes(pop) || path.includes(pill) || path.includes(sendBtn)) return
     closePop()
   }
@@ -2507,6 +2532,99 @@
       return how
     },
   })
+
+  // ---------------------------------------------------------------- inbox
+
+  /**
+   * The This page view: inbox.js projects the route's comments, this paints the button and
+   * the panel and does what a row asks. Jumping opens the pin's own card, so removal, retry
+   * and follow-up stay where they already are.
+   */
+  function inboxModel() {
+    const places = new Map()
+    for (const p of pinNodes) for (const c of p.stack) places.set(c, p.pin._place)
+    return Inbox.view(comments.filter(c => !foreign(c)), c => ({ place: places.get(c), href: location.href }))
+  }
+
+  function paintInbox() {
+    const model = inboxModel()
+    const label = Inbox.buttonLabel(model.count)
+    inboxText.textContent = label.text
+    inboxBadge.textContent = label.badge
+    inboxBadge.style.display = label.badge ? '' : 'none'
+    inboxBtn.setAttribute('aria-label', label.name)
+    inboxBtn.classList.toggle('attention', model.count > 0)
+    const any = model.sections.length > 0
+    if (any && !inboxBtn.isConnected) (pinsBtn.isConnected ? pinsBtn : count).after(inboxBtn)
+    if (!any) { closeInbox(); inboxBtn.remove() }
+    if (inbox.isOpen()) { inbox.paint(model); inbox.place(bar.getBoundingClientRect()) }
+  }
+
+  /** A pin's place changed while scrolling or after a re-render: once per tick is enough. */
+  let inboxQueued = false
+  function inboxSoon() {
+    if (inboxQueued) return
+    inboxQueued = true
+    queueMicrotask(() => { inboxQueued = false; paintInbox() })
+  }
+
+  function openInbox() {
+    closePop()
+    closeBugPanel()
+    inbox.show(true)
+    inboxBtn.setAttribute('aria-expanded', 'true')
+    paintInbox()
+    paintTip()
+    inbox.first().focus({ preventScroll: true })
+  }
+
+  function closeInbox() {
+    if (!inbox.isOpen()) return
+    inbox.show(false)
+    inboxBtn.setAttribute('aria-expanded', 'false')
+    paintTip()
+  }
+
+  inboxBtn.onclick = () => (inbox.isOpen() ? closeInbox() : openInbox())
+
+  /** Opening a pin's card is seeing every comment on it. */
+  function seeStack(stack) {
+    let any = false
+    for (const c of stack) if (Inbox.unseen(c)) { Inbox.markSeen(c); any = true }
+    if (any) { save(); inboxSoon() }
+  }
+
+  function seeOne(id) {
+    const c = comments.find(x => x.id === id)
+    if (!c) return
+    Inbox.markSeen(c)
+    save()
+    paintInbox()
+    live.announce(`Pin ${c.n} marked seen`)
+  }
+
+  /**
+   * A row's own action: the panel closes, the pin comes into view with focus on it, and its
+   * card opens. A detached pin has no element to scroll to, so its card opens at the toolbar
+   * and says why.
+   */
+  function jumpTo(id) {
+    const c = comments.find(x => x.id === id)
+    closeInbox()
+    const entry = c && pinNodes.find(p => p.stack.includes(c))
+    if (!entry) { A11y.returnFocus(root, inboxBtn); return }
+    closeCard()
+    seeStack(entry.stack)
+    if (entry.pin._place === 'detached') {
+      const r = bar.getBoundingClientRect()
+      entry.pin.focus({ preventScroll: true })
+      openPinCard(entry.stack, r.left, Math.max(8, r.top - 48))
+      return
+    }
+    A11y.focusPin(entry.pin, positionPins)
+    const r = entry.pin.getBoundingClientRect()
+    openPinCard(entry.stack, r.left, r.top)
+  }
 
   /**
    * Pings overlap: the 5s beat, Retry, and a pick each send one. Only the newest answer
@@ -2588,7 +2706,7 @@
    * ping. Position is worked out on show, drag and resize only.
    */
   function paintTip() {
-    const due = tipSeen !== true && !hidden && !mode && !popOpen() && !bugPanel.classList.contains('show')
+    const due = tipSeen !== true && !hidden && !mode && !popOpen() && !bugPanel.classList.contains('show') && !inbox.isOpen()
     const was = tip.classList.contains('show')
     tip.classList.toggle('show', due)
     if (!due) return
@@ -2678,6 +2796,7 @@
     store.update(key, list => {
       const c = list.find(x => Route.names(x, ev.id))
       if (!c || !Route.applyEvent(c, ev)) return false
+      Inbox.touch(c, ev.type)
       c.updatedAt = Date.now()
       return true
     }).catch(() => {})
@@ -2735,6 +2854,7 @@
       if (hit) {
         hit.answer = ev.text
         if (hit.status !== 'resolved') hit.status = 'answered'
+        Inbox.touch(hit, 'reply')
         save()
         render()
         // The answer is the point, so show it: open the pin's card instead of leaving it
@@ -2752,6 +2872,7 @@
       const hit = byServerId(ev.id)
       if (!hit || hit.status === 'resolved') return
       hit.progress = { state: ev.state, note: ev.text ?? ev.note ?? '', files: ev.files ?? [] }
+      Inbox.touch(hit, 'progress')
       save()
       render()
       if (openCard?.refresh) openCard.refresh()
@@ -2771,6 +2892,7 @@
       if (!done || done.status === 'resolved') return
       done.status = 'resolved'
       if (ev.outcome) done.resolution = ev.outcome
+      Inbox.touch(done, 'backlog-done')
       save()
       render()
       say(`✓ #${done.n} done${ev.outcome ? ` — ${ev.outcome}` : ''}`)
@@ -2783,6 +2905,7 @@
 
     hit.status = 'resolved'
     if (ev.resolution) hit.resolution = ev.resolution
+    Inbox.touch(hit, 'resolved')
     save()
     render()
     // A question is closed by its answer. Claude often resolves it right after replying, and
@@ -2870,14 +2993,15 @@
     if (orphaned()) return
     const key = KEY
     store.save(key, track.local(comments, seq))
-      .then(record => { if (key === KEY && take(record)) { render(); openCard?.refresh?.() } })
+      .then(record => { if (key !== KEY) return; if (take(record)) { render(); openCard?.refresh?.() } else paintInbox() })
       .catch(() => {})
   }
 
   /** Another tab wrote this route's bucket. */
   function onBucket(changes, area) {
     if (area !== 'local' || !changes[KEY]?.newValue) return
-    if (take(changes[KEY].newValue)) { render(); openCard?.refresh?.() }
+    // A seenAt from the other tab changes no pin, only the inbox.
+    if (take(changes[KEY].newValue)) { render(); openCard?.refresh?.() } else paintInbox()
   }
   chrome.storage.onChanged.addListener(onBucket)
 
@@ -2975,7 +3099,7 @@
 
   /**
    * Escape closes the topmost surface and says where focus goes:
-   *   popover -> the project pill; error panel -> its count; composer -> Comment;
+   *   popover -> the project pill; error panel -> its count; inbox -> Inbox; composer -> Comment;
    *   pin card -> its pin; a pin -> the Pins item; comment mode or a frozen frame -> it
    *   ends and focus stays; the toolbar -> back to the page element focused before it.
    * Focus only moves when it is already ours or nowhere, never off the page.
@@ -2987,6 +3111,7 @@
     // capture phase, so the composer's own Escape handler never sees this press.
     if (popOpen()) { ev.preventDefault(); ev.stopImmediatePropagation(); closePop(); A11y.returnFocus(root, pill); return }
     if (bugPanel.classList.contains('show')) { ev.preventDefault(); closeBugPanel(); A11y.returnFocus(root, bugBtn); return }
+    if (inbox.isOpen()) { ev.preventDefault(); ev.stopImmediatePropagation(); closeInbox(); A11y.returnFocus(root, inboxBtn); return }
     if (openCard) {
       const back = openCard.returnTo
       closeCard()

@@ -430,6 +430,25 @@ Every comment has a stable id, and a save merges by id with what is stored, so t
 one route keep each other's comments and a removed one does not come back from a stale tab.
 Pins saved by older versions move to their route the first time the page opens.
 
+### See what needs you on this page
+
+When the page has comments, the toolbar shows **Inbox** after Pins. Its badge counts the
+comments that need you: an answer or edit you have not looked at, a comment resolved or a
+backlog item done since you last looked, a failed dispatch, a backlog item that could not be
+written, and a pin whose element is gone from the URL it was written on. Pending comments,
+work under way and anything already seen add nothing. The button's accessible name carries
+the count (*Open Pinpoint inbox, 2 items need attention*).
+
+The panel lists this route's comments in groups (Needs attention, Not dispatched, In
+progress, Parked, Recently done; at most 50 each), each row with its pin number, kind,
+state, the start of the note and the element, and an answer in full. Choosing a row closes
+the panel, scrolls the pin into view, focuses it and opens its card, where remove, retry and
+reply work as before. **Mark seen** clears an answer, edit or resolution from the badge;
+opening a pin's card does the same, opening the list does not. A failed dispatch stays until
+a dispatch succeeds. Two tabs on one route share what has been seen. From the keyboard,
+Enter on Inbox opens the panel at its first row, the arrows move through it, and Escape
+returns to Inbox. Comments on other routes are not listed yet.
+
 ### What rides along with a comment
 
 Every comment carries the element's curated computed styles — box model, layout,

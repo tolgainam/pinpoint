@@ -241,6 +241,10 @@ test('the shortcut shows the toolbar and focuses Comment; the toolbar is one tab
   assert.deepEqual(bar.stops, ['Comment'])
   assert.equal(bar.unnamed, 0)
   assert.ok(bar.names.includes('Pins, 3'), `no Pins item: ${bar.names}`)
+  // The keyboard model's order: Comment, Pins, then Inbox.
+  const pinsAt = bar.names.indexOf('Pins, 3')
+  assert.equal(bar.names[pinsAt - 1], 'Comment')
+  assert.match(bar.names[pinsAt + 1], /^Open Pinpoint inbox, \d+ items? needs? attention$/)
   assert.ok(bar.names.includes('Hide Pinpoint'))
 
   // Arrows rove, and the one stop moves with them.

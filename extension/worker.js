@@ -361,7 +361,7 @@ async function ensureInjected(tabId) {
 
   try {
     await chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', files: ['probe.js'] })
-    await chrome.scripting.executeScript({ target: { tabId }, files: ['status.js', 'a11y.js', 'scope.js', 'route.js', 'content.js'] })
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['status.js', 'a11y.js', 'scope.js', 'route.js', 'inbox.js', 'content.js'] })
     return true
   } catch (err) {
     console.warn('[pinpoint] could not inject into tab', tabId, err)
@@ -418,7 +418,7 @@ async function keepOnSite(pattern) {
   if (have.length) await chrome.scripting.unregisterContentScripts({ ids: have.map(s => s.id) })
   await chrome.scripting.registerContentScripts([
     { id: ids[0], matches: [pattern], js: ['probe.js'], world: 'MAIN', runAt: 'document_start', persistAcrossSessions: true },
-    { id: ids[1], matches: [pattern], js: ['status.js', 'a11y.js', 'scope.js', 'route.js', 'content.js'], runAt: 'document_idle', persistAcrossSessions: true },
+    { id: ids[1], matches: [pattern], js: ['status.js', 'a11y.js', 'scope.js', 'route.js', 'inbox.js', 'content.js'], runAt: 'document_idle', persistAcrossSessions: true },
   ])
 }
 

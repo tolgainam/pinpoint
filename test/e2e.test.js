@@ -1214,6 +1214,303 @@ test('two pages on one route converge through the storage change event', { skip:
   }
 })
 
+// ---------------------------------------------------------------- inbox
+
+/*
+ * The toolbar inbox, This page view: the badge, the panel, its rows and actions, and seenAt
+ * shared by two tabs on one route. Comments are written on the cards page or seeded into
+ * its bucket.
+ */
+
+
+async function inboxSays(n, p = page, timeout = 8000) {
+  const want = `Open Pinpoint inbox, ${n} ${n === 1 ? 'item needs' : 'items need'} attention`
+  const until = Date.now() + timeout
+  let got = null
+  while (Date.now() < until) {
+    got = await p.locator('#pinpoint-host .inbox-btn').getAttribute('aria-label', { timeout: 1000 }).catch(() => null)
+    if (got === want) break
+    await p.waitForTimeout(50)
+  }
+  assert.equal(got, want)
+  const badge = await p.evaluate(() => {
+    const b = document.getElementById('pinpoint-host').shadowRoot.querySelector('.inbox-badge')
+    return b && getComputedStyle(b).display !== 'none' ? b.textContent : ''
+  })
+  assert.equal(badge, n ? String(n) : '', 'the visible badge disagrees with the name')
+}
+
+const focusedIn = (p = page) => p.evaluate(() => {
+  const a = document.getElementById('pinpoint-host').shadowRoot.activeElement
+  return a ? { cls: a.className, name: a.getAttribute('aria-label') ?? a.textContent } : null
+})
+
+/** An answered question on a card title, as a bridge answer leaves it. */
+const answered = (n, selector, extra = {}) => ({
+  id: `seed-${n}`, n, note: `why is ${n} grey`, status: 'answered', question: true, answer: `Answer ${n}.`,
+  selector, tag: 'h3', createdHref: `http://localhost:${cardsPort}/cards`, docX: 20, docY: 40, rect: { x: 0, y: 0, w: 10, h: 10 },
+  batch: 'seed', serverN: n, sentTo: PROJECT.projectDir, activityAt: Date.now(), updatedAt: 1, ...extra,
+})
+
+/** The cards page with these comments in its bucket, toolbar showing. */
+async function seedCards(comments, query = '', p = page) {
+  await worker.evaluate(([k, list]) => chrome.storage.local.set({ [k]: { v: 2, seq: list.length, comments: list, removed: [] } }), [KEY(), comments])
+  await p.goto(`http://localhost:${cardsPort}/cards${query}`)
+  await p.locator('#pinpoint-host .bar').waitFor({ state: 'attached', timeout: 15000 })
+  if (p === page) {
+    await ensureShown()
+    await host('.pill-label').filter({ hasText: PROJECT.name }).waitFor({ timeout: 15000 })
+  }
+}
+
+/** The stored comment `pick` finds, once its seenAt has reached storage. */
+async function seenStored(pick) {
+  const until = Date.now() + 5000
+  let c = null
+  while (Date.now() < until) {
+    c = (await worker.evaluate(async k => (await chrome.storage.local.get(k))[k]?.comments ?? [], KEY())).find(pick) ?? null
+    if (c?.seenAt) return c
+    await page.waitForTimeout(50)
+  }
+  assert.fail(`no seenAt was stored: ${JSON.stringify(c)}`)
+}
+
+async function dispatchNow() {
+  const before = bridge.dispatched.length
+  await host('.bar button.primary').filter({ hasText: 'Dispatch' }).click()
+  const until = Date.now() + 8000
+  while (bridge.dispatched.length === before && Date.now() < until) await page.waitForTimeout(50)
+  return bridge.dispatched.length > before ? `e2e-000${bridge.dispatched.length}` : null
+}
+
+test('no badge for ordinary work; an answer badges, the panel shows it, Mark seen clears it, Escape returns to Inbox', { skip: !browser.ok, timeout: 90000 }, async () => {
+  await loadCards()
+  await closeAll()
+  assert.equal(await host('.inbox-btn').count(), 0, 'Inbox shows on a page with no comments')
+  await addComment('[data-n="1"]', 'make it bigger')
+  await inboxSays(0)
+  const first = await dispatchNow()
+  assert.ok(first, 'nothing was dispatched')
+  await page.waitForTimeout(400)
+  await inboxSays(0)
+  bridge.emit({ type: 'progress', id: `${first}#1`, state: 'working', text: 'on it' })
+  await page.waitForTimeout(600)
+  await inboxSays(0)
+
+  await addComment('[data-n="2"]', '? why is this grey')
+  const second = await dispatchNow()
+  await page.waitForTimeout(400)
+  bridge.emit({ type: 'reply', id: `${second}#1`, text: 'It is the muted title style.' })
+  // The answer opens the pin's card on its own; that is not the user opening it.
+  await host('.card .answer').filter({ hasText: 'muted title style' }).waitFor({ timeout: 8000 })
+  await inboxSays(1)
+  await page.keyboard.press('Escape')
+
+  await host('.inbox-btn').click()
+  await host('.inbox.show').waitFor({ timeout: 5000 })
+  assert.match((await focusedIn())?.cls, /\binbox-row\b/, 'opening did not move focus to the first row')
+  assert.deepEqual(await host('.inbox-group').allInnerTexts().then(t => t.map(x => x.toUpperCase())), ['NEEDS ATTENTION (1)', 'IN PROGRESS (1)'])
+  const row = host('.inbox-sect.attention .inbox-item').first()
+  assert.match(await row.innerText(), /#2[\s\S]*question[\s\S]*Answered[\s\S]*why is this grey/)
+  assert.match(await row.locator('.inbox-hint').innerText(), /data-n="2"|h3/)
+  assert.equal((await row.locator('.inbox-answer').innerText()).trim(), 'It is the muted title style.')
+  assert.equal(await host('.inbox-sect.progress .inbox-state').first().innerText(), 'Working')
+  // Opening the list is not seeing the answer.
+  await inboxSays(1)
+
+  await row.locator('button.inbox-seen').click()
+  await inboxSays(0)
+  await liveSays(/^Pin 2 marked seen$/)
+  const q = await seenStored(c => c.question)
+  assert.ok(q.seenAt >= q.activityAt, `seenAt ${q.seenAt} is before activityAt ${q.activityAt}`)
+  // Answered and seen: in Recently done now, and still listed.
+  await host('.inbox-sect.done').waitFor({ timeout: 3000 })
+
+  await page.keyboard.press('Escape')
+  await host('.inbox.show').waitFor({ state: 'hidden', timeout: 3000 })
+  assert.match((await focusedIn())?.name ?? '', /^Open Pinpoint inbox, 0 items need attention$/)
+})
+
+test('a failed dispatch needs attention until a dispatch succeeds', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await loadCards()
+  await closeAll()
+  await addComment('[data-n="3"]', 'tighten this')
+  bridge.state.token = 'not-the-saved-one'
+  try {
+    await host('.bar button.primary').filter({ hasText: 'Dispatch' }).click()
+    await inboxSays(1)
+    await host('.inbox-btn').click()
+    const row = host('.inbox-sect.attention .inbox-item').first()
+    assert.equal(await row.locator('.inbox-state').innerText(), 'Not delivered')
+    assert.match(await row.locator('.inbox-detail').innerText(), /PINPOINT_TOKEN|401|token/i)
+    // Not cleared by looking: there is no Mark seen on it.
+    assert.equal(await row.locator('button.inbox-seen').count(), 0)
+    await page.keyboard.press('Escape')
+    const [c] = await stored(1)
+    assert.ok(c.deliveryError, 'the failure was only toasted, not kept')
+  } finally {
+    bridge.state.token = ''
+  }
+  assert.ok(await dispatchNow(), 'the retry was not dispatched')
+  await inboxSays(0)
+  await page.waitForTimeout(300)
+  const [c] = await stored(1)
+  assert.equal(c.deliveryError, undefined)
+})
+
+test('the keyboard reaches Inbox after Pins; a row jumps to its pin, focuses it and opens its card', { skip: !browser.ok, timeout: 60000 }, async () => {
+  await page.setViewportSize({ width: 1280, height: 400 })
+  try {
+    // Written on this exact URL state, so the pin attaches rather than reading as detached.
+    await seedCards([answered(1, '[data-n="1"]', { createdHref: `http://localhost:${cardsPort}/cards?many=400` })], '?many=400')
+    await inboxSays(1)
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+    await page.waitForTimeout(200)
+    const scrolled = await page.evaluate(() => scrollY)
+    assert.ok(scrolled > 0, 'the page is not tall enough to test scrolling')
+
+    await worker.evaluate(async () => {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+      await chrome.tabs.sendMessage(tab.id, { type: 'focus' })
+    })
+    await page.keyboard.press('Home')
+    const order = []
+    for (let i = 0; i < 6; i++) {
+      order.push((await focusedIn())?.name)
+      await page.keyboard.press('ArrowRight')
+    }
+    const at = order.indexOf('Pins, 1')
+    assert.ok(at > 0, `no Pins item: ${order}`)
+    assert.equal(order[at - 1], 'Comment')
+    assert.equal(order[at + 1], 'Open Pinpoint inbox, 1 item needs attention', `Inbox is not after Pins: ${order}`)
+
+    await page.keyboard.press('Home')
+    while ((await focusedIn())?.name !== 'Open Pinpoint inbox, 1 item needs attention') await page.keyboard.press('ArrowRight')
+    await page.keyboard.press('Enter')
+    await host('.inbox.show').waitFor({ timeout: 5000 })
+    assert.equal((await focusedIn())?.name, 'Pin 1, question, answered: why is 1 grey')
+    await page.keyboard.press('ArrowDown')
+    assert.equal((await focusedIn())?.name, 'Mark pin 1 seen')
+    await page.keyboard.press('ArrowUp')
+    await page.keyboard.press('Enter')
+
+    await host('.card .answer').filter({ hasText: 'Answer 1.' }).waitFor({ timeout: 5000 })
+    assert.equal(await host('.inbox.show').count(), 0, 'the panel stayed open')
+    assert.match((await focusedIn())?.cls, /\bpin\b/)
+    assert.match((await focusedIn())?.name, /^Pin 1, question, answered/)
+    const pin = await host('.pin').first().boundingBox()
+    assert.ok(pin.y >= 0 && pin.y + pin.height <= 400, `the pin is not in view: ${JSON.stringify(pin)}`)
+    assert.ok(await page.evaluate(() => scrollY) < scrolled, 'the page did not scroll to the pin')
+    // Opening the card is seeing it.
+    await inboxSays(0)
+    await page.keyboard.press('Escape')
+    assert.equal(await host('.card').count(), 0)
+    assert.match((await focusedIn())?.name, /^Pin 1,/)
+  } finally {
+    await page.setViewportSize({ width: 1280, height: 800 })
+  }
+})
+
+test('two pages on one route converge on seenAt', { skip: !browser.ok, timeout: 90000 }, async () => {
+  await seedCards([answered(1, '[data-n="1"]'), answered(2, '[data-n="2"]')])
+  const other = await context.newPage()
+  try {
+    await other.goto(`http://localhost:${cardsPort}/cards`)
+    await other.locator('#pinpoint-host .inbox-btn').waitFor({ state: 'attached', timeout: 15000 })
+    await page.bringToFront()
+    await inboxSays(2)
+    await inboxSays(2, other)
+    await host('.inbox-btn').click()
+    await host('.inbox-sect.attention button.inbox-seen').first().click()
+    await inboxSays(1)
+    await inboxSays(1, other)
+    // The other page marks the second one; the first page follows.
+    await other.evaluate(() => {
+      const root = document.getElementById('pinpoint-host').shadowRoot
+      root.querySelector('.inbox-btn').click()
+      root.querySelector('.inbox-sect.attention button.inbox-seen').click()
+    })
+    await inboxSays(0, other)
+    await inboxSays(0)
+    for (const id of ['seed-1', 'seed-2']) {
+      const c = await seenStored(x => x.id === id)
+      assert.ok(c.seenAt >= c.activityAt, JSON.stringify([c.seenAt, c.activityAt]))
+    }
+    await page.keyboard.press('Escape')
+  } finally {
+    await other.close()
+  }
+})
+
+test('the inbox under forced colours and reduced motion, and at 200% zoom with no clipped action', { skip: !browser.ok, timeout: 60000 }, async () => {
+  const sel = ['[data-n="1"]', '[data-n="2"]', '[data-n="3"]', '[data-n="promo"]', '[data-plain="1"]', '[data-plain="2"]', '[data-plain="3"]', '[data-plain="4"]']
+  await seedCards(sel.map((s, i) => answered(i + 1, s)))
+  await inboxSays(8)
+  await host('.inbox-btn').click()
+  await host('.inbox.show').waitFor()
+  const look = () => page.evaluate(() => {
+    const root = document.getElementById('pinpoint-host').shadowRoot
+    const row = root.activeElement
+    const s = getComputedStyle(row)
+    const badge = getComputedStyle(root.querySelector('.inbox-badge'))
+    const panel = getComputedStyle(root.querySelector('.inbox'))
+    return {
+      outline: s.outlineStyle, outlineWidth: parseFloat(s.outlineWidth), transition: s.transitionDuration, animation: s.animationName,
+      panelTransition: panel.transitionDuration, panelBorder: panel.borderTopStyle, badgeAdjust: badge.forcedColorAdjust, badgeBorder: badge.borderTopStyle,
+    }
+  })
+  // Focus by keyboard, so the ring is the keyboard's.
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('ArrowUp')
+  try {
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    const still = await look()
+    assert.equal(still.transition, '0s')
+    assert.equal(still.panelTransition, '0s')
+    assert.equal(still.animation, 'none')
+    await page.emulateMedia({ reducedMotion: 'reduce', forcedColors: 'active' })
+    const forced = await look()
+    assert.equal(forced.outline, 'solid')
+    assert.ok(forced.outlineWidth >= 2)
+    assert.equal(forced.panelBorder, 'solid')
+    assert.equal(forced.badgeAdjust, 'none')
+    assert.equal(forced.badgeBorder, 'solid')
+  } finally {
+    await page.emulateMedia({ reducedMotion: 'no-preference', forcedColors: 'none' })
+  }
+  await page.keyboard.press('Escape')
+
+  // 1280x800 at 200% zoom is a 640x400 CSS viewport.
+  await page.setViewportSize({ width: 640, height: 400 })
+  try {
+    await page.waitForTimeout(300)
+    const inView = (b, what) => {
+      assert.ok(b, `${what} has no box`)
+      assert.ok(b.x >= 0 && b.y >= 0 && b.x + b.width <= 640.5 && b.y + b.height <= 400.5, `${what} is clipped: ${JSON.stringify(b)}`)
+    }
+    const items = host('.bar > button')
+    for (let i = 0; i < await items.count(); i++) inView(await items.nth(i).boundingBox(), `toolbar item ${i}`)
+    await host('.inbox-btn').click()
+    await host('.inbox.show').waitFor()
+    await page.waitForTimeout(200)
+    inView(await host('.inbox').boundingBox(), 'the inbox')
+    const scrolls = await page.evaluate(() => {
+      const n = document.getElementById('pinpoint-host').shadowRoot.querySelector('.inbox')
+      return n.scrollHeight > n.clientHeight
+    })
+    assert.ok(scrolls, 'eight rows at 400px tall should scroll inside the panel')
+    const last = host('.inbox button.inbox-seen').last()
+    await last.scrollIntoViewIfNeeded()
+    inView(await last.boundingBox(), 'the last Mark seen')
+    inView(await host('.inbox-close').boundingBox(), 'Close inbox')
+    await last.click()
+    await inboxSays(7)
+    await page.keyboard.press('Escape')
+  } finally {
+    await page.setViewportSize({ width: 1280, height: 800 })
+  }
+})
+
 test('a page left open across an extension reload says so, instead of throwing', { skip: !browser.ok, timeout: 60000 }, async () => {
   const errors = []
   page.on('pageerror', e => errors.push(String(e)))

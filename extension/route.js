@@ -358,6 +358,9 @@
       if (!String(ev.text ?? '').trim()) return false
       c.answer = ev.text
       c.status = 'answered'
+      // Absent means a plain answer, and a later plain answer clears an earlier question.
+      if (ev.requiresResponse === true) c.requiresResponse = true
+      else delete c.requiresResponse
       return true
     }
     if (ev.type === 'progress') {

@@ -235,6 +235,12 @@
    */
   const canCarryScope = health => !!health?.connected && health?.capabilities?.['comment-scope-v1'] === true
 
+  /**
+   * Whether this bridge answers the inbox's Project view with fresh state (POST /inbox). One
+   * without project-inbox-v1 still gets the view, from what this browser stored.
+   */
+  const canProjectInbox = health => !!health?.connected && health?.capabilities?.['project-inbox-v1'] === true
+
   // ---------------------------------------------------------------- versions
 
   /**
@@ -320,6 +326,6 @@
 
   globalThis.PinpointStatus = {
     view, portOf, tilde, displayNames, same, eventFor, dispatchPick,
-    compareVersions, versionNote, bridgeSummary, tipLine, TIP_KEY, canCarryScope,
+    compareVersions, versionNote, bridgeSummary, tipLine, TIP_KEY, canCarryScope, canProjectInbox,
   }
 })()

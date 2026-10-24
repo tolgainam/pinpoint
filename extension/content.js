@@ -1893,7 +1893,20 @@
   // The accessible name carries the count; the number on its own would be read twice.
   inboxBadge.setAttribute('aria-hidden', 'true')
   inboxBtn.append(inboxText, inboxBadge)
-  const inbox = Inbox.panel({ onJump: jumpTo, onSeen: seeOne, onClose: () => { closeInbox(); A11y.returnFocus(root, inboxBtn) } })
+  /** Which view the inbox shows; see "inbox: Project view" below for the rest of this state. */
+  let inboxView = 'page'
+  /** The other buckets of this origin, as Inbox.buckets returns them. */
+  let away = []
+  /** How the list stands against the bridge: '' not asked yet, 'ok', 'old' (no project-inbox-v1), 'failed'. */
+  let awayFresh = ''
+  /** POST /inbox is asked once per opening of the panel. */
+  let awayAsked = false
+  let awayQueued = false
+  const INBOX_WAIT = 2500
+  const inbox = Inbox.panel({
+    onJump: jumpTo, onSeen: seeOne, onClose: () => { closeInbox(); A11y.returnFocus(root, inboxBtn) },
+    onView: showView, onCopy: copyRoute, onSeenAway: seeAway,
+  })
   bar.append(grip, dot, modeBtn, count, sendBtn, closeBtn)
   // Hidden from the first frame rather than shown and then hidden, so a page load never
   // flashes the toolbar. setHidden owns the state from here on.
@@ -2547,6 +2560,7 @@
   }
 
   function paintInbox() {
+    // The badge counts this page only: the Project view is where other routes are seen.
     const model = inboxModel()
     const label = Inbox.buttonLabel(model.count)
     inboxText.textContent = label.text
@@ -2554,10 +2568,159 @@
     inboxBadge.style.display = label.badge ? '' : 'none'
     inboxBtn.setAttribute('aria-label', label.name)
     inboxBtn.classList.toggle('attention', model.count > 0)
-    const any = model.sections.length > 0
+    const away = projectModel()
+    const any = model.sections.length > 0 || away.sections.length > 0
     if (any && !inboxBtn.isConnected) (pinsBtn.isConnected ? pinsBtn : count).after(inboxBtn)
     if (!any) { closeInbox(); inboxBtn.remove() }
-    if (inbox.isOpen()) { inbox.paint(model); inbox.place(bar.getBoundingClientRect()) }
+    if (inbox.isOpen()) {
+      inbox.paint(inboxView === 'project' ? { ...away, view: 'project', note: projectNote() } : model)
+      inbox.place(bar.getBoundingClientRect())
+    }
+  }
+
+  // ------------------------------------------------------------ inbox: Project view
+
+  /**
+   * The Project view: the project's comments on the other routes of this origin, read from
+   * their buckets. Only this origin's: storage is per origin and so is a route. Comments sent
+   * to another project than this page routes to are left out, as on the page itself.
+   */
+  function projectModel() {
+    return Inbox.projectView(away, { origin: location.origin, keep: c => !foreign(c) })
+  }
+
+  function projectNote() {
+    if (awayFresh === 'old') return 'Stored in this browser only: the connected Pinpoint plugin cannot refresh other pages.'
+    if (awayFresh === 'failed') return 'Stored in this browser only: the bridge did not answer.'
+    return ''
+  }
+
+  /** This origin's other route buckets. Keys are listed first where the browser can, so a
+   *  site with no other routes reads nothing more. */
+  async function readAway() {
+    const head = `${Route.PREFIX}${location.origin}`
+    let keys = null
+    try { if (typeof chrome.storage.local.getKeys === 'function') keys = (await chrome.storage.local.getKeys()).filter(k => k.startsWith(head) && k !== KEY) } catch { keys = null }
+    if (keys && !keys.length) return []
+    const got = await chrome.storage.local.get(keys ?? null)
+    return Inbox.buckets(got, location.origin, KEY)
+  }
+
+  function scanAway() {
+    if (awayQueued || orphaned()) return
+    awayQueued = true
+    setTimeout(async () => {
+      awayQueued = false
+      try { away = await readAway() } catch { /* storage away; keep what was read */ }
+      paintInbox()
+    }, 50)
+  }
+
+  /** Another tab, or this one, wrote a bucket of another route of this origin. */
+  function onAwayBucket(changes, area) {
+    if (area !== 'local') return
+    const head = `${Route.PREFIX}${location.origin}`
+    if (Object.keys(changes).some(k => k !== KEY && k.startsWith(head))) scanAway()
+  }
+  chrome.storage.onChanged.addListener(onAwayBucket)
+
+  function showView(view) {
+    inboxView = view === 'project' ? 'project' : 'page'
+    paintInbox()
+    if (inboxView === 'project') refreshAway()
+  }
+
+  /**
+   * Ask the bridge what it knows about the Project rows, once per opening, and write what
+   * is new into each route's bucket the way an event heard there would have been. A bridge
+   * without project-inbox-v1, or one that does not answer in time, leaves the stored list
+   * and one plain line saying so.
+   */
+  async function refreshAway() {
+    if (awayAsked) return
+    awayAsked = true
+    try { away = await readAway() } catch { /* keep what was read */ }
+    if (!PinpointStatus.canProjectInbox(lastHealth)) { awayFresh = 'old'; paintInbox(); return }
+    const rows = Inbox.inboxRows(away, { origin: location.origin, keep: c => !foreign(c) })
+    if (!rows.length) { awayFresh = 'ok'; paintInbox(); return }
+    let res = null
+    try {
+      res = await Promise.race([
+        send({ type: 'inbox', payload: { rows } }),
+        new Promise(done => setTimeout(() => done(null), INBOX_WAIT)),
+      ])
+    } catch { res = null }
+    if (!res?.ok || !Array.isArray(res.items)) { awayFresh = 'failed'; paintInbox(); return }
+    awayFresh = 'ok'
+    const keyOf = new Map(rows.map(r => [r.id, r.key]))
+    const byKey = new Map()
+    for (const item of res.items) {
+      const key = keyOf.get(item?.id)
+      if (!key || item.found !== true) continue
+      if (!byKey.has(key)) byKey.set(key, [])
+      byKey.get(key).push(item)
+    }
+    for (const [key, items] of byKey) {
+      store.update(key, list => {
+        let changed = false
+        for (const item of items) {
+          const c = list.find(x => x.id === item.id)
+          for (const ev of Inbox.freshEvents(c, item)) {
+            if (!Route.applyEvent(c, ev)) continue
+            Inbox.touch(c, ev.type)
+            c.updatedAt = Date.now()
+            changed = true
+          }
+        }
+        return changed
+      }).catch(() => {})
+    }
+    await store.idle()
+    try { away = await readAway() } catch { /* keep what was read */ }
+    paintInbox()
+  }
+
+  const findAway = ref => {
+    const cut = String(ref).lastIndexOf('#')
+    const key = String(ref).slice(0, cut)
+    const id = String(ref).slice(cut + 1)
+    const b = away.find(x => x.key === key)
+    return { key, id, b, c: b?.comments.find(x => x.id === id) ?? null }
+  }
+
+  /** A Project row's Mark seen: written into its own route's bucket, seenAt the maximum. */
+  function seeAway(ref) {
+    const { key, id, b, c } = findAway(ref)
+    if (!c) return
+    Inbox.markSeen(c)
+    paintInbox()
+    store.update(key, list => {
+      const s = list.find(x => x.id === id)
+      if (!s) return false
+      Inbox.markSeen(s)
+      return true
+    }).then(scanAway).catch(() => {})
+    live.announce(`Pin ${c.n} on ${b.route} marked seen`)
+  }
+
+  /** Copy a Project row's route URL. The page is never navigated from here. */
+  async function copyRoute(ref) {
+    const { b, c } = findAway(ref)
+    if (!c) return
+    const href = Inbox.hrefOf(c, location.origin, b.route)
+    let ok = false
+    try { await navigator.clipboard.writeText(href); ok = true } catch { /* no clipboard API here: the old way */ }
+    if (!ok) {
+      const back = root.activeElement
+      const area = el('textarea', 'sr-only')
+      area.value = href
+      root.append(area)
+      area.select()
+      try { ok = document.execCommand('copy') } catch { ok = false }
+      area.remove()
+      back?.focus?.({ preventScroll: true })
+    }
+    say(ok ? `Route copied: ${href}` : `Could not copy. The route is ${href}`, !ok)
   }
 
   /** A pin's place changed while scrolling or after a re-render: once per tick is enough. */
@@ -2571,6 +2734,9 @@
   function openInbox() {
     closePop()
     closeBugPanel()
+    // Every opening starts on This page and may ask the bridge once about the Project rows.
+    inboxView = 'page'
+    awayAsked = false
     inbox.show(true)
     inboxBtn.setAttribute('aria-expanded', 'true')
     paintInbox()
@@ -2823,7 +2989,7 @@
         const c = byServerId(id)
         if (!c || c.status === 'resolved') continue
         // The same handlers as a live event, so a late answer looks like a timely one.
-        if (st.answer && !c.answer) onBridgeEvent({ type: 'reply', id, text: st.answer })
+        if (st.answer && !c.answer) onBridgeEvent({ type: 'reply', id, text: st.answer, requiresResponse: st.requiresResponse === true })
         if (st.progress && !c.progress) onBridgeEvent({ type: 'progress', id, ...st.progress })
         if (st.resolved) onBridgeEvent({ type: 'resolved', id, resolution: st.resolution ?? '' })
       }
@@ -2854,6 +3020,9 @@
       if (hit) {
         hit.answer = ev.text
         if (hit.status !== 'resolved') hit.status = 'answered'
+        // Optional on the bridge's side: absent is a plain answer and clears an earlier question.
+        if (ev.requiresResponse === true) hit.requiresResponse = true
+        else delete hit.requiresResponse
         Inbox.touch(hit, 'reply')
         save()
         render()
@@ -3048,6 +3217,8 @@
     take(record)
     render()
     syncState()
+    // The route left behind is now one of the others, and the new one is not.
+    scanAway()
   }
 
   async function load() {
@@ -3150,6 +3321,8 @@
   await tipLoaded
   // Whatever was answered while this page was not here.
   syncState()
+  // Other routes of this origin, for the Inbox's Project view.
+  scanAway()
   document.addEventListener('visibilitychange', () => { if (!document.hidden) syncState() })
   addEventListener('focus', syncState)
   setInterval(() => { if (!document.hidden) syncState() }, 30000)

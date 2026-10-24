@@ -32,6 +32,8 @@ function recordingBridge(version) {
   const designAsks = []
   /** What the extension said about itself on each call: its version header and its origin. */
   const identities = []
+  /** Every POST /inbox body: the Project view's ask for fresh state. */
+  const inboxAsks = []
   const streams = new Set()
   let seq = 0
   /** Claude's side: an event on the stream the extension is listening to. */
@@ -41,9 +43,11 @@ function recordingBridge(version) {
   }
   /**
    * A bridge started with PINPOINT_TOKEN asks every POST for it. Empty means it does not.
-   * `scope` false answers /health like a bridge from before comment-scope-v1.
+   * `scope` false answers /health like a bridge from before comment-scope-v1, `inbox` false
+   * like one from before project-inbox-v1. `inboxAnswers` is what /inbox knows, by comment id
+   * (batch#n); anything else it reports as not found.
    */
-  const state = { token: '', palette: null, scope: true }
+  const state = { token: '', palette: null, scope: true, inbox: true, inboxAnswers: {} }
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
     identities.push({ path: url.pathname, version: req.headers['x-pinpoint-extension'], origin: req.headers.origin })
@@ -52,8 +56,22 @@ function recordingBridge(version) {
       return json(200, {
         ok: true, version, projectDir: PROJECT.projectDir, pending: 0, backlog: 0, sessions: [PROJECT],
         route: { how: 'auto', projectDir: PROJECT.projectDir, detected: PROJECT.projectDir, detectedName: PROJECT.name },
-        ...(state.scope ? { capabilities: { 'comment-scope-v1': true } } : {}),
+        ...(state.scope || state.inbox
+          ? { capabilities: { ...(state.scope ? { 'comment-scope-v1': true } : {}), ...(state.inbox ? { 'project-inbox-v1': true } : {}) } }
+          : {}),
       })
+    }
+    if (url.pathname === '/inbox' && req.method === 'POST') {
+      if (!state.inbox) return json(404, { ok: false })
+      let body = ''
+      req.on('data', d => { body += d })
+      req.on('end', () => {
+        const asked = JSON.parse(body || '{}')
+        inboxAsks.push(asked)
+        const items = (asked.rows ?? []).map(r => ({ id: r.id, batch: r.batch, found: false, requiresResponse: false, ...(state.inboxAnswers[r.batch] ?? {}) }))
+        json(200, { ok: true, items, dropped: 0, truncated: false })
+      })
+      return
     }
     if (url.pathname === '/events') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' })
@@ -88,7 +106,7 @@ function recordingBridge(version) {
     json(404, { ok: false })
   })
   server.keepAliveTimeout = 0
-  return { server, dispatched, designAsks, state, emit, identities }
+  return { server, dispatched, designAsks, state, emit, identities, inboxAsks }
 }
 
 /** Named colours only: the picks and the page never need a raw value. */
@@ -1508,6 +1526,164 @@ test('the inbox under forced colours and reduced motion, and at 200% zoom with n
     await page.keyboard.press('Escape')
   } finally {
     await page.setViewportSize({ width: 1280, height: 800 })
+  }
+})
+
+// ---------------------------------------------------------------- inbox: Project view
+
+/*
+ * The Project view: comments of the other routes of the cards page's origin, seeded into
+ * their own buckets. The badge stays this page's; nothing here navigates the page.
+ */
+
+const AWAY = '/inbox-away'
+const AWAY2 = '/inbox-spa#/settings'
+
+/** A comment on another route, dispatched as `batch#n`. */
+const awayComment = (id, n, extra = {}) => ({
+  id, n, note: `away note ${n}`, status: 'sent', selector: `[data-n="${n}"]`, tag: 'h3',
+  createdHref: spa(`${AWAY}?tab=${n}`), batch: 'e2e-away', serverN: n, sentTo: PROJECT.projectDir, updatedAt: 1, ...extra,
+})
+
+async function seedAway(key, comments) {
+  await worker.evaluate(([k, list]) => chrome.storage.local.set({ [k]: { v: 2, seq: list.length, comments: list, removed: [] } }), [key, comments])
+}
+
+const awayStored = key => worker.evaluate(async k => (await chrome.storage.local.get(k))[k]?.comments ?? [], key)
+
+async function openProject() {
+  await host('.inbox-btn').click()
+  await host('.inbox.show').waitFor({ timeout: 5000 })
+  await host('.inbox-view[data-view="project"]').click()
+  await host('.inbox-view[data-view="project"][aria-pressed="true"]').waitFor({ timeout: 3000 })
+}
+
+const clearAway = () => worker.evaluate(keys => chrome.storage.local.remove(keys), [v2(AWAY), v2(AWAY2)])
+
+test('the Project view lists other routes of this origin, refreshed from the bridge; Copy route copies, Mark seen writes that route only', { skip: !browser.ok, timeout: 90000 }, async () => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: `http://localhost:${cardsPort}` })
+  bridge.state.inboxAnswers = { 'e2e-away#2': { found: true, status: 'answered', answer: 'Accent or ink? Pick one.', requiresResponse: true } }
+  try {
+    await seedAway(v2(AWAY), [
+      awayComment('away-1', 1, { status: 'answered', question: true, answer: 'It is the muted style.', activityAt: Date.now() }),
+      awayComment('away-2', 2, { question: true }),
+      awayComment('away-3', 3, { status: 'backlog', backlogId: 'bk-1', batch: undefined, serverN: undefined }),
+    ])
+    await seedAway(v2(AWAY2), [awayComment('away-4', 1, { createdHref: spa(AWAY2) })])
+    await seedCards([answered(1, '[data-n="1"]')])
+    await inboxSays(1)
+    const asksBefore = bridge.inboxAsks.length
+    const url = page.url()
+
+    await openProject()
+    // The bridge's answer for #2 is written into its route's bucket and shown as waiting for the user.
+    const input = host('.inbox-sect.attention .inbox-item.input')
+    await input.waitFor({ timeout: 8000 })
+    assert.equal(bridge.inboxAsks.length, asksBefore + 1, 'the bridge was asked other than once')
+    const ask = bridge.inboxAsks.at(-1)
+    assert.deepEqual(ask.rows.map(r => r.id).sort(), ['away-1', 'away-2', 'away-4'])
+    assert.ok(ask.rows.every(r => r.origin === `http://localhost:${cardsPort}` && !('shot' in r) && !('selector' in r)))
+    assert.equal(await input.locator('.inbox-state').innerText(), 'Needs your input')
+    assert.equal(await input.locator('.inbox-route').innerText(), AWAY)
+    assert.equal((await input.locator('.inbox-answer').innerText()).trim(), 'Accent or ink? Pick one.')
+    const away2 = (await awayStored(v2(AWAY))).find(c => c.id === 'away-2')
+    assert.equal(away2.answer, 'Accent or ink? Pick one.')
+    assert.equal(away2.requiresResponse, true)
+
+    assert.deepEqual(await host('.inbox-group').allInnerTexts().then(t => t.map(x => x.toUpperCase())), ['NEEDS ATTENTION (2)', 'IN PROGRESS (1)', 'PARKED (1)'])
+    assert.equal(await host('.inbox-sect.progress .inbox-route').innerText(), AWAY2)
+    assert.equal(await host('.inbox-sect.parked .inbox-route').innerText(), AWAY)
+    assert.equal(await host('.inbox-fallback').count(), 0, 'a bridge that answered needs no line')
+    // This page's comment is not in the Project view, and the badge is still this page's.
+    assert.equal(await host('.inbox-sect .inbox-item').count(), 4)
+    await inboxSays(1)
+
+    // Copy route: the URL the comment was written on, and the page stays where it is.
+    await input.locator('button.inbox-copy').click()
+    await liveSays(new RegExp(`^Route copied: ${spa(`${AWAY}?tab=2`).replace(/[?.]/g, '\\$&')}$`))
+    const copied = await page.evaluate(() => navigator.clipboard.readText()).catch(() => null)
+    if (copied !== null) assert.equal(copied, spa(`${AWAY}?tab=2`))
+    assert.equal(page.url(), url, 'Copy route navigated the page')
+
+    // Mark seen on the answered row: written into that route's bucket, nowhere else.
+    const answeredRow = host('.inbox-sect.attention .inbox-item.answered')
+    assert.equal(await answeredRow.locator('button.inbox-seen').getAttribute('aria-label'), `Mark pin 1 on ${AWAY} seen`)
+    await answeredRow.locator('button.inbox-seen').click()
+    await liveSays(new RegExp(`^Pin 1 on ${AWAY} marked seen$`))
+    const until = Date.now() + 5000
+    let seen = null
+    while (Date.now() < until && !seen?.seenAt) { seen = (await awayStored(v2(AWAY))).find(c => c.id === 'away-1'); await page.waitForTimeout(50) }
+    assert.ok(seen.seenAt >= seen.activityAt, JSON.stringify(seen))
+    await host('.inbox-sect.attention .inbox-item.answered').waitFor({ state: 'detached', timeout: 3000 })
+    await inboxSays(1)
+    const mine = await stored(1)
+    assert.equal(mine[0].seenAt, undefined, 'this page\'s bucket was written')
+
+    // Closing and opening again starts on This page.
+    await page.keyboard.press('Escape')
+    await host('.inbox-btn').click()
+    assert.equal(await host('.inbox-view[data-view="page"]').getAttribute('aria-pressed'), 'true')
+    await page.keyboard.press('Escape')
+  } finally {
+    bridge.state.inboxAnswers = {}
+    await clearAway()
+  }
+})
+
+test('the view switch by keyboard: Up from the first row, Left/Right switch, Down into the list, Escape back to Inbox', { skip: !browser.ok, timeout: 60000 }, async () => {
+  try {
+    await seedAway(v2(AWAY), [awayComment('away-1', 1, { status: 'answered', question: true, answer: 'Yes.', activityAt: Date.now() })])
+    await seedCards([answered(1, '[data-n="1"]')])
+    await inboxSays(1)
+    await host('.inbox-btn').focus()
+    await page.keyboard.press('Enter')
+    await host('.inbox.show').waitFor({ timeout: 5000 })
+    assert.equal((await focusedIn())?.name, 'Pin 1, question, answered: why is 1 grey')
+    await page.keyboard.press('ArrowUp')
+    assert.equal((await focusedIn())?.name, 'This page')
+    assert.equal(await host('.inbox-views').getAttribute('aria-label'), 'Inbox view')
+    await page.keyboard.press('ArrowRight')
+    assert.equal((await focusedIn())?.name, 'Project')
+    await host('.inbox-view[data-view="project"][aria-pressed="true"]').waitFor({ timeout: 3000 })
+    await host('.inbox-item.away').first().waitFor({ timeout: 5000 })
+    await page.keyboard.press('ArrowDown')
+    assert.equal((await focusedIn())?.name, `Copy route: Pin 1 on ${AWAY}, question, answered: away note 1`)
+    await page.keyboard.press('ArrowDown')
+    assert.equal((await focusedIn())?.name, `Mark pin 1 on ${AWAY} seen`)
+    await page.keyboard.press('ArrowUp')
+    await page.keyboard.press('ArrowUp')
+    assert.equal((await focusedIn())?.name, 'Project')
+    await page.keyboard.press('ArrowLeft')
+    assert.equal((await focusedIn())?.name, 'This page')
+    assert.equal(await host('.inbox-view[data-view="page"]').getAttribute('aria-pressed'), 'true')
+    await host('.inbox-sect.attention .inbox-row').waitFor({ timeout: 3000 })
+    await page.keyboard.press('ArrowRight')
+    await page.keyboard.press('Escape')
+    await host('.inbox.show').waitFor({ state: 'hidden', timeout: 3000 })
+    assert.match((await focusedIn())?.name ?? '', /^Open Pinpoint inbox, 1 item needs attention$/)
+  } finally {
+    await clearAway()
+  }
+})
+
+test('a bridge without project-inbox-v1: the Project view lists what this browser stored and says so in one line', { skip: !browser.ok, timeout: 60000 }, async () => {
+  bridge.state.inbox = false
+  try {
+    await seedAway(v2(AWAY), [awayComment('away-2', 2, { question: true })])
+    await seedCards([answered(1, '[data-n="1"]')])
+    await inboxSays(1)
+    const asksBefore = bridge.inboxAsks.length
+    await openProject()
+    await host('.inbox-fallback').waitFor({ timeout: 5000 })
+    assert.equal(await host('.inbox-fallback').innerText(), 'Stored in this browser only: the connected Pinpoint plugin cannot refresh other pages.')
+    assert.equal(await host('.inbox-fallback').count(), 1)
+    assert.equal(await host('.inbox-sect.progress .inbox-route').innerText(), AWAY)
+    await page.waitForTimeout(300)
+    assert.equal(bridge.inboxAsks.length, asksBefore, 'an old bridge was asked')
+    await page.keyboard.press('Escape')
+  } finally {
+    bridge.state.inbox = true
+    await clearAway()
   }
 })
 

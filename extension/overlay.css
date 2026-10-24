@@ -1193,7 +1193,23 @@ button.mode.on {
 }
 
 .inbox-head .spacer { flex: 1; }
-.inbox-title { font-weight: var(--pp-weight-semibold); }
+
+/* The view switch: two buttons, the shown view pressed. */
+.inbox-views { display: flex; gap: var(--pp-space-2); }
+
+.inbox button.inbox-view {
+  padding: var(--pp-space-3) var(--pp-space-8);
+  border-color: transparent;
+  color: var(--pp-dim);
+  font-size: var(--pp-text-sm);
+}
+
+.inbox button.inbox-view[aria-pressed="true"] {
+  border-color: var(--pp-line);
+  background: var(--pp-wash);
+  color: var(--pp-fg);
+  font-weight: var(--pp-weight-semibold);
+}
 
 button.inbox-close {
   padding: 0 var(--pp-space-4);
@@ -1240,7 +1256,9 @@ button.inbox-close {
 .inbox-state { margin-left: auto; color: var(--pp-dim); }
 .inbox-item.failed .inbox-state,
 .inbox-item.unsaved .inbox-state { color: var(--pp-danger-fg); }
-.inbox-item.answered .inbox-state { color: var(--pp-answer-fg); }
+.inbox-item.answered .inbox-state,
+.inbox-item.input .inbox-state { color: var(--pp-answer-fg); }
+.inbox-item.input .inbox-state { font-weight: var(--pp-weight-semibold); }
 .inbox-item.edited .inbox-state { color: var(--pp-frozen-fg); }
 .inbox-item.resolved .inbox-state,
 .inbox-item.completed .inbox-state { color: var(--pp-resolved-fg); }
@@ -1277,6 +1295,40 @@ button.inbox-close {
 .inbox button.inbox-seen {
   margin-left: var(--pp-space-6);
   padding: var(--pp-space-3) var(--pp-space-8);
+  font-size: var(--pp-text-sm);
+}
+
+/* A Project row is not a button: nothing on it navigates. Its actions sit under it. */
+.inbox-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--pp-space-2);
+  margin-top: var(--pp-space-4);
+  padding: var(--pp-space-4) var(--pp-space-6);
+}
+
+.inbox-route {
+  overflow: hidden;
+  color: var(--pp-dim);
+  font-family: var(--pp-font-mono);
+  font-size: var(--pp-text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-acts { display: flex; flex-wrap: wrap; gap: var(--pp-space-4); padding: 0 var(--pp-space-6) var(--pp-space-2); }
+
+.inbox-acts button.inbox-copy,
+.inbox-acts button.inbox-seen {
+  margin-left: 0;
+  padding: var(--pp-space-3) var(--pp-space-8);
+  font-size: var(--pp-text-sm);
+}
+
+/* One plain line when the list is only what this browser stored. */
+.inbox-fallback {
+  padding: var(--pp-space-6) var(--pp-space-10) 0;
+  color: var(--pp-dim);
   font-size: var(--pp-text-sm);
 }
 
@@ -1354,6 +1406,7 @@ button:focus-visible,
   .scope-outline { border-color: Highlight; }
   .scope-opt input:focus-visible { outline-color: Highlight; }
   .inbox { border-color: CanvasText; }
+  .inbox button.inbox-view[aria-pressed="true"] { border-color: Highlight; }
   .inbox-badge { forced-color-adjust: none; background: Highlight; color: HighlightText; border-color: CanvasText; }
   .bar button.inbox-btn.attention { border-color: Highlight; }
   .inbox-answer { border-left-color: CanvasText; }

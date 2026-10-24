@@ -447,7 +447,26 @@ reply work as before. **Mark seen** clears an answer, edit or resolution from th
 opening a pin's card does the same, opening the list does not. A failed dispatch stays until
 a dispatch succeeds. Two tabs on one route share what has been seen. From the keyboard,
 Enter on Inbox opens the panel at its first row, the arrows move through it, and Escape
-returns to Inbox. Comments on other routes are not listed yet.
+returns to Inbox.
+
+An answer that asks you something reads **Needs your input** instead of Answered. The session
+marks it so by passing `requiresResponse: true` to `reply`; the flag is optional, and an answer
+without it is an ordinary answer.
+
+### See the rest of the project
+
+The panel's header switches between **This page** and **Project**. Project lists the
+comments on the other routes of the same origin (same scheme, host and port) that were sent
+to this page's project: what needs attention first, then what is in progress and what is
+parked, each row with its route (path plus a `#/` route), kind, state and the start of the
+note. Finished work stays in This page. Each opening of Project asks the bridge once what
+it knows about those comments (`POST /inbox`), so an answer that arrived while that route
+was not open shows here, and is written to that route's pins as if the page had heard it.
+**Copy route** copies the URL the comment was written on; Pinpoint never navigates the page
+for you. **Mark seen** clears an item in its own route's pins. The Inbox badge still counts
+this page only. With a plugin older than this feature (no `project-inbox-v1`), Project still
+lists what this browser stored and says so in one line. From the keyboard, Up from the
+first row reaches the switch, Left and Right change the view, and Down goes back to the list.
 
 ### What rides along with a comment
 

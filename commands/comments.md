@@ -15,7 +15,8 @@ Fetch pending comments from the browser toolbar and work through them.
    clears the pin in the browser, so only resolve what you actually fixed.
 
 A comment marked ❓ is a question, not a change request. Answer it by calling `reply`
-with that comment's id — the answer lands on its pin — and change no files for it.
+with that comment's id — the answer lands on its pin — and change no files for it. If the
+answer asks the user a question or needs their decision, also pass `requiresResponse: true`.
 
 If a comment is ambiguous, ask rather than guessing — say which one and why.
 

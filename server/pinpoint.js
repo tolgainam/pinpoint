@@ -33,6 +33,7 @@ import {
   sectionRange, parseItems, appendOpen, startItem, finishItem, appendHistory, ProjectBusyError,
 } from './project-files.js'
 import { sanitiseScope, scopeFacts, SCOPE_CAPABILITY } from './scope.js'
+import { inboxAnswer, pickFlag, INBOX_CAPABILITY } from './inbox.js'
 
 const PORT = Number(process.env.PINPOINT_PORT ?? 8788)
 /**
@@ -603,6 +604,7 @@ const mcp = new Server(
       'trust its screenshot over its selector.',
       'Comments the user parked instead of dispatching live in .pinpoint/backlog.md — reach them',
       'with list_backlog, start_backlog_item, and finish_backlog_item, never by editing that file by hand.',
+      'Set requiresResponse on a reply only when the answer asks the user a question or needs their decision.',
       'Use reply without an id to send a short status line back to the toolbar.',
       'report_progress puts a line on the pin while you work — "working" when you start,',
       '"edited" with the files once they have changed. It is optional and it never closes',
@@ -641,13 +643,14 @@ const TOOLS = [
   {
     name: 'reply',
     annotations: { title: 'Reply in the browser', readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-    description: 'Send text back to the browser. With an id it lands on that comment\'s pin card and is how a ❓ question gets answered; without one it is a passing status toast. `text` is required: it is the answer itself.',
+    description: 'Send text back to the browser. With an id it lands on that comment\'s pin card and is how a ❓ question gets answered; without one it is a passing status toast. `text` is required: it is the answer itself. Set requiresResponse to true when the answer asks the user a question or needs a decision from them, so the toolbar inbox shows it as waiting for their input.',
     inputSchema: {
       type: 'object',
       properties: {
         text: { type: 'string', description: 'The answer, in full, as the user should read it on the pin card. The user looks at the browser, not the terminal, so do not leave the answer only in the terminal. Give this or message; one of them is required.' },
         message: { type: 'string', description: 'The same as text. Use either one.' },
         id: { type: 'string', description: 'Comment id to answer, e.g. 20260822-014455-a1b2#1. Omit for a general status line.' },
+        requiresResponse: { type: 'boolean', description: 'Optional. true when the answer asks the user a question or needs their decision before you can continue. Leave it out for a plain answer.' },
       },
       additionalProperties: false,
     },
@@ -787,13 +790,16 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
     // Kept on the comment, on disk, before anything is sent. The event is a hint that says "look
     // now"; this is what the page reads when it did not hear the hint, and what a follow-up round
     // can quote.
+    // Whether the answer waits on the user. Optional and never relied on: absent, or anything
+    // but a literal true, is a plain answer, and a later answer without it clears it.
+    const requiresResponse = pickFlag(args)
     if (args.id) {
       const [batchId, nRaw] = String(args.id).split('#')
       const b = STATE_ID.test(String(args.id)) ? readBatch(batchId) : null
       const c = b?.comments.find(x => x.n === Number(nRaw))
-      if (c) { c.answer = text; c.answeredAt = new Date().toISOString(); writeBatch(b) }
+      if (c) { c.answer = text; c.answeredAt = new Date().toISOString(); c.requiresResponse = requiresResponse; writeBatch(b) }
     }
-    const shown = await tell({ type: 'reply', text, id: args.id ? String(args.id) : undefined })
+    const shown = await tell({ type: 'reply', text, id: args.id ? String(args.id) : undefined, ...(args.id ? { requiresResponse } : {}) })
     return { content: [{ type: 'text', text: `${args.id ? `answered ${args.id}` : 'sent'}${undelivered(shown)}` }] }
   }
 
@@ -1965,6 +1971,23 @@ async function handleDesignSystem(req, res) {
   sendJson(res, 200, headers, { ok: true, ...chipData(merged), summary: summaryLine(merged), stale: rec.stale })
 }
 
+// ---------------------------------------------------------------- inbox
+
+/**
+ * POST /inbox: the page lists its project's comments from other routes, and gets back what
+ * the batch files say about each. The asking page is the request's Origin when that is a
+ * local page, and otherwise the tab origin the extension's worker adds; a row of any other
+ * origin is dropped. Nothing is written, and no path or project leaves this answer.
+ */
+async function handleInbox(req, res) {
+  const got = await gate(req, res)
+  if (!got) return
+  const { origin, headers, payload } = got
+  const claimed = typeof payload?.page === 'string' && /^https?:\/\/[^\s/?#]{1,180}$/.test(payload.page) ? payload.page : null
+  const page = origin && LOCAL_PAGE.test(origin) ? origin : claimed
+  sendJson(res, 200, headers, inboxAnswer(payload, page, id => (/^[\w-]{6,64}$/.test(id) ? readBatch(id) : null)))
+}
+
 // ---------------------------------------------------------------- backlog intake
 
 /** Notes are prose; a backlog needs a scannable title. First line, capped, emphasis stripped. */
@@ -2106,7 +2129,7 @@ const server = createServer((req, res) => {
       const c = readBatch(batchId)?.comments.find(x => x.n === Number(nRaw))
       if (!c) continue
       const st = {}
-      if (c.answer) st.answer = c.answer
+      if (c.answer) { st.answer = c.answer; st.requiresResponse = c.requiresResponse === true }
       if (c.status === 'resolved') { st.resolved = true; if (c.resolution) st.resolution = c.resolution }
       if (c.progress && c.status !== 'resolved') st.progress = { state: c.progress.state, note: c.progress.note, files: c.progress.files }
       if (Object.keys(st).length) states[id] = st
@@ -2130,7 +2153,7 @@ const server = createServer((req, res) => {
         sessions: sessionList(), route: { ...shown, ...(error ? { error } : {}) },
         // What this bridge can carry. The extension offers group scope only when it sees
         // its flag here: an older bridge would drop the scope and still accept the comment.
-        capabilities: { [SCOPE_CAPABILITY]: true },
+        capabilities: { [SCOPE_CAPABILITY]: true, [INBOX_CAPABILITY]: true },
         extension: extensionSeen
           ? { version: extensionSeen.version, browser: extensionSeen.browser, secondsAgo: Math.round((Date.now() - extensionSeen.at) / 1000) }
           : null,
@@ -2204,6 +2227,16 @@ const server = createServer((req, res) => {
     handleDesignSystem(req, res).catch(err => {
       console.error('[pinpoint] design-system request failed:', err)
       try { res.writeHead(500).end('error') } catch { /* already gone */ }
+    })
+    return
+  }
+
+  // The inbox's Project view: what the bridge knows about comments of routes that are not
+  // open. Read-only, behind the same gate as the other page-facing POSTs.
+  if (url.pathname === '/inbox' && req.method === 'POST') {
+    handleInbox(req, res).catch(err => {
+      console.error('[pinpoint] inbox request failed:', err)
+      if (!res.headersSent) send(res, 500, cors(origin), 'inbox failed')
     })
     return
   }

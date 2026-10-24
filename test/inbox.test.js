@@ -30,7 +30,9 @@ test('every row of the needs-attention table', () => {
     ['progress edited, seen', c({ status: 'sent', progress: { state: 'edited' }, activityAt: 5, seenAt: 5 }), null],
     ['answered, unseen', c({ status: 'answered', question: true, answer: 'yes', activityAt: 5 }), 'answered'],
     ['answered, seen', c({ status: 'answered', question: true, answer: 'yes', activityAt: 5, seenAt: 6 }), null],
-    ['answered with requiresResponse: not read in this part', c({ status: 'answered', answer: 'y', requiresResponse: true, activityAt: 5, seenAt: 6 }), null],
+    ['answered with requiresResponse, unseen', c({ status: 'answered', answer: 'y', requiresResponse: true, activityAt: 5 }), 'input'],
+    ['answered with requiresResponse, seen', c({ status: 'answered', answer: 'y', requiresResponse: true, activityAt: 5, seenAt: 6 }), null],
+    ['answered with requiresResponse anything but true', c({ status: 'answered', answer: 'y', requiresResponse: 'yes', activityAt: 5 }), 'answered'],
     ['resolved, unseen', c({ status: 'resolved', activityAt: 5 }), 'resolved'],
     ['resolved, seen', c({ status: 'resolved', activityAt: 5, seenAt: 5 }), null],
     ['resolved question with its answer, unseen', c({ status: 'resolved', question: true, answer: 'y', activityAt: 5 }), 'answered'],
@@ -57,8 +59,8 @@ test('detached counts only on its own creation URL, unresolved, and never for a 
   assert.equal(I.reason(c({ status: 'answered', answer: 'y', activityAt: 2 }), ctx('detached')), 'answered')
 })
 
-test('only answered, edited, resolved and completed clear on seen', () => {
-  assert.deepEqual(I.REASON_ORDER.filter(I.clearsOnSeen), ['answered', 'edited', 'resolved', 'completed'])
+test('only input, answered, edited, resolved and completed clear on seen', () => {
+  assert.deepEqual(I.REASON_ORDER.filter(I.clearsOnSeen), ['input', 'answered', 'edited', 'resolved', 'completed'])
 })
 
 // ---------------------------------------------------------------- badge

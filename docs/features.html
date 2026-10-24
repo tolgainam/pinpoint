@@ -1136,8 +1136,27 @@
     <p>
       <strong>From the keyboard.</strong> Inbox is a toolbar button like the others. Enter
       opens the panel with focus on the first row, the up and down arrows move through it,
-      Home and End jump to the ends, and Escape closes it and returns to Inbox. Comments on
-      other routes are not listed yet.
+      Home and End jump to the ends, and Escape closes it and returns to Inbox.
+    </p>
+    <p>
+      <strong>An answer that waits for you.</strong> When an answer asks you a question
+      or needs a decision, the session says so with the optional
+      <code>requiresResponse</code> flag on <code>reply</code>, and the row reads
+      <strong>Needs your input</strong> instead of Answered. Without the flag an answer is
+      an ordinary answer.
+    </p>
+    <p>
+      <strong>The rest of the project.</strong> The header switches between
+      <strong>This page</strong> and <strong>Project</strong>. Project lists the comments on
+      the other routes of the same origin that were sent to this page's project: what needs
+      attention, what is in progress and what is parked, each with its route, kind, state and
+      the start of the note. Each time you open it, Pinpoint asks the plugin once what it
+      knows about them, so an answer that arrived while that route was closed shows up here.
+      <strong>Copy route</strong> copies the address the comment was written on; Pinpoint
+      does not navigate the page for you. <strong>Mark seen</strong> clears an item on its
+      own route. The badge still counts this page only. With an older plugin, Project lists
+      what the browser stored and says so in one line. From the keyboard, Up from the first
+      row reaches the switch, Left and Right change the view, and Down returns to the list.
     </p>
   </div>
 </section>
@@ -1410,7 +1429,7 @@
       <tr><td><code>list_comments</code></td><td>The pending batch, rendered as a brief.</td></tr>
       <tr><td><code>report_progress</code></td><td>Puts a status line on the pin. Never closes anything.</td></tr>
       <tr><td><code>resolve_comment</code></td><td>Closes a pin and returns a fresh crop of the element to check against.</td></tr>
-      <tr><td><code>reply</code></td><td>Answers a question on its pin, or sends a status line to the toolbar.</td></tr>
+      <tr><td><code>reply</code></td><td>Answers a question on its pin, or sends a status line to the toolbar. Optional <code>requiresResponse</code> marks an answer that asks the user something.</td></tr>
       <tr><td><code>list_backlog</code></td><td>What was parked instead of dispatched.</td></tr>
       <tr><td><code>start_backlog_item</code> · <code>finish_backlog_item</code></td><td>Work a parked item without hand-editing the file.</td></tr>
     </tbody>

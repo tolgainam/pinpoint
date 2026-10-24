@@ -13,6 +13,8 @@
  *     Clear, Close; Pins and Inbox only while the route has comments.
  *   - Inbox (inbox.js) opens a panel and moves focus to its first row. Up/Down and
  *     Home/End move through the rows' buttons, Escape closes it and returns to Inbox.
+ *     Its header switches between This page and Project: Left/Right on the switch, Down
+ *     to the first row, Up from the first row back to the switch.
  *   - The Pins item (shown when there are pins) enters pin navigation: Enter or Down to the
  *     first pin, Up to the last. Pins never take a tab stop of their own (tabindex=-1).
  *   - On a pin: arrows move in document order (top, then left, then pin number), Home/End

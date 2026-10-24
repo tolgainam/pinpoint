@@ -376,6 +376,8 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
   if (msg?.type === 'dispatch') { post('/dispatch', routed(msg.payload, sender, msg.pick)).then(respond); return true }
   if (msg?.type === 'backlog') { post('/backlog', routed(msg.payload, sender, msg.pick)).then(respond); return true }
   if (msg?.type === 'design-system') { post('/design-system', routed(msg.payload, sender, msg.pick)).then(respond); return true }
+  // The inbox's Project view: fresh bridge state for comments of routes that are not open.
+  if (msg?.type === 'inbox') { post('/inbox', routed(msg.payload, sender)).then(respond); return true }
   if (msg?.type === 'recapture') { post('/recapture', msg.payload).then(respond); return true }
   // Whether the toolbar was left open in this tab. Per tab, and gone with the tab or the
   // browser session: a new tab starts hidden, as it always did.

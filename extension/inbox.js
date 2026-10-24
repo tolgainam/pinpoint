@@ -1,6 +1,9 @@
 /**
- * Pinpoint inbox, "This page" view: which of this route's comments need attention, the
- * count on the toolbar's Inbox button, and the panel that lists them.
+ * Pinpoint inbox: which of this route's comments need attention, the count on the toolbar's
+ * Inbox button, and the panel that lists them, with two views. "This page" is this route's
+ * comments; "Project" is the project's comments on the other routes of this origin, read
+ * from their storage buckets and refreshed from the bridge (POST /inbox) when it offers
+ * project-inbox-v1.
  *
  * Loaded before content.js and left on the isolated world's global as `PinpointInbox`, like
  * a11y.js and route.js. The projection half is pure, so the Node tests import this file and
@@ -18,6 +21,7 @@
  *   progress working                                    no
  *   progress edited, unseen                             yes  "edited"     the pin card or Mark seen
  *   answered, unseen                                    yes  "answered"   the pin card or Mark seen
+ *   answered with requiresResponse, unseen              yes  "input"      the pin card or Mark seen
  *   resolved, unseen                                    yes  "resolved"   the pin card or Mark seen
  *     (a question with its answer reads "answered"; a finished backlog item "completed")
  *   backlog, saved                                      no
@@ -28,7 +32,14 @@
  *
  * The badge is the number of comments with a reason, not the number of reasons. Seen is
  * stored as `seenAt` on the comment and merged by maximum across tabs (route.js merge).
- * `requiresResponse` is not read here: absent means false, so an answer is seen like any other.
+ * `requiresResponse` is the bridge's optional flag on an answer: true reads "Needs your
+ * input" instead of "Answered". Absent means false, so an answer is seen like any other.
+ *
+ * The Project view uses the same projection without a place (no element is on screen for
+ * another route, so nothing reads as detached). It lists what needs attention, what is in
+ * progress and what is parked; "Recently done" stays with This page. A row there offers
+ * Copy route and, when looking clears it, Mark seen, which is written into that route's
+ * bucket by the same merge (seenAt takes the maximum). It never navigates the page.
  */
 ;(function () {
   // ------------------------------------------------------------ projection (pure)
@@ -52,7 +63,7 @@
     if (c.status === 'pending' && c.deliveryError) return 'failed'
     if (c.status === 'backlog' && c.unsaved) return 'unsaved'
     const fresh = unseen(c)
-    if (c.status === 'answered' && fresh) return 'answered'
+    if (c.status === 'answered' && fresh) return c.requiresResponse === true ? 'input' : 'answered'
     if (c.status === 'resolved') {
       if (!fresh) return null
       return c.question && c.answer ? 'answered' : c.backlogId ? 'completed' : 'resolved'
@@ -65,14 +76,15 @@
   }
 
   /** Reasons the user clears by looking; the others clear only when the problem is fixed. */
-  const SEEN_CLEARS = new Set(['answered', 'edited', 'resolved', 'completed'])
+  const SEEN_CLEARS = new Set(['input', 'answered', 'edited', 'resolved', 'completed'])
   const clearsOnSeen = r => SEEN_CLEARS.has(r)
 
   /** The order reasons are listed in: what is broken first, then what is new. */
-  const REASON_ORDER = ['failed', 'unsaved', 'answered', 'edited', 'resolved', 'completed', 'detached']
+  const REASON_ORDER = ['failed', 'unsaved', 'input', 'answered', 'edited', 'resolved', 'completed', 'detached']
   const REASON_LABEL = {
     failed: 'Not delivered',
     unsaved: 'Not saved to backlog',
+    input: 'Needs your input',
     answered: 'Answered',
     edited: 'Edited',
     resolved: 'Resolved',
@@ -136,7 +148,7 @@
       seen: !!why && clearsOnSeen(why),
       name: `Pin ${Number(c.n) || 0}, ${KIND_WORD[kind]}, ${state.toLowerCase()}${note ? `: ${note}` : ''}`,
     }
-    if (why === 'answered' && c.answer) row.answer = line(c.answer, MAX_ANSWER)
+    if ((why === 'answered' || why === 'input') && c.answer) row.answer = line(c.answer, MAX_ANSWER)
     if (why === 'failed') row.detail = line(c.deliveryError, MAX_HINT)
     return row
   }
@@ -177,6 +189,143 @@
     return { count, sections }
   }
 
+  // ------------------------------------------------------------ project (pure)
+
+  const PREFIX = 'pinpoint:v2:'
+  /** Rows sent to POST /inbox at most; the bridge reads no more than this either. */
+  const MAX_ASK = 100
+  const MAX_ASK_NOTE = 200
+  const MAX_ROUTE = 120
+
+  const byText = (a, b) => (a < b ? -1 : a > b ? 1 : 0)
+
+  /** The route of a bucket key of `origin` (pathname and route hash), or null for any other key. */
+  function routeOfKey(key, origin) {
+    const head = PREFIX + String(origin ?? '')
+    if (typeof key !== 'string' || !origin || !key.startsWith(head)) return null
+    const rest = key.slice(head.length)
+    return rest.startsWith('/') ? rest : null
+  }
+
+  /**
+   * The other routes' buckets of `origin` in `all` (what chrome.storage.local holds), as
+   * `{ key, route, comments }`, by route. The bucket `current` is This page's and left out.
+   */
+  function buckets(all, origin, current) {
+    const out = []
+    for (const [key, rec] of Object.entries(all && typeof all === 'object' ? all : {})) {
+      if (key === current) continue
+      const route = routeOfKey(key, origin)
+      if (route == null || !rec || !Array.isArray(rec.comments)) continue
+      const comments = rec.comments.filter(c => c && typeof c === 'object' && typeof c.id === 'string' && c.id)
+      if (comments.length) out.push({ key, route, comments })
+    }
+    return out.sort((a, b) => byText(a.route, b.route))
+  }
+
+  /** Where Copy route points: the URL the comment was written on, else the route on this origin. */
+  function hrefOf(c, origin, route) {
+    try {
+      if (typeof c.createdHref === 'string' && new URL(c.createdHref).origin === origin) return c.createdHref
+    } catch { /* not a URL */ }
+    return `${origin}${route}`
+  }
+
+  /** A row's section in the Project view, or null when the view leaves it out. */
+  function projectSection(c, why) {
+    if (why) return 'attention'
+    if (c.status === 'backlog') return 'parked'
+    if (c.status === 'sent') return 'progress'
+    return null
+  }
+
+  /**
+   * The Project view of `list` (from `buckets`). `keep(c)` says whether a comment belongs
+   * to the routed project. Returns `{ count, sections }` like `view`; each row also has its
+   * `route`, `key`, `href` and a `ref` (key#id) the panel acts on.
+   * @param {{ key: string, route: string, comments: any[] }[]} list
+   * @param {{ origin?: string, keep?: (c: any) => boolean }} [opts]
+   */
+  function projectView(list, { origin = '', keep = undefined } = {}) {
+    const by = new Map([['attention', []], ['progress', []], ['parked', []]])
+    let count = 0
+    for (const b of Array.isArray(list) ? list : []) {
+      const route = line(b.route, MAX_ROUTE)
+      for (const c of b.comments ?? []) {
+        if (!c || typeof c !== 'object' || (keep && !keep(c))) continue
+        const why = reason(c)
+        const sect = projectSection(c, why)
+        if (!sect) continue
+        if (why) count++
+        const row = rowOf(c, why)
+        row.route = route
+        row.key = b.key
+        row.ref = `${b.key}#${c.id}`
+        row.href = hrefOf(c, origin, b.route)
+        row.name = `Pin ${row.n} on ${route}, ${KIND_WORD[row.kind]}, ${row.state.toLowerCase()}${row.note ? `: ${row.note}` : ''}`
+        row.at = Math.max(time(c.activityAt), time(c.updatedAt))
+        by.get(sect).push(row)
+      }
+    }
+    const byRoute = (a, b) => byText(a.route, b.route) || a.n - b.n
+    by.get('attention').sort((a, b) => REASON_ORDER.indexOf(a.reason) - REASON_ORDER.indexOf(b.reason) || newest(a, b))
+    by.get('progress').sort(byRoute)
+    by.get('parked').sort(byRoute)
+    const sections = []
+    for (const s of SECTIONS) {
+      const rows = by.get(s.id)
+      if (!rows?.length) continue
+      for (const r of rows) delete r.at
+      sections.push({ id: s.id, title: s.title, total: rows.length, rows: rows.slice(0, CAP), more: Math.max(0, rows.length - CAP) })
+    }
+    return { count, sections }
+  }
+
+  /**
+   * The compact rows POST /inbox takes: dispatched, unresolved comments of these buckets,
+   * at most MAX_ASK. No screenshots and no element facts: only what the bridge needs to find
+   * the comment and the page needs to match the answer.
+   * @param {{ key: string, route: string, comments: any[] }[]} list
+   * @param {{ origin?: string, keep?: (c: any) => boolean }} [opts]
+   */
+  function inboxRows(list, { origin = '', keep = undefined } = {}) {
+    const out = []
+    for (const b of Array.isArray(list) ? list : []) {
+      for (const c of b.comments ?? []) {
+        if (out.length >= MAX_ASK) return out
+        if (!c?.batch || !c.serverN || c.status === 'resolved' || c.status === 'backlog' || (keep && !keep(c))) continue
+        /** @type {Record<string, any>} */
+        const row = {
+          id: c.id, key: b.key, origin, kind: kindOf(c), state: stateLabel(c),
+          note: line(c.note, MAX_ASK_NOTE), batch: `${c.batch}#${c.serverN}`,
+        }
+        if (typeof c.createdHref === 'string') row.createdHref = c.createdHref
+        if (time(c.seenAt)) row.seenAt = time(c.seenAt)
+        if (time(c.updatedAt)) row.updatedAt = time(c.updatedAt)
+        out.push(row)
+      }
+    }
+    return out
+  }
+
+  /**
+   * The bridge events a fresh /inbox item stands for, against the stored comment `c`: the
+   * same events the page would have heard had it been open, so route.js applies them.
+   */
+  function freshEvents(c, item) {
+    if (!c || !item || item.found !== true || c.status === 'resolved') return []
+    const id = item.batch ?? `${c.batch}#${c.serverN}`
+    const evs = []
+    if (typeof item.answer === 'string' && item.answer.trim() && item.answer !== c.answer) {
+      evs.push({ type: 'reply', id, text: item.answer, requiresResponse: item.requiresResponse === true })
+    }
+    if (item.progress && item.status !== 'resolved' && item.progress.state !== c.progress?.state) {
+      evs.push({ type: 'progress', id, state: item.progress.state, note: item.progress.note ?? '', files: item.progress.files ?? [] })
+    }
+    if (item.status === 'resolved') evs.push({ type: 'resolved', id, resolution: item.resolution ?? '' })
+    return evs
+  }
+
   /** The number of comments needing attention. */
   const badge = (list, ctxOf) => view(list, ctxOf).count
 
@@ -215,53 +364,117 @@
   }
 
   /**
-   * The panel. `onJump(id)` goes to a comment's pin, `onSeen(id)` marks it seen. Built once;
-   * `paint(model)` fills it from `view()` and keeps focus on the comment it was on.
+   * The panel. `onJump(id)` goes to a comment's pin, `onSeen(id)` marks it seen,
+   * `onView(view)` switches between 'page' and 'project', and a Project row's
+   * `onCopy(ref)` and `onSeenAway(ref)` copy its route and mark it seen in its own bucket.
+   * Built once; `paint(model)` fills it from `view()` or `projectView()` and keeps focus on
+   * the comment it was on.
    *
-   * Keyboard: Up/Down move through every button in the list, Home/End jump to the first and
-   * last. Escape is content.js's, in its one Escape handler, and returns to the Inbox button.
+   * Keyboard: the view switch is two buttons in the header. Left/Right on either moves to
+   * the other and shows its view; Down goes to the first row. In the list, Up/Down move
+   * through every button, Up from the first goes back to the switch, Home/End jump to the
+   * first and last. Escape is content.js's, in its one Escape handler, and returns to the
+   * Inbox button.
    */
-  function panel({ onJump, onSeen, onClose }) {
+  function panel({ onJump, onSeen, onClose, onView = undefined, onCopy = undefined, onSeenAway = undefined }) {
     const node = el('div', 'inbox')
     node.setAttribute('role', 'dialog')
     node.setAttribute('aria-label', 'Pinpoint inbox')
     const head = el('div', 'inbox-head')
-    // The one view this release has. A second view (Project) arrives as a view switch here,
-    // shown only when the bridge advertises it.
-    const title = el('div', 'inbox-title', 'This page')
-    title.id = 'pp-inbox-title'
+    const views = el('div', 'inbox-views')
+    views.setAttribute('role', 'group')
+    views.setAttribute('aria-label', 'Inbox view')
+    const viewBtn = (id, text) => {
+      const b = el('button', 'inbox-view', text)
+      b.type = 'button'
+      b.dataset.view = id
+      b.setAttribute('aria-pressed', id === 'page' ? 'true' : 'false')
+      b.onclick = () => onView?.(id)
+      return b
+    }
+    const pageBtn = viewBtn('page', 'This page')
+    const projectBtn = viewBtn('project', 'Project')
+    views.append(pageBtn, projectBtn)
     const close = el('button', 'inbox-close', '✕')
     close.type = 'button'
     close.setAttribute('aria-label', 'Close inbox')
     close.onclick = () => onClose?.()
-    head.append(title, el('span', 'spacer'), close)
+    head.append(views, el('span', 'spacer'), close)
     const body = el('div', 'inbox-body')
     node.append(head, body)
+    let shown = 'page'
 
     const buttons = () => [...body.querySelectorAll('button')]
+    const pressed = () => (shown === 'project' ? projectBtn : pageBtn)
 
     node.addEventListener('keydown', ev => {
-      const list = buttons()
-      const i = list.indexOf(ev.target)
-      if (i < 0 || !list.length) return
       let to = null
-      if (ev.key === 'ArrowDown') to = list[Math.min(i + 1, list.length - 1)]
-      else if (ev.key === 'ArrowUp') to = list[Math.max(i - 1, 0)]
-      else if (ev.key === 'Home') to = list[0]
-      else if (ev.key === 'End') to = list[list.length - 1]
-      else return
+      if (ev.target === pageBtn || ev.target === projectBtn) {
+        if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight') {
+          const other = ev.target === pageBtn ? projectBtn : pageBtn
+          to = other
+          onView?.(other.dataset.view)
+        } else if (ev.key === 'ArrowDown') to = buttons()[0] ?? null
+        else return
+        if (!to) return
+      } else {
+        const list = buttons()
+        const i = list.indexOf(ev.target)
+        if (i < 0 || !list.length) return
+        if (ev.key === 'ArrowDown') to = list[Math.min(i + 1, list.length - 1)]
+        else if (ev.key === 'ArrowUp') to = i === 0 ? pressed() : list[i - 1]
+        else if (ev.key === 'Home') to = list[0]
+        else if (ev.key === 'End') to = list[list.length - 1]
+        else return
+      }
       ev.preventDefault()
       ev.stopPropagation()
       to.focus({ preventScroll: false })
     })
 
+    /** A Project row: what it is and where, then Copy route and, when looking clears it, Mark seen. */
+    function projectItem(r) {
+      const li = el('li', `inbox-item away${r.reason ? ` ${r.reason}` : ''}`)
+      const info = el('div', 'inbox-info')
+      const top = el('span', 'inbox-line')
+      top.append(el('span', 'inbox-n', `#${r.n}`), el('span', `inbox-kind ${r.kind}`, r.kind), el('span', 'inbox-state', r.state))
+      info.append(top, el('span', 'inbox-route', r.route), el('span', 'inbox-note', r.note || '(no note)'))
+      li.append(info)
+      if (r.answer) li.append(el('div', 'inbox-answer', r.answer))
+      if (r.detail) li.append(el('div', 'inbox-detail', r.detail))
+      const acts = el('div', 'inbox-acts')
+      const copy = el('button', 'inbox-copy', 'Copy route')
+      copy.type = 'button'
+      copy.dataset.id = r.ref
+      copy.dataset.act = 'copy'
+      copy.setAttribute('aria-label', `Copy route: ${r.name}`)
+      copy.onclick = () => onCopy?.(r.ref)
+      acts.append(copy)
+      if (r.seen) {
+        const seen = el('button', 'inbox-seen', 'Mark seen')
+        seen.type = 'button'
+        seen.dataset.id = r.ref
+        seen.dataset.act = 'seen'
+        seen.setAttribute('aria-label', `Mark pin ${r.n} on ${r.route} seen`)
+        seen.onclick = () => onSeenAway?.(r.ref)
+        acts.append(seen)
+      }
+      li.append(acts)
+      return li
+    }
+
     function paint(model) {
+      const view = model.view === 'project' ? 'project' : 'page'
+      shown = view
+      pageBtn.setAttribute('aria-pressed', String(view === 'page'))
+      projectBtn.setAttribute('aria-pressed', String(view === 'project'))
       // Keep the keyboard on the comment it was on, wherever its row went.
       const was = node.contains(node.getRootNode().activeElement) ? node.getRootNode().activeElement : null
       const keep = was?.dataset?.id ? { id: was.dataset.id, act: was.dataset.act } : null
       const scroll = body.scrollTop
       body.textContent = ''
-      if (!model.sections.length) body.append(el('div', 'inbox-empty', 'No comments on this page.'))
+      if (model.note) body.append(el('div', 'inbox-fallback', model.note))
+      if (!model.sections.length) body.append(el('div', 'inbox-empty', view === 'project' ? 'Nothing on other pages of this project.' : 'No comments on this page.'))
       for (const s of model.sections) {
         const sect = el('section', `inbox-sect ${s.id}`)
         const h = el('h3', 'inbox-group', `${s.title} (${s.total})`)
@@ -269,6 +482,7 @@
         const ul = el('ul', 'inbox-list')
         ul.setAttribute('aria-labelledby', h.id)
         for (const r of s.rows) {
+          if (view === 'project') { ul.append(projectItem(r)); continue }
           const li = el('li', `inbox-item${r.reason ? ` ${r.reason}` : ''}`)
           const go = el('button', 'inbox-row')
           go.type = 'button'
@@ -336,9 +550,10 @@
   }
 
   globalThis.PinpointInbox = {
-    CAP, SECTIONS, REASON_LABEL, REASON_ORDER,
+    CAP, SECTIONS, REASON_LABEL, REASON_ORDER, MAX_ASK,
     reason, clearsOnSeen, unseen, stateLabel, kindOf, hintOf, rowOf, view, badge, buttonLabel,
     touch, markSeen,
+    routeOfKey, buckets, hrefOf, projectView, inboxRows, freshEvents,
     panel,
   }
 })()

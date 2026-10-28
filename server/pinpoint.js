@@ -66,7 +66,7 @@ const MAX_BATCH_IMAGES = 40 * 1024 * 1024
  * Keep in step with package.json and the manifests. PINPOINT_VERSION exists for the yield
  * test, which needs an older and a newer bridge built from the same file.
  */
-const VERSION = process.env.PINPOINT_VERSION ?? '0.4.5'
+const VERSION = process.env.PINPOINT_VERSION ?? '1.0.0'
 
 mkdirSync(QUEUE, { recursive: true })
 

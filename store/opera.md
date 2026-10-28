@@ -6,9 +6,9 @@ screenshots are in `store/screenshots`, made by `npm run store:shots`.
 
 ## Package
 
-- File: `dist/store/pinpoint-0.4.5.zip` (the contents of `extension/`, with `manifest.json`
+- File: `dist/store/pinpoint-1.0.0.zip` (the contents of `extension/`, with `manifest.json`
   at the top of the zip).
-- Version: `0.4.5`.
+- Version: `1.0.0`.
 - Icon: `extension/icons/icon-128.png`. A larger square PNG is at `.claude-plugin/icon.png`
   (1024 x 1024).
 - Screenshots (800 x 500, scaled from the Chrome set; the site allows up to 800 x 600), in this
@@ -51,6 +51,12 @@ screenshots are in `store/screenshots`, made by `npm run store:shots`.
   - Picks values in your project's own design tokens.
   - Freezes the page (Alt+Shift+F) so you can pin menus and states that vanish.
   - Shows the page's console errors and failed requests next to a comment.
+  - Applies a picked change to a group of matching elements: the same classes, the same
+    component role, the same container or every tag. You see the count and a preview first.
+  - Pins follow single-page app routes, so each view of your app keeps its own pins.
+  - An inbox on the toolbar lists what needs your attention, such as an answer you have not
+    seen, and jumps to the pin.
+  - Works from the keyboard and with a screen reader. Alt+Shift+P moves focus to the toolbar.
 
   Private by design
   Everything stays on your machine. Pinpoint has no server, no account and no analytics. The

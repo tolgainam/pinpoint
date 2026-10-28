@@ -172,8 +172,11 @@ try {
 
   // Claude answers the question, on pin 3.
   emit({ type: 'reply', id: 'story-0001#3', text: 'It is the secondary button style from the theme. The primary one is the purple above it. I left it as it is.' })
+  await host('.pin[aria-label^="Pin 3, question, answered"]').waitFor({ timeout: 8000 })
   await page.waitForTimeout(500)
-  await host('.pin').nth(2).click()
+  // The answer may open its own card; a click on the pin would then close it.
+  if (!(await host('.card').isVisible().catch(() => false))) await host('.pin[aria-label^="Pin 3,"]').click()
+  await host('.card').waitFor({ timeout: 5000 })
   await page.waitForTimeout(500)
   await shot('3-answer')
   await page.keyboard.press('Escape')
@@ -185,7 +188,7 @@ try {
   await page.waitForTimeout(400)
   emit({ type: 'resolved', id: 'story-0001#1', resolution: 'Raised the padding to 14px 28px and the font to 16px in Button.tsx' })
   await page.waitForTimeout(600)
-  await host('.pin').nth(0).click()
+  await host('.pin[aria-label^="Pin 1,"]').click()
   await page.waitForTimeout(500)
   await shot('5-fixed')
 

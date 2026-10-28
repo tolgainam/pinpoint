@@ -1,5 +1,51 @@
 # Changelog
 
+## 1.0.0
+
+Update both halves. Press Reload on Pinpoint in your browser's extensions page, and run
+`claude plugin update pinpoint@pinpoint-marketplace` for the plugin. An older extension with a
+newer bridge, or a newer extension with an older bridge, still works. The features that need
+both halves stay hidden until both are updated.
+
+- Apply to: choose which elements a change covers. After you pick a value, the composer shows
+  Only this, Same classes, Same component role, Same container or Every tag, each with a count
+  for the current page. Hover or focus an option and the members are outlined. Choose one and
+  the change previews on all of them. A wider group warns you when its members differ. The
+  card of a saved comment says which group it applies to, for example "Applies to: Same
+  classes · 3 elements". The bridge checks the group and tells the model that it is a set of
+  rendered nodes, that the selector is only a hint, and that the shared source is the place to
+  change. Only this changes nothing, as before.
+- Pins follow the routes of single-page apps. A page that keeps its state in the URL keeps its
+  pins. Pins are stored by origin, path and route. Only `#/path` and `#!/path` count as a route,
+  so a hash that only holds state (`#tab=2`) no longer hides pins. Old pins move to the new
+  key on their own. A pin made on another URL state is marked, and a pin whose element is gone
+  is dimmed. Each comment has its own id, and two tabs merge their changes by id, so neither
+  loses the other's work.
+- Inbox on the toolbar. A badge counts the comments that need you: a failed dispatch, an
+  unsaved parked note, an unseen answer, an edit or a resolve, or a pin whose element is gone.
+  This page lists them in groups, shows answers in full and jumps to the pin. Project lists the
+  comments of the other routes on the same origin and asks the bridge once per opening for
+  newer answers. An answer can now say that it needs your input (`requiresResponse`). Nothing
+  depends on it being set.
+- Keyboard and screen reader. The toolbar is one tab stop with arrow keys. Pins are buttons with
+  a spoken name: number, kind, state and note. Escape returns focus to a stated place. A polite
+  live region announces results. Focus rings, reduced motion, forced colours and 200 percent
+  zoom are handled. Alt+Shift+P shows the toolbar and moves the keyboard to it. This adds a
+  command and no permission.
+- The design system stays fresh. The bridge re-checks the config and theme files it read, and
+  refreshes in the background when they change. A failed refresh keeps the last good summary
+  and marks it stale. The status pill has a Refresh design system button, and an open composer
+  says when its data may be out of date.
+- Screenshots are saved without blocking the bridge, with a size limit of 12 MiB each and
+  40 MiB per dispatch. A failed write leaves no half batch behind and the page is told. A
+  parked note whose screenshot cannot be saved is kept, with a warning.
+- Backlog and history are written under a project lock. Two sessions on one project can write at
+  once without losing an entry or finishing the wrong item. A lock left by a dead process is
+  recovered.
+- Behind the scenes: `npm run check` runs the syntax, design token, repo rule and type checks
+  in one go, and CI runs it before the tests. The lockfile now resolves zod and body-parser
+  outside the ranges of the high severity advisories.
+
 ## 0.4.5
 
 - Two sessions open on one project no longer swap places. A dispatch goes to the session that

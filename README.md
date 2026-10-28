@@ -15,7 +15,10 @@ element, the page state, and a screenshot of exactly what you saw.
 
 **Where it works:** in Claude Code, on your own computer (terminal, IDE extension or the
 desktop app's Code tab). It needs a local bridge and a browser on the same machine, so it does
-not run in claude.ai chat or in the Claude mobile apps. Browsers: Chrome and other Chromium
+not run in claude.ai chat or in the Claude mobile apps. Cowork is untested: a comment can
+reach a Cowork session through `/pinpoint:comments` and the session can edit the code. Cowork has
+no channels flag, so there is no live delivery: run `/pinpoint:comments` each time. Answers on the
+pin and progress are not checked there. Browsers: Chrome and other Chromium
 browsers, Firefox 128+, Opera.
 
 ---

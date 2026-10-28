@@ -648,7 +648,14 @@ async function compose(selector) {
   if ((await host('.mode').innerText()).trim() !== 'Commenting') await host('.mode').click()
   const b = await page.locator(selector).first().boundingBox()
   await page.mouse.click(b.x + 12, b.y + b.height / 2)
-  await host('.card textarea').waitFor()
+  // On a loaded machine the first click can land before the overlay listens: once more, then fail.
+  try {
+    await host('.card textarea').waitFor({ timeout: 6000 })
+  } catch {
+    if ((await host('.mode').innerText()).trim() !== 'Commenting') await host('.mode').click()
+    await page.mouse.click(b.x + 12, b.y + b.height / 2)
+    await host('.card textarea').waitFor({ timeout: 20000 })
+  }
   await host('.card input[type=checkbox]').first().uncheck()
 }
 

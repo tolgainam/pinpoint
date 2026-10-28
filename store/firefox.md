@@ -115,7 +115,19 @@ localhost sites.
 
 ## Notes for the reviewer
 
-- **Source:** public and unminified, no build step. https://github.com/tolgainam/pinpoint
+- **Source:** public and unminified. https://github.com/tolgainam/pinpoint
+- **Build tools:** none minify, bundle or template the code. One small script,
+  `scripts/firefox.js`, copies `extension/` to `dist/firefox` byte for byte and writes a
+  different `manifest.json` next to it (an event page in place of a service worker,
+  `options_ui`, the add-on id and the minimum Firefox version). The form's question about
+  tools that generate files: answer **Yes**, upload the source zip
+  (`git archive --format=zip --prefix=pinpoint-1.0.0/ -o dist/store/pinpoint-source-1.0.0.zip HEAD`)
+  and paste the build steps below.
+- **Build steps for the reviewer:** Node 20 or newer, no `npm install` needed.
+  1. Unzip the source and open the folder `pinpoint-1.0.0`.
+  2. Run `node scripts/firefox.js`. It writes `dist/firefox`.
+  3. `dist/firefox` is the uploaded package. Every file except `manifest.json` is identical to
+     the file of the same name in `extension/`.
   Nothing is bundled, transpiled or minified. The files in the package are the files in
   `extension/`.
 - **How to reproduce the package:** clone the repository, run `npm run build:firefox` (Node 20

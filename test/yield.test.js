@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { freePort } from './port.js'
+import { testEnv } from './env.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const PORT = await freePort()
@@ -45,16 +46,15 @@ function setup() {
   const start = (name, version) => {
     const projectDir = mkdtempSync(join(base, `${name}-`))
     const child = spawn(process.execPath, [join(ROOT, 'server', 'pinpoint.js')], {
-      env: {
-        ...process.env,
-        PINPOINT_PORT: String(PORT),
+      env: testEnv({
+          PINPOINT_PORT: String(PORT),
         PINPOINT_QUEUE: join(base, 'queue'),
         PINPOINT_PROJECT_DIR: projectDir,
         PINPOINT_PEER_KEY: join(base, 'peer.key'),
         PINPOINT_RETRY_MS: '150',
         PINPOINT_VERSION: version,
         HOME: base,
-      },
+      }),
       stdio: ['pipe', 'pipe', 'pipe'],
     })
     const p = { child, projectDir, log: '' }

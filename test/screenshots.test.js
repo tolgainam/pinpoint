@@ -16,6 +16,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { freePort } from './port.js'
+import { testEnv } from './env.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const SERVER = join(ROOT, 'server', 'pinpoint.js')
@@ -47,15 +48,14 @@ async function start(name, { umask } = {}) {
   await b.client.connect(new StdioClientTransport({
     command: process.execPath,
     args,
-    env: {
-      ...process.env,
+    env: testEnv({
       PINPOINT_PORT: String(port),
       PINPOINT_QUEUE: b.queueDir,
       PINPOINT_PROJECT_DIR: b.projectDir,
       PINPOINT_PEER_KEY: join(dir, 'peer.key'),
       PINPOINT_LSOF: '/usr/bin/false',
       HOME: dir,
-    },
+    }),
     stderr: 'ignore',
   }))
   for (let i = 0; i < 100; i++) {

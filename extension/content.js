@@ -1810,9 +1810,8 @@
           pin._place = place
           const where = place === 'elsewhere' || place === 'detached' ? place : undefined
           pin.setAttribute('aria-label', A11y.pinName(stack, comment, where))
-          const note = A11y.placeNote(where)
+          const note = where === 'elsewhere' ? 'created on another URL state' : A11y.placeNote(where)
           pin.title = `${note ? `${note}\n` : ''}${stack.map(x => `#${x.n} ${x.note}`).join('\n')}`
-          pin.classList.toggle('elsewhere', place === 'elsewhere')
           inboxSoon()
         }
       }

@@ -18,8 +18,8 @@ both halves stay hidden until both are updated.
 - Pins follow the routes of single-page apps. A page that keeps its state in the URL keeps its
   pins. Pins are stored by origin, path and route. Only `#/path` and `#!/path` count as a route,
   so a hash that only holds state (`#tab=2`) no longer hides pins. Old pins move to the new
-  key on their own. A pin made on another URL state is marked, and a pin whose element is gone
-  is dimmed. Each comment has its own id, and two tabs merge their changes by id, so neither
+  key on their own. A pin made on another URL state says so on its card, and a pin whose element
+  is gone is dimmed. Each comment has its own id, and two tabs merge their changes by id, so neither
   loses the other's work.
 - Inbox on the toolbar. A badge counts the comments that need you: a failed dispatch, an
   unsaved parked note, an unseen answer, an edit or a resolve, or a pin whose element is gone.

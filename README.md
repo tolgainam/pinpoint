@@ -421,10 +421,10 @@ the same pins. Paths are used as the browser gives them, so `/users` and `/users
 Because `/users?id=1` and `/users?id=2` share pins, a pin attaches only when the element
 it finds is shown to be the same one. On the URL it was written on, selector and tag are
 enough. On another URL state the element also needs the same text, or with no text the
-same id, test attribute or accessible name; such a pin gets a dotted ring and reads
-*created on another URL state*. Otherwise it is *detached*: dimmed and dashed at the
-element's last position, with the URL it was written on in its card. Both are in the pin's
-accessible name and in the card text.
+same id, test attribute or accessible name; such a pin stays attached and looks like any
+other, and its tooltip and card read *created on another URL state*. Otherwise it is
+*detached*: dimmed and dashed at the element's last position, with the URL it was written
+on in its card. *Detached* is in the pin's accessible name; both are in the card text.
 
 Every comment has a stable id, and a save merges by id with what is stored, so two tabs on
 one route keep each other's comments and a removed one does not come back from a stale tab.

@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { freePort } from './port.js'
+import { testEnv } from './env.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const PORT = await freePort()
@@ -91,8 +92,7 @@ before(async () => {
   await client.connect(new StdioClientTransport({
     command: process.execPath,
     args: [join(ROOT, 'server', 'pinpoint.js')],
-    env: {
-      ...process.env,
+    env: testEnv({
       PINPOINT_PORT: String(PORT),
       PINPOINT_QUEUE: queueDir,
       PINPOINT_PROJECT_DIR: join(dir, 'project'),
@@ -101,7 +101,7 @@ before(async () => {
       PINPOINT_TOKEN: TOKEN,
       PINPOINT_RECAPTURE_MS: '300',
       HOME: dir,
-    },
+    }),
     stderr: 'ignore',
   }))
   for (let i = 0; i < 100; i++) {
@@ -163,7 +163,7 @@ test('/inbox is behind the same gate as the other page-facing POSTs', async () =
   const rows = [row('q', `${batch}#1`)]
   const noToken = await post('/inbox', { rows }, { 'X-Pinpoint-Token': 'wrong' })
   assert.equal(noToken.status, 401)
-  const foreign = await post('/inbox', { rows }, { Origin: 'https://example.com' })
+  const foreign = await post('/inbox', { rows }, { Origin: 'https://example.invalid' })
   assert.equal(foreign.status, 403)
   const notJson = await fetch(`${BRIDGE}/inbox`, { method: 'POST', headers: headers({ 'Content-Type': 'text/plain' }), body: '{}' })
   assert.equal(notJson.status, 415)

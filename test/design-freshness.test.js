@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { freePort } from './port.js'
+import { testEnv } from './env.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -47,8 +48,7 @@ async function startBridge(env) {
   await client.connect(new StdioClientTransport({
     command: process.execPath,
     args: [join(ROOT, 'server', 'pinpoint.js')],
-    env: {
-      ...process.env,
+    env: testEnv({
       PINPOINT_PORT: String(port),
       PINPOINT_QUEUE: queue,
       PINPOINT_PROJECT_DIR: dir,
@@ -56,7 +56,7 @@ async function startBridge(env) {
       PINPOINT_DS_PROBE_LOG: log,
       PINPOINT_DS_FAIL_IF: failIf,
       ...env,
-    },
+    }),
   }))
   for (let i = 0; i < 100; i++) {
     try { if ((await fetch(`${url}/health`)).ok) break } catch { /* not up yet */ }

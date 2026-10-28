@@ -56,13 +56,13 @@
    * The number is the lead comment's, which is the one the pin shows. The note is the lead's
    * when it is unresolved, otherwise the newest comment's. Selectors and URLs stay out.
    *
-   * `where` is how the pin stands on this URL state (route.js): 'elsewhere' or 'detached'
-   * adds its words after the state, so a pin that is only shown, not attached, says so:
-   *   "Pin 3, change request, pending, created on another URL state: Increase the padding"
-   * Without it the name is exactly as above.
+   * `where` is how the pin stands on this URL state (route.js). Only 'detached' adds words
+   * after the state, so a pin that is only shown, not attached, says so:
+   *   "Pin 3, change request, pending, detached, element not found here: Increase the padding"
+   * A pin attached from another URL state ('elsewhere') is named exactly like an attached one;
+   * its tooltip and card carry that fact. Without `where` the name is exactly as above.
    */
   const PLACE_NOTE = {
-    elsewhere: 'created on another URL state',
     detached: 'detached, element not found here',
   }
   const placeNote = where => PLACE_NOTE[where] ?? ''

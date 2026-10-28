@@ -20,6 +20,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { available, startDemo, extensionCopy } from './screens/shoot.js'
 import { freePort } from './port.js'
+import { testEnv } from './env.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const PORT = await freePort()
@@ -35,7 +36,7 @@ async function startBridge() {
   await c.connect(new StdioClientTransport({
     command: process.execPath,
     args: [join(ROOT, 'server', 'pinpoint.js')],
-    env: { ...process.env, PINPOINT_PORT: String(PORT), PINPOINT_QUEUE: queue, PINPOINT_PROJECT_DIR: project, PINPOINT_LSOF: '/usr/bin/false' },
+    env: testEnv({ PINPOINT_PORT: String(PORT), PINPOINT_QUEUE: queue, PINPOINT_PROJECT_DIR: project, PINPOINT_LSOF: '/usr/bin/false' }),
     stderr: 'ignore',
   }))
   for (let i = 0; i < 100; i++) {

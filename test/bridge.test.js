@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { freePort } from './port.js'
+import { testEnv } from './env.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const PORT = await freePort()
@@ -85,8 +86,7 @@ before(async () => {
   await client.connect(new StdioClientTransport({
     command: process.execPath,
     args: [join(ROOT, 'server', 'pinpoint.js')],
-    env: {
-      ...process.env,
+    env: testEnv({
       PINPOINT_PORT: String(PORT),
       PINPOINT_QUEUE: queueDir,
       PINPOINT_PROJECT_DIR: projectDir,
@@ -96,7 +96,7 @@ before(async () => {
       // Long enough that a slow machine does not fail the handshake, short enough that a
       // genuinely missing answer does not stall the suite.
       PINPOINT_RECAPTURE_MS: '3000',
-    },
+    }),
   }))
 
   for (let i = 0; i < 100; i++) {
@@ -413,7 +413,7 @@ test('/state holds what Claude said about a pin, on disk, for a page that did no
   const bad = await state(['../../etc/passwd#1', '..#1', 'x#1', `${res.batch}#99999`])
   assert.deepEqual(bad.states, {})
   // And a page that is not local gets nothing.
-  const blocked = await fetch(`${BRIDGE}/state?ids=${encodeURIComponent(q)}`, { headers: { Origin: 'https://example.com' } })
+  const blocked = await fetch(`${BRIDGE}/state?ids=${encodeURIComponent(q)}`, { headers: { Origin: 'https://example.invalid' } })
   assert.equal(blocked.status, 403)
 })
 

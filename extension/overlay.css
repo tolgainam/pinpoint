@@ -125,9 +125,8 @@ button.pin:focus-visible:not(:disabled) { background: var(--pin-fill); }
    version of this was indistinguishable from the grey "dispatched" state. */
 .pin.resolved { --pin-fill: var(--pp-resolved); border-color: var(--pp-resolved-ring); opacity: 1; }
 .pin.detached { opacity: 0.4; border-style: dashed; }
-/* Attached, but written on another URL state of this route: a ring in the warning colour,
-   and the words in the pin's name, tooltip and card. */
-.pin.elsewhere { border-style: dotted; border-color: var(--pp-warn-fg); }
+/* A pin attached from another URL state of this route has no mark of its own: the app may
+   keep UI state in the URL, so a ring would be noise. Its tooltip and card say it in words. */
 /* A question never changes code, so it must never read like a fix request waiting to
    land. Violet across pending, dispatched, and answered — the colour says "intent",
    the fill says "how far along". */
@@ -1393,7 +1392,6 @@ button:focus-visible,
   .pin.backlog { border-style: dashed; }
   .pin.backlog.unsaved { border-color: Mark; }
   .pin.detached { border-style: dotted; }
-  .pin.elsewhere { border-style: dashed; border-color: Mark; }
   .pin.stack::after { forced-color-adjust: none; background: CanvasText; color: Canvas; border-color: Canvas; }
   .pin.working { animation: none; outline: var(--pp-focus-width) solid CanvasText; outline-offset: var(--pp-focus-offset); }
   .pin:focus-visible { box-shadow: none; }

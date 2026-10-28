@@ -50,13 +50,13 @@ test('a stack is named by its lead number, count, tally and the lead note', () =
   assert.equal(pinName(done, done[0]), 'Pin 1, 2 comments: 2 resolved. newest')
 })
 
-test('a pin only shown, not attached, says how it stands on this URL state; an attached one is unchanged', () => {
+test('a detached pin says so in its name; an attached one, even from another URL state, is unchanged', () => {
   const c = { n: 3, note: 'pad', status: 'pending' }
-  assert.equal(pinName([c], c, 'elsewhere'), 'Pin 3, change request, pending, created on another URL state: pad')
+  assert.equal(pinName([c], c, 'elsewhere'), 'Pin 3, change request, pending: pad')
   assert.equal(pinName([c], c, 'detached'), 'Pin 3, change request, pending, detached, element not found here: pad')
   assert.equal(pinName([c], c, undefined), 'Pin 3, change request, pending: pad')
   const two = [c, { n: 4, note: 'more', status: 'sent' }]
-  assert.equal(pinName(two, c, 'elsewhere'), 'Pin 3, 2 comments, created on another URL state: 1 pending, 1 dispatched. pad')
+  assert.equal(pinName(two, c, 'elsewhere'), 'Pin 3, 2 comments: 1 pending, 1 dispatched. pad')
 })
 
 test('notes are put on one line and cut to 100 characters', () => {

@@ -1111,8 +1111,8 @@ async function loadSpa(path, clear = []) {
   await host('.pill-label').filter({ hasText: PROJECT.name }).waitFor({ timeout: 15000 })
 }
 
-/** The name of pin 1 when it was written on another URL state of the same route. */
-const marked = note => `Pin 1, change request, pending, created on another URL state: ${note}`
+/** The name of pin 1 when it was written on another URL state of the same route: no extra words. */
+const marked = note => `Pin 1, change request, pending: ${note}`
 
 async function addComment(selector, note) {
   await compose(selector)
@@ -1150,7 +1150,7 @@ test('a state-only hash change keeps the pins; pushState to a new path swaps buc
   const pinned = ['Pin 1, change request, pending: london note']
   await pinsAre(pinned)
   // The London sequence: the same bucket throughout. The element is proven by its text, so
-  // the pin stays attached, marked as written on another URL state.
+  // the pin stays attached and is named like any attached pin.
   for (const h of ['#by=line&play=week', '#by=bus&play=week&wk=20260824', '#by=bus&play=month&wk=20260831']) {
     await page.evaluate(x => { location.hash = x }, h)
     await page.waitForTimeout(350)
@@ -1168,7 +1168,7 @@ test('a state-only hash change keeps the pins; pushState to a new path swaps buc
   await pinsAre([marked('london note')])
 })
 
-test('/users?id=1 to ?id=2: a proven element attaches and is marked, the other is dimmed and detached', { skip: !browser.ok, timeout: 60000 }, async () => {
+test('/users?id=1 to ?id=2: a proven element attaches unmarked, the other is dimmed and detached', { skip: !browser.ok, timeout: 60000 }, async () => {
   const href = spa('/spa/users?id=1')
   const seed = [
     { id: 'act', n: 1, note: 'shared action', status: 'pending', selector: '.act', tag: 'button', text: 'Send message', createdHref: href,
@@ -1185,12 +1185,12 @@ test('/users?id=1 to ?id=2: a proven element attaches and is marked, the other i
   await page.goto(spa('/spa/users?id=2'))
   await host('.pin').first().waitFor({ state: 'attached', timeout: 15000 })
   await pinsAre([
-    'Pin 1, change request, pending, created on another URL state: shared action',
+    'Pin 1, change request, pending: shared action',
     'Pin 2, change request, pending, detached, element not found here: about Ann',
   ])
   const [act, who] = await pinList()
-  assert.match(act.cls, /\belsewhere\b/)
-  assert.doesNotMatch(act.cls, /\bdetached\b/)
+  assert.doesNotMatch(act.cls, /\b(detached|elsewhere)\b/)
+  assert.notEqual(await host('.pin').first().evaluate(e => getComputedStyle(e).borderStyle), 'dotted')
   assert.match(act.title, /^created on another URL state/)
   assert.match(who.cls, /\bdetached\b/)
   // The card says why, in words, with the URL state the comment was written on.

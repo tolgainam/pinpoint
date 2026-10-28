@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { freePort } from './port.js'
+import { testEnv } from './env.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const PORT = await freePort()
@@ -48,15 +49,14 @@ test('a server that lost the port takes it over once it frees up, and exits with
 
   let log = ''
   const child = spawn(process.execPath, [join(ROOT, 'server', 'pinpoint.js')], {
-    env: {
-      ...process.env,
+    env: testEnv({
       PINPOINT_PORT: String(PORT),
       PINPOINT_QUEUE: queueDir,
       PINPOINT_PROJECT_DIR: projectDir,
       PINPOINT_RETRY_MS: '100',
       // A tools-only server opens a peer link, which needs a key; keep it out of ~.
       PINPOINT_PEER_KEY: join(queueDir, 'peer.key'),
-    },
+    }),
     stdio: ['pipe', 'pipe', 'pipe'],
   })
   child.stderr.on('data', d => { log += d })

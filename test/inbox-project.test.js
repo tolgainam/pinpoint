@@ -97,7 +97,7 @@ test('the Project view groups like This page, needs attention first, and leaves 
 
 test('Copy route uses the URL the comment was written on, never another origin\'s', () => {
   assert.equal(I.hrefOf(c({ createdHref: `${O}/users?id=2#/x` }), O, '/users'), `${O}/users?id=2#/x`)
-  assert.equal(I.hrefOf(c({ createdHref: 'https://evil.example/users' }), O, '/users'), `${O}/users`)
+  assert.equal(I.hrefOf(c({ createdHref: 'https://evil.invalid/users' }), O, '/users'), `${O}/users`)
   assert.equal(I.hrefOf(c({ createdHref: 'not a url' }), O, '/spa#/users'), `${O}/spa#/users`)
 })
 

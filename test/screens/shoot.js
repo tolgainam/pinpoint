@@ -19,6 +19,7 @@ import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { testEnv } from '../env.js'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(HERE, '..', '..')
@@ -115,7 +116,7 @@ export async function startDemo() {
   const port = await listen(probe)
   await new Promise(r => probe.close(r))
   const child = spawn(process.execPath, [join(ROOT, 'demo', 'serve.js')], {
-    env: { ...process.env, DEMO_PORT: String(port) }, stdio: ['ignore', 'pipe', 'inherit'],
+    env: testEnv({ DEMO_PORT: String(port) }), stdio: ['ignore', 'pipe', 'inherit'],
   })
   await new Promise((resolve, reject) => {
     child.once('exit', code => reject(new Error(`demo server exited (${code})`)))

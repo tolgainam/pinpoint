@@ -59,5 +59,13 @@ for (const name of (await readdir(SHOTS)).filter(f => f.endsWith('.png'))) {
   await page.setContent(`<!doctype html><style>html,body{margin:0}img{display:block;width:800px;height:500px}</style><img src="data:image/png;base64,${png}">`)
   await page.screenshot({ path: join(OPERA, name) })
 }
+
+/** Opera's promo image, 300x188: the small tile scaled down (the ratios differ by under 2%). */
+const OPERA_PROMO = join(ROOT, 'store', 'opera')
+await mkdir(OPERA_PROMO, { recursive: true })
+await page.setViewportSize({ width: 300, height: 188 })
+const small = (await readFile(join(OUT, 'promo-small-440x280.png'))).toString('base64')
+await page.setContent(`<!doctype html><style>html,body{margin:0}img{display:block;width:300px;height:188px}</style><img src="data:image/png;base64,${small}">`)
+await page.screenshot({ path: join(OPERA_PROMO, 'promo-300x188.png') })
 await page.context().browser().close()
-console.log(`store-tiles: wrote 2 tiles to ${OUT} and scaled the screenshots to ${OPERA}`)
+console.log(`store-tiles: wrote 2 tiles to ${OUT}, one to ${OPERA_PROMO}, and scaled the screenshots to ${OPERA}`)

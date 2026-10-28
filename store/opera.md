@@ -11,6 +11,7 @@ screenshots are in `store/screenshots`, made by `npm run store:shots`.
 - Version: `1.0.0`.
 - Icon: `extension/icons/icon-128.png`. A larger square PNG is at `.claude-plugin/icon.png`
   (1024 x 1024).
+- Promo image (300 x 188): `store/opera/promo-300x188.png`, the Chrome small tile scaled down.
 - Screenshots (800 x 500, scaled from the Chrome set; the site allows up to 800 x 600), in this
   order: `store/screenshots/1-dispatch.png`, `2-ask.png`, `3-answer.png`, `4-backlog.png`,
   `5-fixed.png`. Each has a caption strip that says what it shows.

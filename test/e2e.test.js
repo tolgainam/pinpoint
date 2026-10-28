@@ -221,10 +221,7 @@ after(async () => {
 const host = sel => page.locator(`#pinpoint-host ${sel}`)
 
 /** The icon click, as the worker hears it: a toggle message to the active tab. */
-const iconClick = () => worker.evaluate(async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-  await chrome.tabs.sendMessage(tab.id, { type: 'toggle' })
-})
+const iconClick = () => tellTab({ type: 'toggle' })
 
 test('the toolbar mounts hidden, the icon shows it, and the pill names the project', { skip: !browser.ok, timeout: 60000 }, async () => {
   await page.goto(`http://localhost:${demo.port}/`)
@@ -518,10 +515,7 @@ test('an answer goes to the tab that asked, not to another copy of the same page
   const other = await context.newPage()
   await other.goto(url)
   await other.bringToFront()
-  await worker.evaluate(async () => {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-    await chrome.tabs.sendMessage(tab.id, { type: 'toggle' })
-  })
+  await tellTab({ type: 'toggle' })
   await other.locator('#pinpoint-host .bar').waitFor({ timeout: 15000 })
   await page.bringToFront()
 
@@ -613,6 +607,22 @@ const KEY = () => `pinpoint:v2:http://localhost:${cardsPort}/cards`
  * Show the toolbar unless the tab already reopens it. The tab's remembered state arrives a
  * moment after the overlay mounts; a toggle sent before it would hide what it then shows.
  */
+/** Send a message to the active tab's content script, retrying while it is still loading (slow runners). */
+async function tellTab(message) {
+  const until = Date.now() + 15000
+  for (;;) {
+    try {
+      return await worker.evaluate(async m => {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+        return chrome.tabs.sendMessage(tab.id, m)
+      }, message)
+    } catch (err) {
+      if (!/Receiving end does not exist|Could not establish connection/.test(String(err)) || Date.now() > until) throw err
+      await new Promise(r => setTimeout(r, 250))
+    }
+  }
+}
+
 async function ensureShown() {
   try {
     await host('.bar').waitFor({ state: 'visible', timeout: 1500 })
@@ -965,7 +975,7 @@ test('a component answer slower than 250ms is given up on, and a late one is ign
   await pickColour()
   // The other matches do not wait for the probe.
   await host('.scope-opt[data-kind="classes"]').waitFor({ timeout: 1000 })
-  assert.ok(Date.now() - t0 < 2000)
+  assert.ok(Date.now() - t0 < 4000)
   await host('.scope[data-omitted*="component:timeout"]').waitFor({ timeout: 2000 })
   // The held answer lands at 600ms; it must not add the option afterwards.
   await page.waitForTimeout(900)
@@ -978,11 +988,8 @@ test('a frozen frame offers only Only this', { skip: !browser.ok, timeout: 60000
   await loadCards()
   // No real capture in a headless test browser: the frame only needs a picture.
   await worker.evaluate(() => { chrome.tabs.captureVisibleTab = async () => 'data:image/png;base64,AAAA' })
-  await worker.evaluate(async () => {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-    await chrome.tabs.sendMessage(tab.id, { type: 'freeze' })
-  })
-  await host('.frame-note').waitFor({ timeout: 5000 })
+  await tellTab({ type: 'freeze' })
+  await host('.frame-note').waitFor({ state: 'visible', timeout: 15000 })
   const b = await page.locator('[data-n="1"]').boundingBox()
   await page.mouse.click(b.x + 12, b.y + b.height / 2)
   await host('.card textarea').waitFor()

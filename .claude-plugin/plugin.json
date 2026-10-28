@@ -2,7 +2,7 @@
   "name": "pinpoint",
   "displayName": "Pinpoint",
   "version": "1.0.0",
-  "description": "Pin comments to elements on a localhost page and dispatch them, with screenshots, into a running Claude Code session on your computer. Ask questions, park notes and watch fixes land.",
+  "description": "Pin comments to elements on a localhost page and dispatch them, with screenshots, into a running Claude Code or Cowork session on your computer. Ask questions, park notes and watch fixes land.",
   "author": {
     "name": "Tolga Inam",
     "url": "https://github.com/tolgainam"

@@ -32,13 +32,12 @@ each tab. Build the zip and the images with `npm run package:extension` and
   Watch it get fixed. Claude edits your code, checks the element again and marks the comment
   done. The pin turns green. Not right yet? Reply on the pin and it goes another round.
 
-  Why Claude Code only
-  Pinpoint is built on Claude Code's channels, a live link into your running session. That is
-  what lets answers, progress and fixes come back to the page, not just comments go out. No
-  other coding agent offers that link, so Pinpoint works with Claude Code only. Channels are a
-  research preview, so you start Claude Code with one extra flag. The setup steps show it.
-  Without the flag nothing is lost: run /pinpoint:comments in the session and every dispatched
-  comment is there.
+  Claude Code and Cowork
+  Pinpoint works in Claude Code and in Cowork. In Claude Code it is built on channels, a live
+  link into your running session. That is what lets answers, progress and fixes come back to
+  the page, not just comments go out. Channels are a research preview, so you start Claude
+  Code with one extra flag. The setup steps show it. Without the flag, and in Cowork, nothing
+  is lost: run /pinpoint:comments in the session and every dispatched comment is there.
 
   More
   - Works on localhost and 127.0.0.1 straight away. Any other site, such as a staging server,

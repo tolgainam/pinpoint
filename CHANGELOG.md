@@ -7,6 +7,8 @@ Update both halves. Press Reload on Pinpoint in your browser's extensions page, 
 newer bridge, or a newer extension with an older bridge, still works. The features that need
 both halves stay hidden until both are updated.
 
+- Pinpoint also works in Cowork. Cowork has no channels flag, so there is no live delivery: run
+  `/pinpoint:comments` each time to pull comments into the session.
 - Apply to: choose which elements a change covers. After you pick a value, the composer shows
   Only this, Same classes, Same component role, Same container or Every tag, each with a count
   for the current page. Hover or focus an option and the members are outlined. Choose one and

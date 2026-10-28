@@ -13,13 +13,12 @@ element, the page state, and a screenshot of exactly what you saw.
 
 </div>
 
-**Where it works:** in Claude Code, on your own computer (terminal, IDE extension or the
-desktop app's Code tab). It needs a local bridge and a browser on the same machine, so it does
-not run in claude.ai chat or in the Claude mobile apps. Cowork is untested: a comment can
-reach a Cowork session through `/pinpoint:comments` and the session can edit the code. Cowork has
-no channels flag, so there is no live delivery: run `/pinpoint:comments` each time. Answers on the
-pin and progress are not checked there. Browsers: Chrome and other Chromium
-browsers, Firefox 128+, Opera.
+**Where it works:** in Claude Code and in Cowork, on your own computer. For Claude Code that is
+the terminal, the IDE extension or the desktop app's Code tab. It needs a local bridge and a browser
+on the same machine, so it does not run in claude.ai chat or in the Claude mobile apps. Claude Code
+can receive comments live (see [Two ways to receive comments](#two-ways-to-receive-comments)).
+Cowork has no channels flag, so there you run `/pinpoint:comments` each time to pull comments in.
+Browsers: Chrome and other Chromium browsers, Firefox 128+, Opera.
 
 ---
 
@@ -34,11 +33,10 @@ the page URL and colour scheme, and a cropped PNG of the element itself.
 
 It runs in both directions. Claude Code answers a question you ask on a pin (start the note
 with `?`), keeps a backlog for later (start it with `!`), and marks a comment done when the fix
-lands, so the pin turns green. That is possible because Pinpoint is built on Claude Code's
-channels, a live link into a running session, which is why it works with Claude Code only.
-Channels are a research preview, so Claude Code needs one extra flag (see
-[Install](#install)). Without it nothing is lost: run `/pinpoint:comments` and every
-dispatched comment is there.
+lands, so the pin turns green. Live delivery is possible because Pinpoint is built on Claude
+Code's channels, a live link into a running session. Channels are a research preview, so Claude
+Code needs one extra flag (see [Install](#install)). Without it, and in Cowork, nothing is lost:
+run `/pinpoint:comments` and every dispatched comment is there.
 
 ```
 browser overlay ──POST /dispatch──▶ bridge ──▶ queue on disk (json + PNGs)
@@ -514,7 +512,7 @@ all. A comment parked with `!` carries the buffer on its own, since it has no ba
 
 ### Two ways to receive comments
 
-**On demand** — works in any session, no flags:
+**On demand** — works in any Claude Code or Cowork session, no flags:
 
 ```
 /pinpoint:comments
@@ -525,6 +523,8 @@ all. A comment parked with `!` carries the buffer on its own, since it has no ba
 ```bash
 claude --dangerously-load-development-channels plugin:pinpoint@pinpoint-marketplace
 ```
+
+Cowork has no such flag, so in Cowork use the on-demand command above.
 
 From a clone started with `--mcp-config dev/mcp.json`, the last part is `server:pinpoint` instead.
 `/pinpoint:doctor` says whether the session you are in has it on.

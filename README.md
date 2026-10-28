@@ -702,15 +702,8 @@ Security problems: please do not open a public issue. Use GitHub's private repor
 repository's Security tab ("Report a vulnerability"), and say what you found and how to
 reproduce it.
 
-Pinpoint is free to use and it stays that way. If it saves you time and you
-want to say thanks, a sponsorship link will live here.
-
-<!-- TODO: replace with a real link before announcing — GitHub Sponsors, Ko-fi,
-     Buy Me a Coffee, or whatever you settle on. An empty donate section is worse
-     than none, so this stays a comment until it points somewhere. -->
-
-Free ways to help that are worth just as much: star the repo, file an issue when
-something breaks, or tell someone who reviews a lot of UI.
+Pinpoint is free to use and it stays that way. The best help is to star the repo, file an
+issue when something breaks, or tell someone who reviews a lot of UI.
 
 ## License
 

@@ -920,13 +920,13 @@
     <div class="step">
       <h3>Add the browser extension</h3>
       <p class="note" id="store-note" hidden>
-        Use the button for your browser at the top of this page: the Chrome Web Store (Chrome,
-        Edge, Brave, Arc, Vivaldi), Mozilla Add-ons (Firefox 128+) or Opera add-ons. Pin the
+        Where your browser has a store button at the top of this page, use it: the Chrome Web Store
+        (Chrome, Edge, Brave, Arc, Vivaldi), Mozilla Add-ons (Firefox 128+) or Opera add-ons. Pin the
         icon afterwards. Then run <code>/pinpoint:setup</code> in Claude Code; it checks that
         everything is connected.
       </p>
       <p class="note" id="no-store-note">
-        The store listings are on the way. Until they are live, load the extension from a folder.
+        Store listings that are not live yet are on the way. Until then, load the extension from a folder.
       </p>
       <details id="manual-load" open>
         <summary>Load it from a folder instead <span class="sub">(developers, or until a listing is live)</span></summary>
@@ -1210,7 +1210,7 @@ whole page: ~/.claude/pinpoint/queue/20260822-023835-z0fp/page.png
    * store link; leave it empty and the card points at the manual steps below, which work
    * today. Nothing is guessed: an empty value never produces a link.
    */
-  const STORES = { chrome: '', firefox: '', opera: '' }
+  const STORES = { chrome: 'https://chromewebstore.google.com/detail/pinpoint/jdkpobiooiffpjffpiegpofjgjepmncd', firefox: '', opera: '' }
   document.querySelectorAll('[data-store]').forEach(card => {
     const url = STORES[card.dataset.store]
     if (!url) return
@@ -1220,9 +1220,11 @@ whole page: ~/.claude/pinpoint/queue/20260822-023835-z0fp/page.png
     const act = card.querySelector('.get-act')
     if (act) act.textContent = 'Add to ' + card.dataset.name + ' \u2197'
   })
-  // With a listing live, the store is the way in and the folder is the fallback.
-  if (Object.values(STORES).some(Boolean)) {
-    document.getElementById('store-note').hidden = false
+  // With a listing live, the store is the way in for that browser. The folder stays open
+  // until every browser has a listing.
+  const live = Object.values(STORES).filter(Boolean).length
+  if (live) document.getElementById('store-note').hidden = false
+  if (live === Object.keys(STORES).length) {
     document.getElementById('no-store-note').hidden = true
     document.getElementById('manual-load').open = false
   }

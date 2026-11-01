@@ -55,7 +55,7 @@ export function installStable(src, dest, version) {
  * the store; leave it empty and setup shows only how to load the folder. Nothing is guessed:
  * an empty value never prints a link. The website has the same list (STORES in docs/index.html).
  */
-export const STORE_LINKS = { chrome: 'https://chromewebstore.google.com/detail/pinpoint/jdkpobiooiffpjffpiegpofjgjepmncd', firefox: '', opera: '' }
+export const STORE_LINKS = { chrome: 'https://chromewebstore.google.com/detail/pinpoint/jdkpobiooiffpjffpiegpofjgjepmncd', firefox: 'https://addons.mozilla.org/en-US/firefox/addon/pinpointforclaude/', opera: '' }
 
 export function storeBlock(links = STORE_LINKS) {
   const names = { chrome: 'Chrome, Edge, Brave, Arc, Vivaldi', firefox: 'Firefox 128+', opera: 'Opera' }

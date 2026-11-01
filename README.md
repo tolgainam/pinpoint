@@ -117,11 +117,11 @@ browser and in Firefox.
 | Browser | How to load it | Notes |
 |---|---|---|
 | Chrome, Edge, Brave, Opera, Vivaldi, Arc | Same steps as above. `npx pinpoint-dev setup` does what `/pinpoint:setup` does. Open the browser's own extensions page (`edge://extensions`, `brave://extensions`, ...) | `/pinpoint:setup` opens Chrome; open the other page yourself and paste the same path |
-| Firefox 128+ | `/pinpoint:setup --firefox`, then `about:debugging#/runtime/this-firefox`, **Load Temporary Add-on**, pick `manifest.json` | Firefox removes a temporary add-on when it quits. Allow localhost access under `about:addons` > Pinpoint > Permissions |
+| Firefox 128+ | [Mozilla Add-ons](https://addons.mozilla.org/en-US/firefox/addon/pinpointforclaude/), or `/pinpoint:setup --firefox`, then `about:debugging#/runtime/this-firefox`, **Load Temporary Add-on**, pick `manifest.json` | Firefox removes a temporary add-on when it quits. Allow localhost access under `about:addons` > Pinpoint > Permissions |
 | Safari | Not supported yet | Needs `xcrun safari-web-extension-converter` and an Xcode build |
 
-**A permanent Firefox install** comes from Mozilla Add-ons (the link is on
-[the website](https://tolgainam.github.io/pinpoint/)). Until the listing is live, load it as a
+**A permanent Firefox install** comes from [Mozilla Add-ons](https://addons.mozilla.org/en-US/firefox/addon/pinpointforclaude/) (the link is also on
+[the website](https://tolgainam.github.io/pinpoint/)). To try a build before you install, load it as a
 temporary add-on, as in the table. Developers who sign their own copy: see
 [CONTRIBUTING.md](CONTRIBUTING.md#firefox-build-and-signing).
 

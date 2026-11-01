@@ -1210,7 +1210,7 @@ whole page: ~/.claude/pinpoint/queue/20260822-023835-z0fp/page.png
    * store link; leave it empty and the card points at the manual steps below, which work
    * today. Nothing is guessed: an empty value never produces a link.
    */
-  const STORES = { chrome: 'https://chromewebstore.google.com/detail/pinpoint/jdkpobiooiffpjffpiegpofjgjepmncd', firefox: '', opera: '' }
+  const STORES = { chrome: 'https://chromewebstore.google.com/detail/pinpoint/jdkpobiooiffpjffpiegpofjgjepmncd', firefox: 'https://addons.mozilla.org/en-US/firefox/addon/pinpointforclaude/', opera: '' }
   document.querySelectorAll('[data-store]').forEach(card => {
     const url = STORES[card.dataset.store]
     if (!url) return

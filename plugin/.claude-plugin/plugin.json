@@ -20,5 +20,14 @@
     "devtools",
     "channel"
   ],
-  "mcpServers": "./plugin-mcp.json"
+  "mcpServers": "./plugin-mcp.json",
+  "userConfig": {
+    "token": {
+      "type": "string",
+      "title": "Bridge token",
+      "description": "Optional. A shared secret that the browser extension must send to the local bridge. Leave it empty unless other programs on this computer can reach localhost. Enter the same value on the extension's options page.",
+      "sensitive": true,
+      "default": ""
+    }
+  }
 }

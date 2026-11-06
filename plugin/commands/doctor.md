@@ -5,7 +5,7 @@ description: Check that Pinpoint is connected (bridge, sessions, extension, chan
 Run this exact command and show the user its output verbatim:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/doctor.js"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/doctor.mjs"
 ```
 
 Each line is a check: `ok`, `FAIL` with a one-line Fix under it, or `info`.

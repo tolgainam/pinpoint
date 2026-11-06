@@ -6,7 +6,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { main, USAGE } from '../scripts/cli.js'
@@ -34,11 +34,23 @@ test('help exits 0 and an unknown command exits 2', () => {
   }
 })
 
+test('the plugin folder stays free of anything that triggers an install or fetches code', () => {
+  for (const f of ['package.json', 'package-lock.json', 'bun.lock', 'yarn.lock', 'pnpm-lock.yaml']) {
+    assert.ok(!existsSync(join(ROOT, 'plugin', f)), `plugin/${f} would make Claude Code run an install`)
+  }
+  const texts = readdirSync(join(ROOT, 'plugin'), { recursive: true }).filter(f => /\.(mjs|md|json)$/.test(f))
+  for (const f of texts) {
+    const text = readFileSync(join(ROOT, 'plugin', f), 'utf8')
+    assert.doesNotMatch(text, /\bnpx\b|curl |wget /, `plugin/${f} names a command that fetches code`)
+    if (f.endsWith('.mjs')) assert.doesNotMatch(text, /^import .* from '[^.n]/m, `plugin/${f} imports a package`)
+  }
+})
+
 test('the package ships the bin and every file the commands need', () => {
   assert.equal(pkg.bin['pinpoint-dev'], 'scripts/cli.js')
   assert.ok(existsSync(join(ROOT, pkg.bin['pinpoint-dev'])))
   // setup.js and doctor.js import these, so a files list that drops one breaks `npx`.
-  for (const f of ['scripts/setup.js', 'scripts/doctor.js', 'scripts/firefox.js', 'server/paths.js', 'server/version.js', '.claude-plugin/plugin.json', 'extension/manifest.json']) {
+  for (const f of ['scripts/setup.js', 'plugin/scripts/doctor.mjs', 'plugin/scripts/setup.mjs', 'scripts/firefox.js', 'plugin/server/paths.mjs', 'plugin/server/version.mjs', 'plugin/.claude-plugin/plugin.json', 'extension/manifest.json']) {
     const top = f.split('/')[0]
     assert.ok(pkg.files.includes(f) || pkg.files.includes(top), `${f} is not in "files"`)
   }

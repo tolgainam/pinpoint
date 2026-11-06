@@ -11,11 +11,11 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync, existsSync
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { compareVersions } from '../server/version.js'
+import { compareVersions } from '../plugin/server/version.mjs'
 import {
   checkNode, checkBridge, checkSessions, findDuplicates, checkDuplicates, checkChannels,
   stableVersion, checkExtension, checkBrowserExtension, stopCommand, pluginVersion, format,
-} from '../scripts/doctor.js'
+} from '../plugin/scripts/doctor.mjs'
 import { installStable } from '../scripts/setup.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -32,10 +32,10 @@ test('versions compare as numbers, and junk reads as oldest', () => {
 test('every place the version lives says the same thing', () => {
   const json = f => JSON.parse(readFileSync(join(ROOT, f), 'utf8'))
   const v = json('package.json').version
-  assert.equal(json('.claude-plugin/plugin.json').version, v)
+  assert.equal(json('plugin/.claude-plugin/plugin.json').version, v)
   assert.equal(json('.claude-plugin/marketplace.json').plugins[0].version, v)
   assert.equal(json('extension/manifest.json').version, v)
-  assert.match(readFileSync(join(ROOT, 'server/pinpoint.js'), 'utf8'), new RegExp(`const VERSION = .*'${v.replace(/[.\\]/g, '\\$&')}'`))
+  assert.match(readFileSync(join(ROOT, 'plugin/server/pinpoint.mjs'), 'utf8'), new RegExp(`const VERSION = .*'${v.replace(/[.\\]/g, '\\$&')}'`))
   assert.equal(pluginVersion(), v)
 })
 
@@ -156,7 +156,7 @@ test('stable copy: installed whole with a VERSION file, refreshed in place, chec
     writeFileSync(join(src, 'content.js'), 'one')
 
     assert.equal(stableVersion(dest), null)
-    assert.equal(checkExtension({ stable: null, version: '0.3.0', dir: dest }).ok, false)
+    assert.equal(checkExtension({ stable: null, version: '0.3.0', dir: dest }).ok, null)
 
     installStable(src, dest, '0.2.0')
     assert.equal(stableVersion(dest), '0.2.0')

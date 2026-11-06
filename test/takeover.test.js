@@ -48,7 +48,7 @@ test('a server that lost the port takes it over once it frees up, and exits with
   await new Promise(r => owner.listen(PORT, '127.0.0.1', r))
 
   let log = ''
-  const child = spawn(process.execPath, [join(ROOT, 'server', 'pinpoint.js')], {
+  const child = spawn(process.execPath, [join(ROOT, 'plugin', 'server', 'pinpoint.mjs')], {
     env: testEnv({
       PINPOINT_PORT: String(PORT),
       PINPOINT_QUEUE: queueDir,

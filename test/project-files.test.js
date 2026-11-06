@@ -16,7 +16,7 @@ import {
   BACKLOG_SEED, sectionRange, parseItems, titleOf, idOf, findItem, ensureSection,
   ProjectBusyError, withProjectLock, updateText, lockPathOf,
   appendOpen, startItem, finishItem, appendHistory,
-} from '../server/project-files.js'
+} from '../plugin/server/project-files.mjs'
 
 const project = () => mkdtempSync(join(tmpdir(), 'pinpoint-files-'))
 const backlog = dir => join(dir, '.pinpoint', 'backlog.md')

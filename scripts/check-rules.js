@@ -34,7 +34,7 @@ export function checkVersions(files) {
   }
   const market = JSON.parse(files.marketplace)
   const versions = {
-    '.claude-plugin/plugin.json': JSON.parse(files.plugin).version,
+    'plugin/.claude-plugin/plugin.json': JSON.parse(files.plugin).version,
     '.claude-plugin/marketplace.json': market.plugins?.[0]?.version ?? market.version,
     'extension/manifest.json': JSON.parse(files.manifest).version,
   }
@@ -132,21 +132,21 @@ const read = p => readFileSync(join(ROOT, p), 'utf8')
 
 /** @returns {Problem[]} */
 export function checkRepo() {
-  const serverText = read('server/pinpoint.js')
+  const serverText = read('plugin/server/pinpoint.mjs')
   const problems = [
     ...checkVersions({
       server: serverText,
       package: read('package.json'),
-      plugin: read('.claude-plugin/plugin.json'),
+      plugin: read('plugin/.claude-plugin/plugin.json'),
       marketplace: read('.claude-plugin/marketplace.json'),
       manifest: read('extension/manifest.json'),
     }),
     ...checkScriptLists(read('extension/manifest.json'), read('extension/worker.js')),
-    ...checkHandlersCaught('server/pinpoint.js', serverText),
+    ...checkHandlersCaught('plugin/server/pinpoint.mjs', serverText),
   ]
-  for (const f of readdirSync(join(ROOT, 'server')).filter(f => f.endsWith('.js'))) {
-    const text = read(`server/${f}`)
-    problems.push(...checkNoStdout(`server/${f}`, text), ...checkNoSyncBase64Write(`server/${f}`, text))
+  for (const f of readdirSync(join(ROOT, 'plugin', 'server')).filter(f => f.endsWith('.mjs'))) {
+    const text = read(`plugin/server/${f}`)
+    problems.push(...checkNoStdout(`plugin/server/${f}`, text), ...checkNoSyncBase64Write(`plugin/server/${f}`, text))
   }
   return problems
 }

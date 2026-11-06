@@ -14,9 +14,6 @@
  * Plain JavaScript on plain Node, deliberately: the only runtime a user needs is the one
  * Claude Code already requires. No build step, no second runtime to install.
  */
-import { Server } from '@modelcontextprotocol/sdk/server/index.js'
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { createServer, request as httpRequest } from 'node:http'
 import { execFile } from 'node:child_process'
 import { randomBytes, timingSafeEqual } from 'node:crypto'
@@ -26,14 +23,16 @@ import { join, dirname, basename, resolve, isAbsolute, relative } from 'node:pat
 import { homedir } from 'node:os'
 import {
   probeProject, fingerprintOf, withRuntime, tokenIndex, annotate, summaryLine, guardrailLine, chipData, deltaLine,
-} from './design-system.js'
-import { compareVersions } from './version.js'
-import { real, canon, inside, nowhere } from './paths.js'
+} from './design-system.mjs'
+import { McpServer } from './mcp.mjs'
+import { tokenFrom } from './config.mjs'
+import { compareVersions } from './version.mjs'
+import { real, canon, inside, nowhere } from './paths.mjs'
 import {
   sectionRange, parseItems, appendOpen, startItem, finishItem, appendHistory, ProjectBusyError,
-} from './project-files.js'
-import { sanitiseScope, scopeFacts, SCOPE_CAPABILITY } from './scope.js'
-import { inboxAnswer, pickFlag, INBOX_CAPABILITY } from './inbox.js'
+} from './project-files.mjs'
+import { sanitiseScope, scopeFacts, SCOPE_CAPABILITY } from './scope.mjs'
+import { inboxAnswer, pickFlag, INBOX_CAPABILITY } from './inbox.mjs'
 
 const PORT = Number(process.env.PINPOINT_PORT ?? 8788)
 /**
@@ -52,7 +51,7 @@ const backlogFile = dir => join(dir, '.pinpoint', 'backlog.md')
 const BACKLOG_FILE = backlogFile(PROJECT_DIR)
 const shotsDir = dir => join(dir, '.pinpoint', 'shots')
 /** Optional shared secret. When set, /dispatch also requires X-Pinpoint-Token. */
-const TOKEN = process.env.PINPOINT_TOKEN?.trim()
+const TOKEN = tokenFrom(process.env.PINPOINT_TOKEN)
 /** How long a fully-resolved batch is kept before its screenshots are deleted. */
 const RETAIN_MS = Number(process.env.PINPOINT_RETAIN_HOURS ?? 24) * 3600_000
 /** Hard ceiling on batches kept, oldest dropped first, regardless of age. */
@@ -582,7 +581,7 @@ prune()
 
 // ---------------------------------------------------------------- mcp
 
-const mcp = new Server(
+const mcp = new McpServer(
   { name: 'pinpoint', version: VERSION },
   {
     capabilities: {
@@ -710,9 +709,9 @@ const TOOLS = [
   },
 ]
 
-mcp.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }))
+mcp.onRequest('tools/list', async () => ({ tools: TOOLS }))
 
-mcp.setRequestHandler(CallToolRequestSchema, async req => {
+mcp.onRequest('tools/call', async req => {
   const args = req.params.arguments ?? {}
 
   if (req.params.name === 'list_comments') {
@@ -843,7 +842,7 @@ mcp.setRequestHandler(CallToolRequestSchema, async req => {
   throw new Error(`unknown tool: ${req.params.name}`)
 })
 
-await mcp.connect(new StdioServerTransport())
+mcp.connect(process.stdin, process.stdout)
 
 // ---------------------------------------------------------------- sse
 

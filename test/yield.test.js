@@ -45,7 +45,7 @@ function setup() {
   const procs = []
   const start = (name, version) => {
     const projectDir = mkdtempSync(join(base, `${name}-`))
-    const child = spawn(process.execPath, [join(ROOT, 'server', 'pinpoint.js')], {
+    const child = spawn(process.execPath, [join(ROOT, 'plugin', 'server', 'pinpoint.mjs')], {
       env: testEnv({
           PINPOINT_PORT: String(PORT),
         PINPOINT_QUEUE: join(base, 'queue'),

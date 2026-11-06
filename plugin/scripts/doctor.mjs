@@ -17,8 +17,8 @@ import { execFileSync } from 'node:child_process'
 import { dirname, join, resolve, sep } from 'node:path'
 import { homedir } from 'node:os'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { compareVersions } from '../server/version.js'
-import { canon, tilde } from '../server/paths.js'
+import { compareVersions } from '../server/version.mjs'
+import { canon, tilde } from '../server/paths.mjs'
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 export const PORT = Number(process.env.PINPOINT_PORT ?? 8788)
@@ -98,11 +98,11 @@ export function checkBridge({ health, owner, version, port = PORT }) {
  * The command that stops an old bridge. A pattern on its script path rather than its pid,
  * because every session still on that version runs the same file and any of them would
  * pick the port straight back up. The path includes the version folder, so it matches
- * that version only. A relative path (a clone run as `node ./server/pinpoint.js`) matches
+ * that version only. A relative path (a clone run as `node ./plugin/server/pinpoint.mjs`) matches
  * too much, so that one gets its pid.
  */
 export function stopCommand(owner) {
-  const script = owner?.command?.split(/\s+/).find(a => /server[/\\]pinpoint\.js$/.test(a))
+  const script = owner?.command?.split(/\s+/).find(a => /server[/\\]pinpoint\.m?js$/.test(a))
   if (script && script.startsWith('/')) return `Stop the old version: pkill -f "${script}"`
   if (owner?.pid) return `Stop the old bridge: kill ${owner.pid}`
   return 'Stop the old bridge: quit the Claude Code sessions that were open before the update'
@@ -202,13 +202,13 @@ export function checkExtension({ stable, version, dir = STABLE_DIR }) {
   const name = 'Extension'
   const where = tilde(dir)
   if (!stable) {
-    return { name, ok: false, detail: `no copy at ${where} yet`, fix: 'Run /pinpoint:setup. It copies the extension there and shows how to load it in Chrome.' }
+    return { name, ok: null, detail: `no folder copy at ${where}, which a store install does not need` }
   }
   const cmp = compareVersions(stable, version)
   if (cmp < 0) {
     return {
       name, ok: false, detail: `the copy at ${where} is ${stable}, older than this plugin (${version})`,
-      fix: 'Run /pinpoint:setup to refresh it, then press Reload on the Pinpoint card in chrome://extensions.',
+      fix: 'Install from your browser\'s store and remove the old card. /pinpoint:setup shows the links. From a clone, run node scripts/setup.js and press Reload.',
     }
   }
   if (cmp > 0) return { name, ok: null, detail: `the copy at ${where} is ${stable}, newer than this plugin (${version})` }
@@ -240,7 +240,7 @@ export function checkBrowserExtension({ health, copyVersion }) {
     return {
       name, ok: null,
       detail: 'no extension has contacted the bridge since it started. It is not installed in your browser yet, or no page is open on localhost.',
-      fix: 'Not installed: add it from your browser\'s store, or load the folder shown below. Already installed: open a localhost page and click the Pinpoint icon, then check again.',
+      fix: 'Not installed: add it from your browser\'s store. Already installed: open a localhost page and click the Pinpoint icon, then check again.',
     }
   }
   const ago = seen.secondsAgo ?? 0

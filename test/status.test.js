@@ -8,7 +8,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import '../extension/status.js'
-import { compareVersions as serverCompare } from '../server/version.js'
+import { compareVersions as serverCompare } from '../plugin/server/version.mjs'
 
 const { view, portOf, displayNames, eventFor, dispatchPick, versionNote, bridgeSummary, tipLine, compareVersions } = globalThis.PinpointStatus
 

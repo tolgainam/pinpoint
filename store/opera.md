@@ -9,7 +9,7 @@ screenshots are in `store/screenshots`, made by `npm run store:shots`.
 - File: `dist/store/pinpoint-1.0.0.zip` (the contents of `extension/`, with `manifest.json`
   at the top of the zip).
 - Version: `1.0.0`.
-- Icon: `extension/icons/icon-128.png`. A larger square PNG is at `.claude-plugin/icon.png`
+- Icon: `extension/icons/icon-128.png`. A larger square PNG is at `plugin/.claude-plugin/icon.png`
   (1024 x 1024).
 - Promo image (300 x 188): `store/opera/promo-300x188.png`, the Chrome small tile scaled down.
 - Screenshots (800 x 500, scaled from the Chrome set; the site allows up to 800 x 600), in this

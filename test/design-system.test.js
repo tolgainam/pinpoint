@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import {
   probeProject, cssVars, flattenLiteral, categorise, toPx, spacingStep, normaliseColour,
-} from '../server/design-system.js'
+} from '../plugin/server/design-system.mjs'
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
 const probe = name => probeProject(join(FIXTURES, name))
@@ -238,7 +238,7 @@ test('normaliseColour makes two spellings of one colour compare equal', () => {
 
 // ---------------------------------------------------------------- mapping values back
 
-import { tokenIndex, annotate, summaryLine, guardrailLine } from '../server/design-system.js'
+import { tokenIndex, annotate, summaryLine, guardrailLine } from '../plugin/server/design-system.mjs'
 
 const index = name => tokenIndex(probe(name))
 
@@ -351,7 +351,7 @@ test('the guardrail prefers utility classes on Tailwind and tokens elsewhere', (
 
 // ---------------------------------------------------------------- the runtime half
 
-import { withRuntime } from '../server/design-system.js'
+import { withRuntime } from '../plugin/server/design-system.mjs'
 
 test('runtime variables fill in a stack the files could not describe', () => {
   const merged = withRuntime(probe('mantine'), {
@@ -399,7 +399,7 @@ test('withRuntime with nothing to add changes nothing', () => {
 
 // ---------------------------------------------------------------- what the composer needs
 
-import { chipData, deltaLine } from '../server/design-system.js'
+import { chipData, deltaLine } from '../plugin/server/design-system.mjs'
 
 test('chipData hands the composer sorted, pre-normalised scales', () => {
   const d = chipData(probe('tailwind4'))
@@ -451,7 +451,7 @@ test('deltaLine ignores a delta with no property', () => {
 
 import { mkdtempSync, writeFileSync, rmSync, utimesSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { fingerprintOf } from '../server/design-system.js'
+import { fingerprintOf } from '../plugin/server/design-system.mjs'
 
 test('probeProject lists every file it read, and the summary and chips leave them out', () => {
   const dir = mkdtempSync(join(tmpdir(), 'pinpoint-ds-files-'))

@@ -35,7 +35,7 @@ async function startBridge() {
   const c = new Client({ name: 'restart-test', version: '0' }, { capabilities: {} })
   await c.connect(new StdioClientTransport({
     command: process.execPath,
-    args: [join(ROOT, 'server', 'pinpoint.js')],
+    args: [join(ROOT, 'plugin', 'server', 'pinpoint.mjs')],
     env: testEnv({ PINPOINT_PORT: String(PORT), PINPOINT_QUEUE: queue, PINPOINT_PROJECT_DIR: project, PINPOINT_LSOF: '/usr/bin/false' }),
     stderr: 'ignore',
   }))

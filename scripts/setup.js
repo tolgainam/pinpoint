@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 /**
+ * For developers and the npm command: load the extension from a folder. The plugin itself
+ * ships no extension, and /pinpoint:setup (plugin/scripts/setup.mjs) points at the stores.
+ *
  * Put the extension where Chrome can keep it, walk the user through loading it, then run
  * the doctor's checks.
  *
@@ -18,8 +21,12 @@ import { homedir, tmpdir } from 'node:os'
 import { spawn, spawnSync } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { ROOT, STABLE_DIR, PORT, pluginVersion, stableVersion, runChecks, format, getHealth, checkBrowserExtension } from './doctor.js'
+import { fileURLToPath } from 'node:url'
+import { STABLE_DIR, PORT, pluginVersion, stableVersion, runChecks, format, getHealth, checkBrowserExtension } from '../plugin/scripts/doctor.mjs'
+import { storeBlock, CHANNEL_NOTE } from '../plugin/scripts/setup.mjs'
 import { buildFirefox } from './firefox.js'
+
+const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 /** Firefox gets its own folder: its manifest is not the one Chrome loads. */
 export const FIREFOX_DIR = process.env.PINPOINT_FIREFOX_DIR ?? join(homedir(), '.claude', 'pinpoint', 'extension-firefox')
@@ -49,40 +56,6 @@ export function installStable(src, dest, version) {
   }
   rmSync(old, { recursive: true, force: true })
 }
-
-/**
- * Where each browser's store listing lives, once it is live. Fill one in and setup leads with
- * the store; leave it empty and setup shows only how to load the folder. Nothing is guessed:
- * an empty value never prints a link. The website has the same list (STORES in docs/index.html).
- */
-export const STORE_LINKS = { chrome: 'https://chromewebstore.google.com/detail/pinpoint/jdkpobiooiffpjffpiegpofjgjepmncd', firefox: 'https://addons.mozilla.org/en-US/firefox/addon/pinpointforclaude/', opera: '' }
-
-export function storeBlock(links = STORE_LINKS) {
-  const names = { chrome: 'Chrome, Edge, Brave, Arc, Vivaldi', firefox: 'Firefox 128+', opera: 'Opera' }
-  const lines = Object.entries(links).filter(([, url]) => url).map(([k, url]) => `    ${names[k].padEnd(34)} ${url}`)
-  if (!lines.length) return ''
-  return `
-  Install from your browser's store (recommended):
-${lines.join('\n')}
-  The steps below load the extension from a folder instead, for developers.
-`
-}
-
-/**
- * The step people miss. Without the flag a dispatch still works, but it waits in the queue
- * until someone runs /pinpoint:comments, which reads as "nothing happens". Custom channels
- * are not on Anthropic's allowlist in the research preview, hence the long flag.
- */
-export const CHANNEL_NOTE = `
-  Comments in your session on their own (optional)
-    Start Claude Code with channels on. Custom channels are a research preview, so the
-    flag is long and Claude Code shows a full-screen warning at startup: choose
-    "I am using this for local development".
-
-      claude --dangerously-load-development-channels plugin:pinpoint@pinpoint-marketplace
-
-    Without it nothing breaks. Comments wait until you run /pinpoint:comments.
-`
 
 /** Best-effort clipboard. Every platform names its clipboard tool differently. */
 function copy(text) {
@@ -123,7 +96,7 @@ async function mainFirefox() {
   const version = pluginVersion()
   const work = mkdtempSync(join(tmpdir(), 'pinpoint-firefox-'))
   try {
-    buildFirefox(join(ROOT, 'extension'), join(work, 'extension'))
+    buildFirefox(join(REPO, 'extension'), join(work, 'extension'))
     installStable(join(work, 'extension'), FIREFOX_DIR, version)
   } catch (err) {
     console.error(`Could not build the Firefox extension at ${FIREFOX_DIR}: ${err?.message ?? err}`)
@@ -161,7 +134,7 @@ ${CHANNEL_NOTE}`)
 
 async function main() {
   if (process.argv.includes('--firefox')) return mainFirefox()
-  const src = join(ROOT, 'extension')
+  const src = join(REPO, 'extension')
   if (!existsSync(join(src, 'manifest.json'))) {
     console.error(`Could not find the extension at ${src}`)
     process.exit(1)
@@ -190,7 +163,7 @@ async function main() {
   const opened = current ? false : openBrowser('chrome://extensions')
 
   // Nothing to load when the browser already has this version.
-  const steps = current ? '' : `${storeBlock()}
+  const steps = current ? '' : `${storeBlock()}  The steps below load the extension from a folder instead, for developers.
   Chrome runs the extension straight from that folder: don't move or delete it.
   After a Pinpoint update, run /pinpoint:setup again, then press Reload on its card.
 

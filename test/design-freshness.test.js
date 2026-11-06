@@ -47,7 +47,7 @@ async function startBridge(env) {
   const client = new Client({ name: 'test', version: '0' }, { capabilities: {} })
   await client.connect(new StdioClientTransport({
     command: process.execPath,
-    args: [join(ROOT, 'server', 'pinpoint.js')],
+    args: [join(ROOT, 'plugin', 'server', 'pinpoint.mjs')],
     env: testEnv({
       PINPOINT_PORT: String(port),
       PINPOINT_QUEUE: queue,

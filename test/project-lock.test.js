@@ -13,7 +13,7 @@ import { spawn } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { withProjectLock, appendHistory, ProjectBusyError, lockPathOf } from '../server/project-files.js'
+import { withProjectLock, appendHistory, ProjectBusyError, lockPathOf } from '../plugin/server/project-files.mjs'
 
 const WRITER = join(dirname(fileURLToPath(import.meta.url)), 'lock-writer.js')
 const RUNS = Number(process.env.PINPOINT_LOCK_RUNS ?? 10)

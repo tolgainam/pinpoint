@@ -19,7 +19,7 @@ import { freePort } from './port.js'
 import { testEnv } from './env.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const SERVER = join(ROOT, 'server', 'pinpoint.js')
+const SERVER = join(ROOT, 'plugin', 'server', 'pinpoint.mjs')
 /** The smallest real PNG, so the write path is exercised without carrying an image around. */
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 const MiB = 1024 * 1024

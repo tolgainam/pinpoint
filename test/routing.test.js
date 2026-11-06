@@ -39,7 +39,7 @@ async function start(name, projectDir, env = {}) {
   }
   await client.connect(new StdioClientTransport({
     command: process.execPath,
-    args: [join(ROOT, 'server', 'pinpoint.js')],
+    args: [join(ROOT, 'plugin', 'server', 'pinpoint.mjs')],
     env: testEnv({
       PINPOINT_PORT: String(PORT),
       PINPOINT_QUEUE: queueDir,

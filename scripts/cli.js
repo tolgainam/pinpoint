@@ -7,7 +7,8 @@
  *   npx pinpoint-dev doctor      check that everything is connected
  *
  * It only calls what is already here. `install` runs Claude Code's own plugin commands,
- * and `setup` and `doctor` are the same scripts that /pinpoint:setup and /pinpoint:doctor run.
+ * `setup` loads the extension from the folder in this package, and `doctor` is the script
+ * that /pinpoint:doctor runs.
  * Nothing is downloaded or run beyond that: the plugin comes from Claude Code's marketplace.
  */
 import { spawnSync } from 'node:child_process'
@@ -65,7 +66,7 @@ export function main(argv) {
   switch (cmd) {
     case 'install': return install()
     case 'setup': return run(process.execPath, [join(HERE, 'setup.js'), ...rest]).status ?? 1
-    case 'doctor': return run(process.execPath, [join(HERE, 'doctor.js'), ...rest]).status ?? 1
+    case 'doctor': return run(process.execPath, [join(HERE, '..', 'plugin', 'scripts', 'doctor.mjs'), ...rest]).status ?? 1
     case undefined: case 'help': case '--help': case '-h': console.log(USAGE); return 0
     default:
       console.error(`Unknown command: ${cmd}\n\n${USAGE}`)

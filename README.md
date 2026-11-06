@@ -49,7 +49,7 @@ browser overlay ──POST /dispatch──▶ bridge ──▶ queue on disk (js
 
 Two pieces: a Claude Code plugin, and a browser extension. Requires Node 20+ and Chrome, a
 Chromium browser or Firefox 128+.
-Nothing else: dependencies install themselves with the plugin.
+Nothing else: the plugin has no dependencies, so nothing installs with it.
 
 1. **Add the marketplace and install the plugin**, in any Claude Code session:
 
@@ -81,15 +81,15 @@ Nothing else: dependencies install themselves with the plugin.
    [the website](https://tolgainam.github.io/pinpoint/). Until a listing is live for your
    browser, load it from a folder (next step).
 
-4. **Run setup.** It checks that everything is connected, and it copies the extension for
-   loading from a folder:
+4. **Run setup.** It shows the store links and checks that everything is connected:
 
    ```
    /pinpoint:setup
    ```
 
-   It copies the extension to `~/.claude/pinpoint/extension`, puts that path on your
-   clipboard and opens `chrome://extensions`.
+   To load the extension from a folder instead, run `npx pinpoint-dev setup`. It copies the
+   extension to `~/.claude/pinpoint/extension`, puts that path on your clipboard and opens
+   `chrome://extensions`.
 
    **Loading from a folder** (developers, or until a listing is live): turn on **Developer
    mode** (top right), click **Load unpacked**, paste the path and select the folder.
@@ -116,8 +116,8 @@ browser and in Firefox.
 
 | Browser | How to load it | Notes |
 |---|---|---|
-| Chrome, Edge, Brave, Opera, Vivaldi, Arc | Same steps as above. `npx pinpoint-dev setup` does what `/pinpoint:setup` does. Open the browser's own extensions page (`edge://extensions`, `brave://extensions`, ...) | `/pinpoint:setup` opens Chrome; open the other page yourself and paste the same path |
-| Firefox 128+ | [Mozilla Add-ons](https://addons.mozilla.org/en-US/firefox/addon/pinpointforclaude/), or `/pinpoint:setup --firefox`, then `about:debugging#/runtime/this-firefox`, **Load Temporary Add-on**, pick `manifest.json` | Firefox removes a temporary add-on when it quits. Allow localhost access under `about:addons` > Pinpoint > Permissions |
+| Chrome, Edge, Brave, Opera, Vivaldi, Arc | Same steps as above, with `npx pinpoint-dev setup`. Open the browser's own extensions page (`edge://extensions`, `brave://extensions`, ...) | `/pinpoint:setup` opens Chrome; open the other page yourself and paste the same path |
+| Firefox 128+ | [Mozilla Add-ons](https://addons.mozilla.org/en-US/firefox/addon/pinpointforclaude/), or `npx pinpoint-dev setup --firefox`, then `about:debugging#/runtime/this-firefox`, **Load Temporary Add-on**, pick `manifest.json` | Firefox removes a temporary add-on when it quits. Allow localhost access under `about:addons` > Pinpoint > Permissions |
 | Safari | Not supported yet | Needs `xcrun safari-web-extension-converter` and an Xcode build |
 
 **A permanent Firefox install** comes from [Mozilla Add-ons](https://addons.mozilla.org/en-US/firefox/addon/pinpointforclaude/) (the link is also on
@@ -128,7 +128,8 @@ temporary add-on, as in the table. Developers who sign their own copy: see
 ### Updating
 
 1. `claude plugin update pinpoint@pinpoint-marketplace` (or update it in `/plugin`).
-2. `/pinpoint:setup`, then press **Reload** on the Pinpoint card in `chrome://extensions`.
+2. Your browser updates a store install. For a folder install, run `npx pinpoint-dev setup`,
+   then press **Reload** on the Pinpoint card in `chrome://extensions`.
 3. Restart the Claude Code sessions you had open. A newer bridge takes over from an older
    0.3+ one by itself; `/pinpoint:doctor` tells you if an older one needs stopping.
 
@@ -144,11 +145,11 @@ installed.
 > the only one. If you start the session with both, `/mcp` shows two `pinpoint` servers.
 > Drop one, or rename the clone's to `pinpoint-dev`. `/pinpoint:doctor` flags it.
 
-**1. Get it and install the one dependency**
+**1. Get it**
 
 ```bash
 git clone https://github.com/tolgainam/pinpoint
-cd pinpoint && npm install
+cd pinpoint
 ```
 
 **2. Load the extension**
@@ -171,7 +172,7 @@ want to work on, create `.mcp.json`:
   "mcpServers": {
     "pinpoint": {
       "command": "node",
-      "args": ["/absolute/path/to/pinpoint/server/pinpoint.js"],
+      "args": ["/absolute/path/to/pinpoint/plugin/server/pinpoint.mjs"],
       "env": {
         "PINPOINT_PROJECT_DIR": "/absolute/path/to/your/project",
         "PINPOINT_PORT": "8788"
@@ -192,7 +193,7 @@ cd /path/to/your/project && claude
 ```
 
 Open your dev app on `localhost` and click the Pinpoint icon to bring up the toolbar. The
-pill on it should show your project name. `node scripts/doctor.js` from the clone runs
+pill on it should show your project name. `node plugin/scripts/doctor.mjs` from the clone runs
 the same checks as `/pinpoint:doctor`.
 
 <details>
@@ -545,7 +546,7 @@ the image. One viewport capture per action gets cropped per comment, because
 
 ## How it works
 
-**`server/pinpoint.js`** — an MCP server that Claude Code spawns over stdio, which also
+**`plugin/server/pinpoint.mjs`** — an MCP server that Claude Code spawns over stdio, which also
 binds `127.0.0.1:8788`. The `experimental: { 'claude/channel': {} }` capability is what
 lets it push into a live session. Screenshots are written to disk as real PNGs and
 referenced by absolute path; Claude opens them with the ordinary Read tool, which renders
@@ -578,18 +579,20 @@ required, which forces a CORS preflight the server refuses. Comment text is trea
 untrusted input in the channel instructions, since anything reaching the session is
 model-visible.
 
-Set `PINPOINT_TOKEN` to also require an `X-Pinpoint-Token` header.
+Set the plugin's `token` option to also require an `X-Pinpoint-Token` header. Claude Code asks
+for it when you enable the plugin and keeps it in secure storage. From a clone, set
+`PINPOINT_TOKEN`.
 
 ### What it runs, writes and sends
 
 Nothing leaves your machine. Pinpoint has no server of its own, no analytics and no
 account. Here is everything it does:
 
-- **Runs** one local Node process, `server/pinpoint.js`, started by Claude Code as an MCP
+- **Runs** one local Node process, `plugin/server/pinpoint.mjs`, started by Claude Code as an MCP
   server. It listens on `127.0.0.1:8788` only. To find which project a page belongs to it
   runs `lsof` to ask which process holds the page's port and reads that process's working
-  directory. `/pinpoint:setup` also copies files, puts a path on your clipboard and opens
-  your browser's extensions page.
+  directory. `npx pinpoint-dev setup` also copies files, puts a path on your clipboard and
+  opens your browser's extensions page.
 - **Writes** comment batches and screenshots to `~/.claude/pinpoint/queue`, the extension
   copy to `~/.claude/pinpoint/extension`, a peer key to `~/.claude/pinpoint/peer.key`, and
   the backlog and history to `<project>/.pinpoint/` when you park or dispatch a comment.
@@ -609,7 +612,7 @@ See [PRIVACY.md](./PRIVACY.md).
 |---|---|---|
 | `PINPOINT_PORT` | `8788` | Bridge port |
 | `PINPOINT_QUEUE` | `~/.claude/pinpoint/queue` | Where batches land |
-| `PINPOINT_TOKEN` | — | Shared secret for `/dispatch` |
+| `PINPOINT_TOKEN` | — | Shared secret for `/dispatch`. The plugin sets it from its `token` option |
 | `PINPOINT_RETAIN_HOURS` | `24` | How long resolved batches are kept |
 | `PINPOINT_MAX_BATCHES` | `200` | Hard ceiling on batches kept |
 | `PINPOINT_PROJECT_DIR` | cwd | Where `.pinpoint/backlog.md` and `shots/` live |

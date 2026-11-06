@@ -9,7 +9,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   INBOX_CAPABILITY, MAX_ROWS, clean, pickFlag, sanitiseRow, sanitiseRows, answerOf, inboxAnswer, pageOriginOf,
-} from '../server/inbox.js'
+} from '../plugin/server/inbox.mjs'
 
 const O = 'http://localhost:5173'
 const row = (extra = {}) => ({

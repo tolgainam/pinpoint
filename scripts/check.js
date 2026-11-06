@@ -19,7 +19,7 @@ function jsFiles(dir) {
     const rel = join(dir, e.name)
     if (e.isDirectory()) {
       if (e.name !== 'vendor' && e.name !== 'node_modules') out.push(...jsFiles(rel))
-    } else if (e.name.endsWith('.js') && !e.name.endsWith('.min.js')) out.push(rel)
+    } else if (/\.m?js$/.test(e.name) && !e.name.endsWith('.min.js')) out.push(rel)
   }
   return out
 }
@@ -29,7 +29,7 @@ function run(cmd, args) {
   return { ok: r.status === 0, output: `${r.stdout ?? ''}${r.stderr ?? ''}${r.error ? String(r.error) : ''}` }
 }
 
-const files = ['server', 'scripts', 'extension'].flatMap(jsFiles)
+const files = ['plugin', 'scripts', 'extension'].flatMap(jsFiles)
 /** @type {[string, () => { ok: boolean, output: string }][]} */
 const steps = [
   ['syntax', () => {

@@ -2,6 +2,12 @@
 
 These notes are for people working on Pinpoint itself. The plugin does not load this file.
 
+The plugin is the `plugin/` folder and nothing else. Keep `package.json` and any lockfile out of
+it, because Claude Code would then run an install. Its files use `.mjs` because without a
+`package.json` Node 20 reads `.js` as CommonJS. It has no dependencies: `plugin/server/mcp.mjs`
+is a small MCP layer, and the SDK is a dev dependency that the tests use as the client. Run
+`claude plugin validate plugin` before a submission.
+
 ## Design rules
 
 - Colours, type, spacing, radii, shadows and layers come only from `extension/tokens.css`, as `var(--pp-*)`.
@@ -16,9 +22,9 @@ These notes are for people working on Pinpoint itself. The plugin does not load 
 
 `npm run check` runs four quick gates and stops at the first failure:
 
-1. Syntax: `node --check` on every `.js` file in `server/`, `scripts/` and `extension/`.
+1. Syntax: `node --check` on every `.js` and `.mjs` file in `plugin/`, `scripts/` and `extension/`.
 2. Design tokens: `scripts/check-design.js`, the raw-value check above.
-3. Repo rules (`scripts/check-rules.js`): the version is the same in the server, `package.json` and the three manifests; nothing in `server/` writes to stdout, which carries the MCP transport; no sync write of decoded base64; every async HTTP handler call has a `.catch`; the content script lists in the manifest and `extension/worker.js` agree.
+3. Repo rules (`scripts/check-rules.js`): the version is the same in the server, `package.json` and the three manifests; nothing in `plugin/server/` writes to stdout, which carries the MCP transport; no sync write of decoded base64; every async HTTP handler call has a `.catch`; the content script lists in the manifest and `extension/worker.js` agree.
 4. Types: `tsc` over the explicit file list in `tsconfig.check.json`. Add a module there once it passes as it is; there is no project-wide type check.
 
 CI runs it before `npm test`.

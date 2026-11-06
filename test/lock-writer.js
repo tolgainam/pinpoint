@@ -5,7 +5,7 @@
  *   hold <dir> <ms>              take the lock, say "held", keep it for <ms>, let it go
  *   die <dir>                    take the lock, say "held", and SIGKILL itself holding it
  */
-import { withProjectLock, appendHistory } from '../server/project-files.js'
+import { withProjectLock, appendHistory } from '../plugin/server/project-files.mjs'
 
 const [mode, dir, a, b] = process.argv.slice(2)
 const sleep = ms => new Promise(r => setTimeout(r, ms))

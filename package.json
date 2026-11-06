@@ -22,7 +22,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "server": "node server/pinpoint.js",
+    "server": "node plugin/server/pinpoint.mjs",
     "demo": "node demo/serve.js",
     "test": "node --test test/*.test.js",
     "package:extension": "mkdir -p dist/store && rm -f dist/store/pinpoint-$npm_package_version.zip && cd extension && zip -r -X ../dist/store/pinpoint-$npm_package_version.zip . -x '*.DS_Store'",
@@ -36,10 +36,8 @@
     "screens:update": "node scripts/screens-update.js",
     "prepublishOnly": "npm test"
   },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.32.1"
-  },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@types/node": "^26.6.5",
     "pixelmatch": "^8.0.0",
     "playwright": "^1.64.1",
@@ -50,15 +48,12 @@
     "pinpoint-dev": "scripts/cli.js"
   },
   "files": [
-    "server",
+    "plugin",
     "extension",
-    "commands",
-    ".claude-plugin",
-    "plugin-mcp.json",
     "scripts/cli.js",
     "scripts/setup.js",
-    "scripts/doctor.js",
     "scripts/firefox.js",
+    ".claude-plugin",
     "README.md",
     "LICENSE",
     "PRIVACY.md",

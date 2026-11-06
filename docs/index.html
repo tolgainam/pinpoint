@@ -919,17 +919,17 @@
 
     <div class="step">
       <h3>Add the browser extension</h3>
-      <p class="note" id="store-note" hidden>
-        Where your browser has a store button at the top of this page, use it: the Chrome Web Store
-        (Chrome, Edge, Brave, Arc, Vivaldi), Mozilla Add-ons (Firefox 128+) or Opera add-ons. Pin the
+      <p class="note" id="store-note">
+        Install it from your browser's store: the Chrome Web Store (Chrome, Edge, Brave, Arc,
+        Vivaldi) or Mozilla Add-ons (Firefox 128+). The buttons above go straight there. Pin the
         icon afterwards. Then run <code>/pinpoint:setup</code> in Claude Code; it checks that
         everything is connected.
       </p>
       <p class="note" id="no-store-note">
-        Store listings that are not live yet are on the way. Until then, load the extension from a folder.
+        On Opera, load the extension from a folder for now.
       </p>
-      <details id="manual-load" open>
-        <summary>Load it from a folder instead <span class="sub">(developers, or until a listing is live)</span></summary>
+      <details id="manual-load">
+        <summary>Load it from a folder instead <span class="sub">(developers and Opera)</span></summary>
         <p class="note">
           This copies the extension to <code>~/.claude/pinpoint/extension</code>, puts the path
           on your clipboard and opens <code>chrome://extensions</code>. Turn on Developer mode,
@@ -1220,14 +1220,8 @@ whole page: ~/.claude/pinpoint/queue/20260822-023835-z0fp/page.png
     const act = card.querySelector('.get-act')
     if (act) act.textContent = 'Add to ' + card.dataset.name + ' \u2197'
   })
-  // With a listing live, the store is the way in for that browser. The folder stays open
-  // until every browser has a listing.
-  const live = Object.values(STORES).filter(Boolean).length
-  if (live) document.getElementById('store-note').hidden = false
-  if (live === Object.keys(STORES).length) {
-    document.getElementById('no-store-note').hidden = true
-    document.getElementById('manual-load').open = false
-  }
+  // The note about the folder is only for a browser with no listing yet.
+  if (Object.values(STORES).every(Boolean)) document.getElementById('no-store-note').hidden = true
 </script>
 </body>
 </html>

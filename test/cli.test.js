@@ -46,6 +46,13 @@ test('the plugin folder stays free of anything that triggers an install or fetch
   }
 })
 
+test('the server config names no variable the directory validator refuses', () => {
+  const text = readFileSync(join(ROOT, 'plugin/plugin-mcp.json'), 'utf8')
+  for (const [name] of text.matchAll(/\$\{[^}]+\}/g)) {
+    assert.ok(['${CLAUDE_PLUGIN_ROOT}', '${user_config.token}'].includes(name), `${name} in plugin-mcp.json`)
+  }
+})
+
 test('the package ships the bin and every file the commands need', () => {
   assert.equal(pkg.bin['pinpoint-dev'], 'scripts/cli.js')
   assert.ok(existsSync(join(ROOT, pkg.bin['pinpoint-dev'])))

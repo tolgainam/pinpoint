@@ -6,7 +6,6 @@
         "${CLAUDE_PLUGIN_ROOT}/server/pinpoint.mjs"
       ],
       "env": {
-        "PINPOINT_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}",
         "PINPOINT_PORT": "8788",
         "PINPOINT_TOKEN": "${user_config.token}"
       }

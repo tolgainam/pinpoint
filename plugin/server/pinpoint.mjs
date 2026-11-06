@@ -40,7 +40,7 @@ const PORT = Number(process.env.PINPOINT_PORT ?? 8788)
  * comparison. Symlinks are kept: this is the spelling shown to the user. Comparisons go
  * through canon() instead, which also resolves links.
  */
-const PROJECT_DIR = resolve(process.env.PINPOINT_PROJECT_DIR ?? process.cwd())
+const PROJECT_DIR = resolve(process.env.PINPOINT_PROJECT_DIR ?? process.env.CLAUDE_PROJECT_DIR ?? process.cwd())
 const QUEUE = process.env.PINPOINT_QUEUE ?? join(homedir(), '.claude', 'pinpoint', 'queue')
 /**
  * The backlog is not the queue and deliberately lives somewhere else. The queue is a
